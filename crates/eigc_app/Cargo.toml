@@ -1,0 +1,12 @@
+[package]
+name = "eigc_app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy.workspace = true
+eigc_moons.workspace = true
+eigc_terrain.workspace = true
+
+[features]
+dev = ["bevy/dynamic_linking"]

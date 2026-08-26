@@ -1,0 +1,1 @@
+Jupiter, Starfield and Sun textures were downloaded from https://www.solarsystemscope.com/textures/

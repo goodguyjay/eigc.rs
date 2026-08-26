@@ -1,0 +1,18 @@
+[package]
+name = "eigc_terrain"
+edition.workspace = true
+
+[dependencies]
+eigc_common.workspace = true
+eigc_moons.workspace = true
+bevy.workspace = true
+noise.workspace = true
+
+[dev-dependencies]
+eigc_testkit.workspace = true
+rstest.workspace = true
+proptest.workspace = true
+eigc_moons.workspace = true
+
+[features]
+dev = ["bevy/dynamic_linking"]

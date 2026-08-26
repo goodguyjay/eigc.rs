@@ -1,0 +1,9 @@
+[package]
+name = "eigc_sim"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+
+#[features]
+#dev = ["bevy/dynamic_linking"]

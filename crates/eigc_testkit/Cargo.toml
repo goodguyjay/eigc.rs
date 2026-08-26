@@ -1,0 +1,8 @@
+[package]
+name = "eigc_testkit"
+edition.workspace = true
+
+[dependencies]
+eigc_common.workspace = true
+eigc_moons.workspace = true
+bevy.workspace = true

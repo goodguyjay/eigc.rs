@@ -1,0 +1,23 @@
+[target.x86_64-pc-windows-msvc]
+linker = "lld-link.exe"
+
+[alias]
+test-all = "test"
+test-eigc-app = "test --package eigc_app --features dev"
+test-eigc-common = "test --package eigc_common"
+test-eigc-moons = "test --package eigc_moons --features dev"
+test-eigc-perf = "test --package eigc_perf"
+test-eigc-scene = "test --package eigc_scene"
+test-eigc-sim = "test --package eigc_sim"
+test-eigc-terrain = "test --package eigc_terrain --features dev"
+
+# all é lento, então só usar antes de fazer o commit
+test-all-verbose = "test --verbose"
+#
+test-eigc-app-verbose = "test --package eigc_app --features dev --verbose"
+test-eigc-common-verbose = "test --package eigc_common --verbose"
+test-eigc-moons-verbose = "test --package eigc_moons --features dev --verbose"
+test-eigc-perf-verbose = "test --package eigc_perf --verbose"
+test-eigc-scene-verbose = "test --package eigc_scene --verbose"
+test-eigc-sim-verbose = "test --package eigc_sim --verbose"
+test-eigc-terrain-verbose = "test --package eigc_terrain --features dev --verbose"
