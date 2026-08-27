@@ -107,7 +107,6 @@ fn handle_time_flow_keyboard_controls(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy::input::InputPlugin;
     use bevy::time::TimePlugin;
 
     /// Testa que advance_simulation_time acumula SimTime corretamente dado um time_scale e um
@@ -138,7 +137,7 @@ mod tests {
     #[test]
     fn keyboard_control_sets_expected_time_scale() {
         let mut app = App::new();
-        app.add_plugins(InputPlugin)
+        app.init_resource::<ButtonInput<KeyCode>>()
             .insert_resource(TimeFlow::default())
             .add_systems(Update, handle_time_flow_keyboard_controls);
 
