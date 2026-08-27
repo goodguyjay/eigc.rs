@@ -7,6 +7,7 @@ edition = "2024"
 bevy.workspace = true
 eigc_moons.workspace = true
 eigc_terrain.workspace = true
+eigc_sim.workspace = true
 
 [features]
 dev = ["bevy/dynamic_linking"]
