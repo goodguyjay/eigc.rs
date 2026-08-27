@@ -50,6 +50,7 @@ impl Plugin for TimeFlowPlugin {
     }
 }
 
+/// Avança o relógio da simulação conforme o delta do tempo real e o multiplicador de velocidade.
 fn advance_simulation_time(
     mut simulation_time: ResMut<SimTime>,
     time_flow: Res<TimeFlow>,
@@ -58,6 +59,7 @@ fn advance_simulation_time(
     simulation_time.0 += time_flow.time_scale * real_time.delta_secs();
 }
 
+/// Controla a velocidade do tempo de simulação com base nas teclas.
 fn handle_time_flow_keyboard_controls(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut time_flow: ResMut<TimeFlow>,
@@ -132,6 +134,7 @@ mod tests {
         );
     }
 
+    /// Testa que pressionar a tecla Digit2 ajusta o time_scale para 600.0.
     #[test]
     fn keyboard_control_sets_expected_time_scale() {
         let mut app = App::new();
