@@ -1,14 +1,5 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Estado da simulação: controle de passagem de tempo e ordenação de sistemas relacionados.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+mod time_flow;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use time_flow::{SimSet, SimTime, TimeFlow, TimeFlowPlugin};

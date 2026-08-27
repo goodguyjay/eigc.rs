@@ -2260,6 +2260,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "eigc_moons",
+ "eigc_sim",
  "eigc_terrain",
 ]
 
@@ -2291,6 +2292,9 @@ version = "0.1.0"
 [[package]]
 name = "eigc_sim"
 version = "0.1.0"
+dependencies = [
+ "bevy",
+]
 
 [[package]]
 name = "eigc_terrain"
