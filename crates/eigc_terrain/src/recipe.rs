@@ -8,6 +8,7 @@ use crate::height::warp::{Oriented, Warp2D};
 use crate::height::{HeightFn, arc};
 use crate::params::TerrainParams;
 use crate::pipeline::TerrainAppearance;
+use crate::systems::TerrainMaterialProperties;
 use bevy::prelude::{Color, Vec2};
 use eigc_moons::profile::{MoonId, MoonProfile};
 use noise::Perlin;
@@ -15,9 +16,14 @@ use noise::Perlin;
 /// Agrupa os três produtos de uma receita de terreno: a função de altura composta, os parâmetros
 /// de malha/mundo, e a aparência visual.
 pub struct TerrainRecipe {
+    /// Altura do terreno
     pub height: HeightFn,
+    /// Parâmetros de malha/mundo do terreno
     pub params: TerrainParams,
+    /// Aparência visual do terreno
     pub appearance: TerrainAppearance,
+    /// Propriedades do material do terreno
+    pub material_properties: TerrainMaterialProperties,
 }
 
 /// Ponto de entrada para montar a receita de geração de terreno de uma lua específica.
@@ -83,7 +89,7 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
 
     let scaled_terrain = Scale {
         s: warped_terrain,
-        scale: 1.0
+        scale: 1.0,
     };
 
     let biased_terrain = Bias {
@@ -97,7 +103,7 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         amp: calibration.vertical_amplitude_meters,
         freq: base_frequency,
         line_dir: feature_direction,
-        seed
+        seed,
     };
 
     let terrain_appearance = TerrainAppearance {
@@ -105,10 +111,16 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         display_name: profile.display_name.clone(),
     };
 
+    let material_properties = TerrainMaterialProperties {
+        perceptual_roughness: calibration.perceptual_roughness,
+        reflectance: calibration.reflectance,
+    };
+
     TerrainRecipe {
         height: arc(biased_terrain),
         params: terrain_params,
         appearance: terrain_appearance,
+        material_properties,
     }
 }
 

@@ -6,9 +6,9 @@
 - [ ] Calibrar receita de terreno de calisto (`recipe.rs`, hoje unimplemented!)
 - [ ] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa
   documentada de motivo geológico ou estético
-- [ ] `perceptual_roughness` e `reflectance` em `systems.rs::spawn_terrain` estão
+- [X] `perceptual_roughness` e `reflectance` em `systems.rs::spawn_terrain` estão
   chumbados (0.7 / 0.5), deveriam vir de `MoonProfile` por lua (gelo de
-  Europa reflete diferente de enxofre de Io)
+  Europa reflete diferente de enxofre de Io) (issue #5)
 
 ## Cena / Visual
 - [ ] Câmera e luz em eigc_app::scene_placeholder são fixas e hardcoded,

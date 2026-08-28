@@ -16,6 +16,8 @@ fn minimal_profile_for(moon_id: MoonId) -> MoonProfile {
             feature_direction: [1.0, 0.0],
             vertical_amplitude_meters: 10.0,
             warp_amplitude_meters: 20.0,
+            perceptual_roughness: 0.5,
+            reflectance: 0.3,
         },
         terrain_base_color: [1.0, 1.0, 1.0, 1.0],
         walkable: true,
@@ -31,6 +33,12 @@ fn europa_recipe_produces_height_function_and_matching_params() {
     assert_eq!(recipe.params.seed, profile.terrain.seed);
     assert_eq!(recipe.params.amp, profile.terrain.vertical_amplitude_meters);
     assert_eq!(recipe.appearance.display_name, profile.display_name);
+
+    assert_eq!(
+        recipe.material_properties.perceptual_roughness,
+        profile.terrain.perceptual_roughness,
+        "perceptual_roughness não corresponde ao perfil"
+    );
 
     let sample_height = recipe.height.height_at(100.0, 200.0);
     assert!(

@@ -18,6 +18,8 @@ MoonProfile(
         feature_direction: (1.0, 0.0),
         vertical_amplitude_meters: 5.0,
         warp_amplitude_meters: 10.0,
+        perceptual_roughness: 0.7,
+        reflectance: 0.5,
     ),
     terrain_base_color: (1.0, 1.0, 1.0, 1.0),
     walkable: true,
