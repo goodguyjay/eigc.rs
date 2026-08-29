@@ -3,7 +3,7 @@
 
 use crate::height::HeightFn;
 use crate::recipe::build_recipe;
-use crate::systems::build_and_spawn_terrain;
+use crate::systems::{TerrainMaterialProperties, build_and_spawn_terrain};
 use bevy::prelude::{
     App, Assets, Color, Commands, Mesh, OnEnter, Plugin, Res, ResMut, Resource, StandardMaterial,
 };
@@ -57,6 +57,11 @@ fn build_terrain_from_loaded_profile(
         display_name: recipe.appearance.display_name.clone(),
     };
 
+    let material_properties = TerrainMaterialProperties {
+        perceptual_roughness: profile.terrain.perceptual_roughness,
+        reflectance: profile.terrain.reflectance,
+    };
+
     build_and_spawn_terrain(
         &mut commands,
         &mut meshes,
@@ -64,9 +69,11 @@ fn build_terrain_from_loaded_profile(
         recipe.params,
         recipe.height.as_ref(),
         &appearance,
+        material_properties,
     );
 
     commands.insert_resource(recipe.params);
     commands.insert_resource(HeightResource(recipe.height));
     commands.insert_resource(appearance);
+    commands.insert_resource(material_properties);
 }

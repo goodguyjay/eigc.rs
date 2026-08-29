@@ -26,6 +26,10 @@ pub struct TerrainCalibration {
     pub vertical_amplitude_meters: f32,
     /// Quantidade de deslocamento de distorção (warp) em metros
     pub warp_amplitude_meters: f32,
+    /// Quantidade de distorção (warp) em frequência
+    pub perceptual_roughness: f32,
+    /// O quanto o material do terreno reflete a luz
+    pub reflectance: f32,
 }
 
 /// Dados completos de uma lua, incluindo parâmetros de calibração de terreno e informações de exibição.
