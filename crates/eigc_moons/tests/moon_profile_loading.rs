@@ -6,6 +6,7 @@ use std::io::Write;
 
 /// Escreve um arquivo .ron temporário de teste em um diretório de assets
 /// isolado, para não depender do conteúdo real de assets/moons/europa.ron.
+/// Não representa valores reais da aplicação.
 fn write_temp_moon_profile(assets_dir: &std::path::Path, file_name: &str) {
     let content = r#"
 MoonProfile(
@@ -23,6 +24,17 @@ MoonProfile(
     ),
     terrain_base_color: (1.0, 1.0, 1.0, 1.0),
     walkable: true,
+    sky: SkyCalibration(
+      orbital_period_seconds: 306822.0, // 3.551181 dias * 86400
+      base_sun_dir: (-0.15, 0.35, -0.92),
+      base_jupiter_dir: (0.35, 0.25, -0.90),
+      jupiter_libration_lat_deg: 2.0,
+      jupiter_libration_lon_deg: 2.0,
+      jupiter_ang_radius: 0.10384709, // (11.9 * 0.5).to_radians()
+      sun_elevation_deg: 25.0,
+      eclipse_soft_deg: 1.0,
+      planet_shine_max: 0.006,
+    ),
 )
 "#;
     std::fs::create_dir_all(assets_dir).unwrap();

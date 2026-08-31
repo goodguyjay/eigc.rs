@@ -7,5 +7,5 @@ pub mod state;
 
 pub use loader::{MoonProfileLoader, MoonProfileLoaderError};
 pub use plugin::MoonPlugin;
-pub use profile::{MoonId, MoonProfile, TerrainCalibration};
+pub use profile::{MoonId, MoonProfile, TerrainCalibration, SkyCalibration};
 pub use state::{ActiveMoonProfileHandle, AppState};
