@@ -1,10 +1,11 @@
 //! Testes de integração para recipe::build_recipe. Cobre as quatro luas do enum MoonId
 
-use eigc_moons::profile::{MoonId, MoonProfile, TerrainCalibration};
+use eigc_moons::profile::{MoonId, MoonProfile, SkyCalibration, TerrainCalibration};
 use eigc_terrain::recipe::build_recipe;
 use rstest::rstest;
 
 /// Cria um MoonProfile mínimo para teste, com valores arbitrários, exceto pelo moon_id.
+/// Não representa valores reais da aplicação.
 fn minimal_profile_for(moon_id: MoonId) -> MoonProfile {
     MoonProfile {
         moon_id,
@@ -21,6 +22,17 @@ fn minimal_profile_for(moon_id: MoonId) -> MoonProfile {
         },
         terrain_base_color: [1.0, 1.0, 1.0, 1.0],
         walkable: true,
+        sky: SkyCalibration {
+            base_jupiter_dir: [0.0, 0.0, -1.0],
+            base_sun_dir: [0.0, 1.0, 0.0],
+            planet_shine_max: 0.01,
+            jupiter_ang_radius: 0.10384709,
+            orbital_period_seconds: 3.551181 * 86_400.0,
+            eclipse_soft_deg: 1.0,
+            jupiter_libration_lat_deg: 2.0,
+            jupiter_libration_lon_deg: 2.0,
+            sun_elevation_deg: 1.0,
+        },
     }
 }
 
@@ -35,8 +47,7 @@ fn europa_recipe_produces_height_function_and_matching_params() {
     assert_eq!(recipe.appearance.display_name, profile.display_name);
 
     assert_eq!(
-        recipe.material_properties.perceptual_roughness,
-        profile.terrain.perceptual_roughness,
+        recipe.material_properties.perceptual_roughness, profile.terrain.perceptual_roughness,
         "perceptual_roughness não corresponde ao perfil"
     );
 
