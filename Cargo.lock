@@ -2285,6 +2285,12 @@ version = "0.1.0"
 [[package]]
 name = "eigc_scene"
 version = "0.1.0"
+dependencies = [
+ "bevy",
+ "eigc_common",
+ "eigc_moons",
+ "eigc_sim",
+]
 
 [[package]]
 name = "eigc_sim"
