@@ -92,6 +92,8 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         scale: 1.0,
     };
 
+    // bias: -0.1 é um ajuste estético. Não corresponde à precisão dos dados reais de Europa.
+    // TODO (leticia.rodrigues): testar visualmente quando a cena tiver câmera/luz.
     let biased_terrain = Bias {
         s: scaled_terrain,
         bias: -0.1,
