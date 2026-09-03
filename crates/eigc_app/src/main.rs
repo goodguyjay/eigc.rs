@@ -2,10 +2,12 @@
 //! já spawnado.
 
 use crate::moon_loading::{start_loading_active_moon_profile, transition_when_moon_profile_loaded};
-use crate::scene_placeholder::spawn_placeholder_camera_and_light;
+use crate::scene_placeholder::spawn_placeholder_light;
 use bevy::DefaultPlugins;
 use bevy::prelude::{App, AppExtStates, AssetPlugin, PluginGroup, Startup, Update, default};
 use eigc_moons::{AppState, MoonPlugin};
+use eigc_scene::camera::free_fly_camera::FreeFlyCameraPlugin;
+use eigc_scene::sky::SkyPlugin;
 use eigc_sim::TimeFlowPlugin;
 use eigc_terrain::pipeline::TerrainPlugin;
 
@@ -22,11 +24,13 @@ fn main() {
         .add_plugins(MoonPlugin)
         .add_plugins(TerrainPlugin)
         .add_plugins(TimeFlowPlugin)
+        .add_plugins(FreeFlyCameraPlugin)
+        .add_plugins(SkyPlugin)
         .add_systems(
             Startup,
             (
                 start_loading_active_moon_profile,
-                spawn_placeholder_camera_and_light,
+                spawn_placeholder_light,
             ),
         )
         .add_systems(Update, transition_when_moon_profile_loaded)

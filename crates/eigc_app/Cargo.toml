@@ -8,6 +8,7 @@ bevy.workspace = true
 eigc_moons.workspace = true
 eigc_terrain.workspace = true
 eigc_sim.workspace = true
+eigc_scene.workspace = true
 
 [features]
 dev = ["bevy/dynamic_linking"]

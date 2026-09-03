@@ -4,6 +4,7 @@ use bevy::app::App;
 use bevy::prelude::{
     AssetServer, Assets, Commands, Handle, Image, IntoScheduleConfigs, Message, MessageWriter,
     OnEnter, Plugin, Quat, Res, ResMut, Resource, Update, Vec3, error, in_state,
+    resource_exists,
 };
 use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonProfile};
 use eigc_sim::{SimSet, SimTime};
@@ -116,7 +117,12 @@ impl Plugin for SkyPlugin {
                 starfield::StarfieldPlugin,
                 planet_shine::PlanetShinePlugin,
             ))
-            .add_systems(Update, animate_sky_physical.in_set(SimSet::Animate));
+            .add_systems(
+                Update,
+                animate_sky_physical
+                    .in_set(SimSet::Animate)
+                    .run_if(resource_exists::<SkySettings>),
+            );
     }
 }
 

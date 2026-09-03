@@ -15,6 +15,7 @@
   sem calibração por lua. migrar para eigc_scene quando esse crate for
   desenhado (céu, luz solar orientada por MoonProfile, câmera dupla
   andar/órbita)
+- [ ] Jupiter está com orientação incorreta no céu
 
 ## Arquitetura aceita
 - TerrainPlugin acopla carregamento de asset (`Handle<MoonProfile>`) com
@@ -39,3 +40,8 @@ que só leem `Query/Res`, chamam a função pura, e escrevem o resultado de volt
 
 o trade-off aceito: cobertura vem via teste de integração (montar App mínimo, rodar app.update(), inspecionar o 
 resource/transform resultante), não via teste unitário isolado de função pura.
+
+## Plataformas
+- Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS
+e X11 não possuem suporte completo e o bevy pode recair silenciosamente para `CursorGrabMode::Confined`.
+**todo (jay): vê isso depois Rodger**
