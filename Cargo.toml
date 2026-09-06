@@ -15,7 +15,7 @@ resolver = "2"
 edition = "2024"
 
 [workspace.dependencies]
-bevy = { version = "0.18.1", features = ["jpeg", "png", "file_watcher", "debug"] }
+bevy = { version = "0.18.1", features = ["jpeg", "png", "file_watcher"] }
 noise = { version = "0.9.0" }
 ron = "0.12.2"
 serde = { version = "1.0.229", features = ["derive"] }
