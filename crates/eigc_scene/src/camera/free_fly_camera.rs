@@ -1,11 +1,12 @@
 //! Cãmera de voo livre ("freefly") usada para navegar pela cena.
 
+use crate::sky::SkySettings;
 use bevy::app::App;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::{
-    ButtonInput, Camera3d, Commands, Component, EulerRot, KeyCode, MessageReader,
-    PerspectiveProjection, Plugin, Projection, Quat, Query, Res, Single, Startup, Time, Transform,
-    Update, Vec3, default,
+    ButtonInput, Camera3d, Commands, Component, EulerRot, IntoScheduleConfigs, KeyCode,
+    MessageReader, PerspectiveProjection, Plugin, Projection, Quat, Query, Res, ResMut, Resource,
+    Single, Startup, Time, Transform, Update, Vec3, default, resource_exists,
 };
 use bevy::window::{CursorGrabMode, CursorOptions};
 
@@ -44,9 +45,35 @@ pub struct FreeFlyCameraPlugin;
 
 impl Plugin for FreeFlyCameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_free_fly_camera)
-            .add_systems(Update, (mouse_look, keyboard_movement, cursor_release));
+        app.init_resource::<CamLock>()
+            .add_systems(Startup, spawn_free_fly_camera)
+            .add_systems(
+                Update,
+                (
+                    toggle_lock,
+                    mouse_look,
+                    keyboard_movement,
+                    lock_aim_update.run_if(resource_exists::<SkySettings>),
+                    cursor_release,
+                )
+                    .chain(),
+            );
     }
+}
+
+/// Guarda o estado de bloqueio da câmera, se está livre ou travada em algum corpo celeste.
+#[derive(Resource, Default)]
+struct CamLock {
+    mode: LockMode,
+}
+
+/// Modos de bloqueio da câmera.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+enum LockMode {
+    #[default]
+    Free,
+    Sun,
+    Jupiter,
 }
 
 /// Spawna a câmera de voo livre com projeção perspectiva e captura o cursor imediatamente.
@@ -160,6 +187,55 @@ fn cursor_release(keys: Res<ButtonInput<KeyCode>>, mut cursor_options: Single<&m
     }
 }
 
+/// Atualiza a orientação da câmera para mirar no Sol ou em Júpiter, dependendo do modo de bloqueio.
+fn lock_aim_update(
+    lock: Res<CamLock>,
+    settings: Res<SkySettings>,
+    mut cameras: Query<(&mut Transform, &mut FreeFlyCamera)>,
+) {
+    let Some(forward) = resolve_lock_direction(lock.mode, &settings) else {
+        return;
+    };
+
+    let Ok((mut transform, mut camera)) = cameras.single_mut() else {
+        return;
+    };
+
+    transform.look_to(forward, Vec3::Y);
+
+    let (yaw, pitch, _roll) = transform.rotation.to_euler(EulerRot::YXZ);
+    camera.yaw = yaw;
+    camera.pitch = pitch;
+}
+
+/// Alterna o modo de bloqueio da câmera entre livre, travada no Sol ou travada em Júpiter.
+fn toggle_lock(keys: Res<ButtonInput<KeyCode>>, mut lock: ResMut<CamLock>) {
+    if keys.just_pressed(KeyCode::KeyF) {
+        lock.mode = match lock.mode {
+            LockMode::Sun => LockMode::Free,
+            _ => LockMode::Sun,
+        };
+    }
+
+    if keys.just_pressed(KeyCode::KeyJ) {
+        lock.mode = match lock.mode {
+            LockMode::Jupiter => LockMode::Free,
+            _ => LockMode::Jupiter,
+        };
+    }
+}
+
+/// Resolve a direção alvo do lock atual a partir das configurações do céu.
+///
+/// Retorna `None` quando o modo é `Free`, já que não há direção associada.
+fn resolve_lock_direction(mode: LockMode, settings: &SkySettings) -> Option<Vec3> {
+    match mode {
+        LockMode::Free => None,
+        LockMode::Sun => Some(settings.base_sun_dir.normalize()),
+        LockMode::Jupiter => Some(settings.base_jupiter_dir.normalize()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,5 +286,125 @@ mod tests {
             position_after_first_update,
             position_after_second_update
         );
+    }
+
+    /// Testa que `resolve_lock_direction` retorna a direção correta pra cada
+    /// modo de lock, e `None` quando livre.
+    #[test]
+    fn resolve_lock_direction_returns_body_direction() {
+        let settings = SkySettings {
+            base_sun_dir: Vec3::new(1.0, 0.0, 0.0),
+            base_jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
+            ..default()
+        };
+
+        assert_eq!(resolve_lock_direction(LockMode::Free, &settings), None);
+
+        assert_eq!(
+            resolve_lock_direction(LockMode::Sun, &settings),
+            Some(Vec3::new(1.0, 0.0, 0.0))
+        );
+
+        assert_eq!(
+            resolve_lock_direction(LockMode::Jupiter, &settings),
+            Some(Vec3::new(0.0, 0.0, 1.0))
+        );
+    }
+
+    /// Testa que, com o lock travado no Sol, a câmera acaba orientada na direção
+    /// de `base_sun_dir` após um update, e que yaw/pitch ficam sincronizados
+    /// com essa orientação.
+    #[test]
+    fn lock_aim_update_orients_camera_toward_sun_when_locked() {
+        let mut app = App::new();
+
+        let sun_dir = Vec3::new(1.0, 0.0, 0.0).normalize();
+        let jupiter_dir = Vec3::new(0.0, 0.0, 1.0).normalize();
+
+        app.insert_resource(CamLock {
+            mode: LockMode::Sun,
+        })
+            .insert_resource(SkySettings {
+                base_sun_dir: sun_dir,
+                base_jupiter_dir: jupiter_dir,
+                ..default()
+            })
+            .add_systems(Update, lock_aim_update);
+
+        // câmera arbitrária, olhando pra uma direção que não é nem sol nem
+        // júpiter, com yaw/pitch velhos que não deviam sobreviver ao lock.
+        let transform = Transform::from_translation(Vec3::ZERO);
+        let camera = FreeFlyCamera {
+            yaw: 2.5,
+            pitch: 0.5,
+            ..default()
+        };
+        let entity = app.world_mut().spawn((transform, camera)).id();
+
+        app.update();
+
+        let updated_transform = app.world().get::<Transform>(entity).unwrap();
+        let updated_camera = app.world().get::<FreeFlyCamera>(entity).unwrap();
+
+        let mut expected_transform = Transform::from_translation(Vec3::ZERO);
+        expected_transform.look_to(sun_dir, Vec3::Y);
+        let (expected_yaw, expected_pitch, _roll) =
+            expected_transform.rotation.to_euler(EulerRot::YXZ);
+
+        assert!(
+            updated_transform
+                .rotation
+                .abs_diff_eq(expected_transform.rotation, 1e-5),
+            "câmera deveria olhar na direção do sol, mas rotação foi {:?}, esperado {:?}",
+            updated_transform.rotation,
+            expected_transform.rotation
+        );
+
+        assert!(
+            (updated_camera.yaw - expected_yaw).abs() < 1e-5,
+            "yaw deveria estar sincronizado com a direção travada, foi {}, esperado {}",
+            updated_camera.yaw,
+            expected_yaw
+        );
+        assert!(
+            (updated_camera.pitch - expected_pitch).abs() < 1e-5,
+            "pitch deveria estar sincronizado com a direção travada, foi {}, esperado {}",
+            updated_camera.pitch,
+            expected_pitch
+        );
+    }
+
+    /// Testa que, com o lock livre, `lock_aim_update` não altera a orientação
+    /// da câmera nem os campos yaw/pitch.
+    #[test]
+    fn lock_aim_update_does_nothing_when_free() {
+        let mut app = App::new();
+
+        app.insert_resource(CamLock {
+            mode: LockMode::Free,
+        })
+            .insert_resource(SkySettings {
+                base_sun_dir: Vec3::new(1.0, 0.0, 0.0),
+                base_jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
+                ..default()
+            })
+            .add_systems(Update, lock_aim_update);
+
+        let transform = Transform::from_translation(Vec3::ZERO);
+        let camera = FreeFlyCamera {
+            yaw: 1.2,
+            pitch: 0.3,
+            ..default()
+        };
+        let entity = app.world_mut().spawn((transform, camera)).id();
+
+        app.update();
+
+        let updated_transform = app.world().get::<Transform>(entity).unwrap();
+        let updated_camera = app.world().get::<FreeFlyCamera>(entity).unwrap();
+
+        assert_eq!(updated_transform.rotation, Quat::IDENTITY);
+        assert_eq!(updated_camera.yaw, 1.2);
+        assert_eq!(updated_camera.pitch, 0.3);
     }
 }
