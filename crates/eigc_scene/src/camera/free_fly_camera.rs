@@ -1,6 +1,6 @@
 //! Cãmera de voo livre ("freefly") usada para navegar pela cena.
 
-use crate::sky::SkySettings;
+use crate::sky::{SkySettings, SkyState};
 use bevy::app::App;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::{
@@ -190,10 +190,10 @@ fn cursor_release(keys: Res<ButtonInput<KeyCode>>, mut cursor_options: Single<&m
 /// Atualiza a orientação da câmera para mirar no Sol ou em Júpiter, dependendo do modo de bloqueio.
 fn lock_aim_update(
     lock: Res<CamLock>,
-    settings: Res<SkySettings>,
+    state: Res<SkyState>,
     mut cameras: Query<(&mut Transform, &mut FreeFlyCamera)>,
 ) {
-    let Some(forward) = resolve_lock_direction(lock.mode, &settings) else {
+    let Some(forward) = resolve_lock_direction(lock.mode, &state) else {
         return;
     };
 
@@ -228,11 +228,11 @@ fn toggle_lock(keys: Res<ButtonInput<KeyCode>>, mut lock: ResMut<CamLock>) {
 /// Resolve a direção alvo do lock atual a partir das configurações do céu.
 ///
 /// Retorna `None` quando o modo é `Free`, já que não há direção associada.
-fn resolve_lock_direction(mode: LockMode, settings: &SkySettings) -> Option<Vec3> {
+fn resolve_lock_direction(mode: LockMode, state: &SkyState) -> Option<Vec3> {
     match mode {
         LockMode::Free => None,
-        LockMode::Sun => Some(settings.base_sun_dir.normalize()),
-        LockMode::Jupiter => Some(settings.base_jupiter_dir.normalize()),
+        LockMode::Sun => Some(state.sun_dir.normalize()),
+        LockMode::Jupiter => Some(state.jupiter_dir.normalize()),
     }
 }
 
@@ -292,21 +292,21 @@ mod tests {
     /// modo de lock, e `None` quando livre.
     #[test]
     fn resolve_lock_direction_returns_body_direction() {
-        let settings = SkySettings {
-            base_sun_dir: Vec3::new(1.0, 0.0, 0.0),
-            base_jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
+        let state = SkyState {
+            sun_dir: Vec3::new(1.0, 0.0, 0.0),
+            jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
             ..default()
         };
 
-        assert_eq!(resolve_lock_direction(LockMode::Free, &settings), None);
+        assert_eq!(resolve_lock_direction(LockMode::Free, &state), None);
 
         assert_eq!(
-            resolve_lock_direction(LockMode::Sun, &settings),
+            resolve_lock_direction(LockMode::Sun, &state),
             Some(Vec3::new(1.0, 0.0, 0.0))
         );
 
         assert_eq!(
-            resolve_lock_direction(LockMode::Jupiter, &settings),
+            resolve_lock_direction(LockMode::Jupiter, &state),
             Some(Vec3::new(0.0, 0.0, 1.0))
         );
     }
@@ -324,9 +324,9 @@ mod tests {
         app.insert_resource(CamLock {
             mode: LockMode::Sun,
         })
-            .insert_resource(SkySettings {
-                base_sun_dir: sun_dir,
-                base_jupiter_dir: jupiter_dir,
+            .insert_resource(SkyState {
+                sun_dir,
+                jupiter_dir,
                 ..default()
             })
             .add_systems(Update, lock_aim_update);
@@ -383,9 +383,9 @@ mod tests {
         app.insert_resource(CamLock {
             mode: LockMode::Free,
         })
-            .insert_resource(SkySettings {
-                base_sun_dir: Vec3::new(1.0, 0.0, 0.0),
-                base_jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
+            .insert_resource(SkyState {
+                sun_dir: Vec3::new(1.0, 0.0, 0.0),
+                jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
                 ..default()
             })
             .add_systems(Update, lock_aim_update);
