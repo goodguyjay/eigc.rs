@@ -16,6 +16,7 @@
   desenhado (céu, luz solar orientada por MoonProfile, câmera dupla
   andar/órbita)
 - [ ] Jupiter está com orientação incorreta no céu
+- [ ] falta damping/smoothing na transição, e não desabilitar mouse_look completamente durante o lock
 
 ## Arquitetura aceita
 - TerrainPlugin acopla carregamento de asset (`Handle<MoonProfile>`) com

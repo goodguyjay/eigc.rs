@@ -45,7 +45,7 @@ pub struct SkyState {
 }
 
 /// Configurações físicas do céu, calibradas para a lua ativa.
-#[derive(Resource, Clone)]
+#[derive(Resource, Clone, Default)]
 pub struct SkySettings {
     /// Direção base de Júpiter
     pub base_jupiter_dir: Vec3,
