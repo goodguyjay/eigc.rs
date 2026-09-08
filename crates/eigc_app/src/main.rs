@@ -15,24 +15,26 @@ pub mod moon_loading;
 mod scene_placeholder;
 
 fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins.set(AssetPlugin {
-            file_path: "../../assets".to_string(),
-            ..default()
-        }))
-        .init_state::<AppState>()
-        .add_plugins(MoonPlugin)
-        .add_plugins(TerrainPlugin)
-        .add_plugins(TimeFlowPlugin)
-        .add_plugins(FreeFlyCameraPlugin)
-        .add_plugins(SkyPlugin)
-        .add_systems(
-            Startup,
-            (
-                start_loading_active_moon_profile,
-                spawn_placeholder_light,
-            ),
-        )
-        .add_systems(Update, transition_when_moon_profile_loaded)
-        .run();
+    let mut app = App::new();
+
+    app.add_plugins(DefaultPlugins.set(AssetPlugin {
+        file_path: "../../assets".to_string(),
+        ..default()
+    }))
+    .init_state::<AppState>()
+    .add_plugins(MoonPlugin)
+    .add_plugins(TerrainPlugin)
+    .add_plugins(TimeFlowPlugin)
+    .add_plugins(FreeFlyCameraPlugin)
+    .add_plugins(SkyPlugin)
+    .add_systems(
+        Startup,
+        (start_loading_active_moon_profile, spawn_placeholder_light),
+    )
+    .add_systems(Update, transition_when_moon_profile_loaded);
+
+    #[cfg(feature = "dev")]
+    app.add_plugins(eigc_perf::debug_tools::DebugToolsPlugin);
+
+    app.run();
 }
