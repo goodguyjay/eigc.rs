@@ -2,3 +2,12 @@
 name = "eigc_scene"
 version = "0.1.0"
 edition = "2024"
+
+[dependencies]
+bevy.workspace = true
+eigc_moons.workspace = true
+eigc_sim.workspace = true
+eigc_common.workspace = true
+
+[features]
+dev = ["bevy/dynamic_linking"]

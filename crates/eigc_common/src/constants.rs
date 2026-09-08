@@ -16,3 +16,5 @@ pub const FLY_CAM_PITCH_CLAMP_RAD: f32 = 1.54;
 pub const CAMERA_NEAR_PLANE: f32 = 0.1;
 /// Distância máxima do plano de corte da câmera
 pub const CAMERA_FAR_PLANE: f32 = 50_000.0;
+/// Bolha de céu ao redor do player
+pub const SKY_RADIUS: f32 = 10_000.0;

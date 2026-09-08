@@ -15,7 +15,7 @@ resolver = "2"
 edition = "2024"
 
 [workspace.dependencies]
-bevy = { version = "0.18.1", features = ["jpeg", "png", "file_watcher"] }
+bevy = { version = "0.18.1", features = ["jpeg", "png", "file_watcher", "bevy_ui", "bevy_ui_render"] }
 noise = { version = "0.9.0" }
 ron = "0.12.2"
 serde = { version = "1.0.229", features = ["derive"] }
@@ -30,6 +30,7 @@ eigc_moons = { path = "crates/eigc_moons" }
 eigc_terrain = { path = "crates/eigc_terrain" }
 eigc_scene = { path = "crates/eigc_scene" }
 eigc_testkit = { path = "crates/eigc_testkit" }
+eigc_perf = { path = "crates/eigc_perf" }
 
 [profile.dev]
 opt-level = 1

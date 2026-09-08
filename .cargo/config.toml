@@ -21,3 +21,6 @@ test-eigc-perf-verbose = "test --package eigc_perf --verbose"
 test-eigc-scene-verbose = "test --package eigc_scene --verbose"
 test-eigc-sim-verbose = "test --package eigc_sim --features dev --verbose"
 test-eigc-terrain-verbose = "test --package eigc_terrain --features dev --verbose"
+
+# run
+run-eigc-app = "run --package eigc_app --features dev"
