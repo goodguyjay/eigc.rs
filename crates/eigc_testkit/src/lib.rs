@@ -1,14 +1,4 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+//! Utilitários de teste compartilhados entre os crates do workspace.
+//!
+//! Ainda não populado; helpers serão adicionados conforme os crates de domínio
+//! precisarem de infraestrutura de teste comum (fixtures de ECS, builders, etc.).

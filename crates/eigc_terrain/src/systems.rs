@@ -41,6 +41,7 @@ pub fn build_and_spawn_terrain(
     ));
 }
 
+/// Sistema Bevy que lê os recursos de terreno já inseridos e spawna a entidade de terreno.
 pub fn spawn_terrain(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
