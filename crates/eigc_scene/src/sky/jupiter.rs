@@ -104,6 +104,5 @@ fn place_and_scale_jupiter(
     t.look_to(forward, up_hint);
 
     let right = t.right().as_vec3();
-
-    t.rotate(Quat::from_axis_angle(right, -std::f32::consts::FRAC_2_PI));
+    t.rotate(Quat::from_axis_angle(right, -std::f32::consts::FRAC_PI_2));
 }
