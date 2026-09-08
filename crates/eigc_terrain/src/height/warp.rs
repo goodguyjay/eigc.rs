@@ -1,14 +1,24 @@
+//! Distorção de domínio e projeção anisotrópica de `HeightSource`.
+
 use super::HeightSource;
 use bevy::prelude::Vec2;
 use noise::{NoiseFn, Perlin};
 
+/// Distorce as coordenadas (x, z) com um campo de ruído fbm antes de consultar a fonte de altura.
 pub struct Warp2D<S: HeightSource> {
+    /// Fonte de altura consultada com as coordenadas já distorcidas.
     pub source: S,
+    /// Gerador de ruído Perlin usado para o campo de distorção.
     pub perlin: Perlin,
-    pub warp_amp: f32, // meters of warp displacement
+    /// Amplitude do deslocamento de distorção, em metros.
+    pub warp_amp: f32,
+    /// Frequência base do campo de distorção.
     pub warp_freq: f32,
+    /// Número de oitavas somadas no campo de distorção.
     pub octaves: u32,
+    /// Multiplicador de frequência aplicado a cada oitava sucessiva.
     pub lacunarity: f32,
+    /// Multiplicador de amplitude aplicado a cada oitava sucessiva.
     pub gain: f32,
 }
 
@@ -44,12 +54,15 @@ impl<S: HeightSource> HeightSource for Warp2D<S> {
     }
 }
 
-/// Projects coordinates onto an oriented axis to create anisotropy
+/// Projeta as coordenadas sobre um eixo orientado para criar anisotropia.
 pub struct Oriented<S: HeightSource> {
+    /// Fonte de altura consultada com as coordenadas já projetadas.
     pub source: S,
-    pub dir: Vec2, // must be normalized
-    /// scale along the main axis (dir) and orthogonal axis
+    /// Direção do eixo principal de projeção (deve ser normalizada).
+    pub dir: Vec2,
+    /// Escala aplicada ao longo do eixo principal (`dir`).
     pub main_scale: f32,
+    /// Escala aplicada ao longo do eixo ortogonal ao principal.
     pub ortho_scale: f32,
 }
 

@@ -8,6 +8,7 @@ use bevy::asset::{AssetLoader, LoadContext};
 use bevy::prelude::TypePath;
 use thiserror::Error;
 
+/// `AssetLoader` do Bevy para arquivos `.ron` que descrevem um `MoonProfile`.
 #[derive(Default, TypePath)]
 pub struct MoonProfileLoader;
 

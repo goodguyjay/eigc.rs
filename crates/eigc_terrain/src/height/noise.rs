@@ -1,12 +1,21 @@
+//! Fontes de altura baseadas em ruído Perlin (fbm e ridged).
+
 use super::HeightSource;
 use noise::{NoiseFn, Perlin};
 
+/// Fonte de altura por ruído Perlin fractal (fbm - soma de oitavas com amplitude decrescente).
 pub struct PerlinFbm {
+    /// Gerador de ruído Perlin subjacente.
     pub perlin: Perlin,
+    /// Frequência base do ruído (menor → características mais amplas).
     pub freq: f32,
+    /// Número de oitavas somadas.
     pub octaves: u32,
+    /// Multiplicador de frequência aplicado a cada oitava sucessiva.
     pub lacunarity: f32,
+    /// Multiplicador de amplitude aplicado a cada oitava sucessiva.
     pub gain: f32,
+    /// Amplitude final aplicada ao resultado normalizado.
     pub amplitude: f32,
 }
 
@@ -30,13 +39,21 @@ impl HeightSource for PerlinFbm {
     }
 }
 
+/// Fonte de altura por ruído Perlin "ridged" (cristas), útil para relevo acidentado.
 pub struct PerlinRidged {
+    /// Gerador de ruído Perlin subjacente.
     pub perlin: Perlin,
+    /// Frequência base do ruído (menor → características mais amplas).
     pub freq: f32,
+    /// Número de oitavas somadas.
     pub octaves: u32,
+    /// Multiplicador de frequência aplicado a cada oitava sucessiva.
     pub lacunarity: f32,
+    /// Multiplicador de amplitude aplicado a cada oitava sucessiva.
     pub gain: f32,
+    /// Amplitude final aplicada ao resultado normalizado.
     pub amplitude: f32,
+    /// Fator de anisotropia aplicado ao eixo z entre oitavas.
     pub z_anisotropy: f32,
 }
 

@@ -11,6 +11,7 @@ use eigc_scene::sky::SkyPlugin;
 use eigc_sim::TimeFlowPlugin;
 use eigc_terrain::pipeline::TerrainPlugin;
 
+/// Sistemas de carregamento do perfil de lua ativo e transição de estado ao concluir.
 pub mod moon_loading;
 mod scene_placeholder;
 

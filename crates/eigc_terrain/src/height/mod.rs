@@ -1,7 +1,12 @@
+//! Fontes de altura componíveis (`HeightSource`) usadas para gerar o relevo do terreno.
+
 use std::sync::Arc;
 
+/// Combinadores de `HeightSource` (soma, escala, viés).
 pub mod comb;
+/// Fontes de altura baseadas em ruído Perlin (fbm e ridged).
 pub mod noise;
+/// Distorção de domínio e projeção anisotrópica de `HeightSource`.
 pub mod warp;
 
 /// Estrutura que representa uma fonte de altura para o terreno.
