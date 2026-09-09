@@ -28,7 +28,16 @@ Além da convenção geral (nome de arquivo por comportamento observável), este
 - Damping/smoothing na transição de lock — ainda não implementado, aceito conscientemente por ora.
 - `mouse_look` não é totalmente desabilitado durante o lock.
 - ESC não pausa `mouse_look` depois do cursor ser liberado.
-- Risco arquitetural de limite de directional light.
 - Markers de componente privados (`Jupiter`, `SunDisc`, `StarDome`) ainda sem teste de integração.
+
+## Limite de DirectionalLight (risco monitorado, não mais implícito)
+
+O Bevy 0.18 suporta no máximo `MAX_DIRECTIONAL_LIGHTS = 10` (constante interna de
+`bevy_pbr::render::light`, não pública fora do crate). Hoje o app produz exatamente 2:
+`SunLight` (`sky::sun`) e `PlanetShine` (`sky::planet_shine`). Havia uma terceira, vestigial,
+em `eigc_app::scene_placeholder`, que foi removida por não ter mais função depois do `SkyPlugin`
+existir. `crates/eigc_scene/tests/directional_light_budget.rs` monta o pipeline real (headless)
+e falha se esse número mudar sem atualização deliberada do teste — não adicione uma nova
+`DirectionalLight` permanente sem revisar esse teste.
 
 Não resolva essas pendências de forma incidental enquanto faz outra tarefa neste crate — se esbarrar em uma delas, confirme com o desenvolvedor humano antes de decidir se agora é a hora de resolver ou só documentar que ainda está pendente.

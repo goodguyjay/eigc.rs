@@ -2,7 +2,6 @@
 //! já spawnado.
 
 use crate::moon_loading::{start_loading_active_moon_profile, transition_when_moon_profile_loaded};
-use crate::scene_placeholder::spawn_placeholder_light;
 use bevy::DefaultPlugins;
 use bevy::prelude::{App, AppExtStates, AssetPlugin, PluginGroup, Startup, Update, default};
 use eigc_moons::{AppState, MoonPlugin};
@@ -13,7 +12,6 @@ use eigc_terrain::pipeline::TerrainPlugin;
 
 /// Sistemas de carregamento do perfil de lua ativo e transição de estado ao concluir.
 pub mod moon_loading;
-mod scene_placeholder;
 
 fn main() {
     let mut app = App::new();
@@ -28,10 +26,7 @@ fn main() {
     .add_plugins(TimeFlowPlugin)
     .add_plugins(FreeFlyCameraPlugin)
     .add_plugins(SkyPlugin)
-    .add_systems(
-        Startup,
-        (start_loading_active_moon_profile, spawn_placeholder_light),
-    )
+    .add_systems(Startup, start_loading_active_moon_profile)
     .add_systems(Update, transition_when_moon_profile_loaded);
 
     #[cfg(feature = "dev")]
