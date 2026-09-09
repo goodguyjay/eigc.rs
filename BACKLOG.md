@@ -11,10 +11,14 @@
   Europa reflete diferente de enxofre de Io) (issue #5)
 
 ## Cena / Visual
-- [ ] Câmera e luz em eigc_app::scene_placeholder são fixas e hardcoded,
-  sem calibração por lua. migrar para eigc_scene quando esse crate for
-  desenhado (céu, luz solar orientada por MoonProfile, câmera dupla
-  andar/órbita)
+- [X] Câmera e luz em eigc_app::scene_placeholder eram fixas e hardcoded, sem
+  calibração por lua. A luz placeholder (`spawn_placeholder_light`) foi
+  removida — o céu real (`SkyPlugin`, com `SunLight` e `PlanetShine`) já
+  cobre esse papel e a luz vestigial estava empilhando com as luzes de
+  verdade, quase estourando o limite de `DirectionalLight` do Bevy
+  (`MAX_DIRECTIONAL_LIGHTS = 10`). Guarda de regressão adicionada em
+  `crates/eigc_scene/tests/directional_light_budget.rs`. A parte de câmera
+  dupla andar/órbita continua pendente, não fazia parte desse fix.
 - [ ] Jupiter está com orientação incorreta no céu
 - [ ] falta damping/smoothing na transição, e não desabilitar mouse_look completamente durante o lock
 
