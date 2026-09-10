@@ -107,7 +107,12 @@ fn spawn_free_fly_camera(mut commands: Commands, mut cursor_options: Single<&mut
 fn mouse_look(
     mut mouse_motion: MessageReader<MouseMotion>,
     mut cameras: Query<(&mut Transform, &mut FreeFlyCamera)>,
+    cursor_options: Single<&CursorOptions>,
 ) {
+    if cursor_options.grab_mode != CursorGrabMode::Locked {
+        mouse_motion.clear();
+        return;
+    }
     let Ok((mut transform, mut camera)) = cameras.single_mut() else {
         return;
     };
@@ -324,12 +329,12 @@ mod tests {
         app.insert_resource(CamLock {
             mode: LockMode::Sun,
         })
-            .insert_resource(SkyState {
-                sun_dir,
-                jupiter_dir,
-                ..default()
-            })
-            .add_systems(Update, lock_aim_update);
+        .insert_resource(SkyState {
+            sun_dir,
+            jupiter_dir,
+            ..default()
+        })
+        .add_systems(Update, lock_aim_update);
 
         // câmera arbitrária, olhando pra uma direção que não é nem sol nem
         // júpiter, com yaw/pitch velhos que não deviam sobreviver ao lock.
@@ -383,12 +388,12 @@ mod tests {
         app.insert_resource(CamLock {
             mode: LockMode::Free,
         })
-            .insert_resource(SkyState {
-                sun_dir: Vec3::new(1.0, 0.0, 0.0),
-                jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
-                ..default()
-            })
-            .add_systems(Update, lock_aim_update);
+        .insert_resource(SkyState {
+            sun_dir: Vec3::new(1.0, 0.0, 0.0),
+            jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
+            ..default()
+        })
+        .add_systems(Update, lock_aim_update);
 
         let transform = Transform::from_translation(Vec3::ZERO);
         let camera = FreeFlyCamera {
