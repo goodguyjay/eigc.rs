@@ -66,8 +66,10 @@ pub struct MoonProfile {
     pub jupiter_angular_diameter_deg: f32,
     /// Parâmetros de geração procedural de terreno específico dessa lua
     pub terrain: TerrainCalibration,
-    /// Cor base do material do terreno
+    /// Cor base do material do terreno (crista/encosta, ex.: gelo claro)
     pub terrain_base_color: [f32; 4],
+    /// Cor do vale entre as duas cristas de uma linea (escuro/avermelhado)
+    pub terrain_valley_color: [f32; 4],
     /// Se esta lua tem modo de caminha completo implementado
     pub walkable: bool,
     /// Parâmetros de calibração do céu e ajustes artísticos

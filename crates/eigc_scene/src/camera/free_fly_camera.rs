@@ -31,7 +31,7 @@ impl Default for FreeFlyCamera {
             yaw: 0.0,
             pitch: 0.0,
             speed: 20.0,
-            sprint_multiplier: 10.0,
+            sprint_multiplier: 100.0,
             sensitivity: 0.02,
         }
     }
