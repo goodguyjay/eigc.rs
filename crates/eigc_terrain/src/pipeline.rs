@@ -1,9 +1,9 @@
 //! Pipeline genérico de terreno: registra um Plugin do bevy que spawna uma única
 //! entidade de malha de terreno usando o HeightFn e TerrainParams fornecidos.
 
-use crate::height::HeightFn;
+use crate::height::{ColorFn, HeightFn};
 use crate::recipe::build_recipe;
-use crate::systems::{TerrainMaterialProperties, build_and_spawn_terrain};
+use crate::systems::{TerrainMaterialProperties, build_and_spawn_terrain_with_color};
 use bevy::prelude::{
     App, Assets, Color, Commands, Mesh, OnEnter, Plugin, Res, ResMut, Resource, StandardMaterial,
 };
@@ -13,6 +13,11 @@ use eigc_moons::{ActiveMoonProfileHandle, AppState};
 /// Encapsula a função de altura composta para poder ser usada como recurso no Bevy.
 #[derive(Resource, Clone)]
 pub struct HeightResource(pub HeightFn);
+
+/// Encapsula a fonte de cor por vértice para poder ser usada como recurso no Bevy. Só é inserido
+/// quando a receita da lua produz uma cor (ex.: lineae de Europa).
+#[derive(Resource, Clone)]
+pub struct ColorResource(pub ColorFn);
 
 /// Estrutura que define a aparência visual do terreno, incluindo cor base e nome de exibição.
 #[derive(Resource, Clone)]
@@ -62,17 +67,21 @@ fn build_terrain_from_loaded_profile(
         reflectance: profile.terrain.reflectance,
     };
 
-    build_and_spawn_terrain(
+    build_and_spawn_terrain_with_color(
         &mut commands,
         &mut meshes,
         &mut materials,
         recipe.params,
         recipe.height.as_ref(),
+        recipe.color.as_deref(),
         &appearance,
         material_properties,
     );
 
     commands.insert_resource(recipe.params);
+    if let Some(color) = recipe.color {
+        commands.insert_resource(ColorResource(color));
+    }
     commands.insert_resource(HeightResource(recipe.height));
     commands.insert_resource(appearance);
     commands.insert_resource(material_properties);

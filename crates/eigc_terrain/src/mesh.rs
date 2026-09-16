@@ -1,10 +1,20 @@
-use crate::height::HeightSource;
+use crate::height::{ColorSource, HeightSource};
 use crate::params::TerrainParams;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::{Mesh, Vec3, default};
 
-/// Gera uma malha de terreno a partir de parâmetros e uma fonte de altura
+/// Gera uma malha de terreno a partir de parâmetros e uma fonte de altura, sem cor por vértice.
 pub fn build_terrain_mesh(p: TerrainParams, height: &dyn HeightSource) -> Mesh {
+    build_terrain_mesh_with_color(p, height, None)
+}
+
+/// Gera uma malha de terreno a partir de parâmetros e uma fonte de altura. Quando `color` é
+/// `Some`, escreve também `Mesh::ATTRIBUTE_COLOR` por vértice a partir dela.
+pub fn build_terrain_mesh_with_color(
+    p: TerrainParams,
+    height: &dyn HeightSource,
+    color: Option<&dyn ColorSource>,
+) -> Mesh {
     let n = p.res;
     let v_count = (n + 1) as usize;
     let size = p.size;
@@ -66,6 +76,19 @@ pub fn build_terrain_mesh(p: TerrainParams, height: &dyn HeightSource) -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+
+    if let Some(color) = color {
+        let mut colors = Vec::with_capacity(v_count * v_count);
+        for j in 0..v_count {
+            for i in 0..v_count {
+                let x = -half + i as f32 * dx;
+                let z = -half + j as f32 * dx;
+                colors.push(color.color_at(x, z));
+            }
+        }
+        mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+    }
+
     mesh.insert_indices(Indices::U32(indices));
     mesh.generate_tangents().ok();
     mesh

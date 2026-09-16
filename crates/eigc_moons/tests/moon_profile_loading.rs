@@ -23,6 +23,7 @@ MoonProfile(
         reflectance: 0.5,
     ),
     terrain_base_color: (1.0, 1.0, 1.0, 1.0),
+    terrain_valley_color: (0.3, 0.2, 0.1, 1.0),
     walkable: true,
     sky: SkyCalibration(
       orbital_period_seconds: 306822.0, // 3.551181 dias * 86400

@@ -21,6 +21,7 @@ fn minimal_profile_for(moon_id: MoonId) -> MoonProfile {
             reflectance: 0.3,
         },
         terrain_base_color: [1.0, 1.0, 1.0, 1.0],
+        terrain_valley_color: [0.3, 0.2, 0.1, 1.0],
         walkable: true,
         sky: SkyCalibration {
             base_jupiter_dir: [0.0, 0.0, -1.0],
@@ -56,6 +57,27 @@ fn europa_recipe_produces_height_function_and_matching_params() {
         sample_height.is_finite(),
         "Altura gerada não é finita: {sample_height}"
     );
+
+    assert!(
+        recipe.color.is_some(),
+        "Europa deveria produzir uma fonte de cor por vértice para as lineae"
+    );
+}
+
+/// Testa se a origem (onde câmera/jogador aparecem) e uma vizinhança ao redor dela ficam planas.
+#[test]
+fn europa_recipe_keeps_spawn_clearing_flat_around_origin() {
+    let profile = minimal_profile_for(MoonId::Europa);
+    let recipe = build_recipe(&profile);
+
+    let origin_height = recipe.height.height_at(0.0, 0.0);
+    for (x, z) in [(0.0, 0.0), (100.0, 0.0), (0.0, -140.0), (-90.0, 90.0)] {
+        let height = recipe.height.height_at(x, z);
+        assert_eq!(
+            height, origin_height,
+            "ponto ({x}, {z}) dentro da clareira deveria ter a mesma altura plana da origem"
+        );
+    }
 }
 
 /// Testa se a receita para luas não calibradas (Io, Ganymede, Callisto) causa pânico ao invés de

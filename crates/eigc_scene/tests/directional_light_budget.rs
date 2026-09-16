@@ -1,6 +1,5 @@
-//! Regressão para o risco arquitetural de limite de `DirectionalLight` documentado no
-//! `CLAUDE.md` deste crate: monta o mesmo pipeline de plugins que `eigc_app::main` usa em
-//! produção (menos janela/renderer) e conta quantas `DirectionalLight`s existem depois do
+//! Regressão para o risco arquitetural de limite de `DirectionalLight`. Monta o mesmo pipeline de plugins
+//! que `eigc_app::main` usa em produção (menos janela/renderer) e conta quantas `DirectionalLight`s existem depois do
 //! céu terminar de carregar.
 
 use bevy::MinimalPlugins;
@@ -38,6 +37,7 @@ fn test_profile() -> MoonProfile {
             reflectance: 0.3,
         },
         terrain_base_color: [1.0, 1.0, 1.0, 1.0],
+        terrain_valley_color: [0.3, 0.2, 0.1, 1.0],
         walkable: true,
         sky: SkyCalibration {
             orbital_period_seconds: 1000.0,
