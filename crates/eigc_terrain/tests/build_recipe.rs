@@ -86,11 +86,14 @@ fn europa_recipe_produces_a_consistent_lod_config() {
         lod.quads_per_chunk
     );
     assert!(
-        lod.distance_thresholds.windows(2).all(|pair| pair[0] < pair[1]),
-        "limites de distância deveriam ser crescentes: {:?}",
-        lod.distance_thresholds
+        lod.max_screen_error_px > 0.0,
+        "a tolerância de erro em pixels deveria ser positiva: {}",
+        lod.max_screen_error_px
     );
+    assert!(lod.min_error_fraction >= 0.0);
     assert!(lod.hysteresis_fraction >= 0.0 && lod.hysteresis_fraction < 1.0);
+    assert!(lod.in_flight_vertex_budget > 0);
+    assert!(lod.max_error_tasks_in_flight > 0);
 
     let chunk_size = recipe.params.size / lod.chunks_per_side as f32;
     assert!(

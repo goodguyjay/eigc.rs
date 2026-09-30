@@ -199,14 +199,19 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
 
     // 64x64 chunks de 343,75 m. O nível 0 tem espaçamento de ~10,7 m (melhor que os 14,3 m da
     // malha monolítica) e o mais grosso ~86 m, ainda menor que a largura das lineae (100-300 m).
+    // O nível de cada chunk sai do erro geométrico medido (ver `lod_error.rs`) projetado na tela:
+    // `max_screen_error_px` menor = mais detalhe de mais longe. `min_error_fraction` é o piso
+    // para chunks lisos (e para a cor por vértice, que também perde resolução ao engrossar).
     // Valores calibráveis: medir com o app rodando antes de mexer.
     let lod = TerrainLodConfig {
         chunks_per_side: 64,
-        quads_per_chunk: [32, 16, 8, 4],
-        distance_thresholds: [1200.0, 2500.0, 5000.0],
+        quads_per_chunk: [64, 32, 16, 8],
+        max_screen_error_px: 1.5,
+        min_error_fraction: 0.2,
         hysteresis_fraction: 0.1,
         skirt_depth_factor: 0.35,
-        vertex_budget_per_frame: 3000,
+        in_flight_vertex_budget: 30_000,
+        max_error_tasks_in_flight: 16,
     };
 
     TerrainRecipe {

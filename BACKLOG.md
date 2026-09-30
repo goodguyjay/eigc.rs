@@ -56,19 +56,27 @@
   cálculo amostra um anel extra além do chunk). Uma alternativa é calcular todas as normais
   com um epsilon fixo (o espaçamento do nível 0), ao custo de 4 amostras de altura extras por
   vértice.
-- [ ] **Geração de malha de LOD é síncrona, com orçamento de vértices por frame**
-  (`vertex_budget_per_frame`). Voar em alta velocidade (sprint, 2000 u/s) pode gerar mais
-  chunks por segundo do que o orçamento cobre, e o refinamento atrasa (o terreno fica grosso
-  por um instante). A evolução natural é gerar em `AsyncComputeTaskPool` e trocar o `Mesh3d`
-  quando a task terminar. Valores de distância, orçamento e resolução por nível são chutes
-  calibráveis (`europa_recipe`), ainda não medidos com o app rodando.
+- [ ] **Nível de LOD vem do erro geométrico medido, projetado na tela.** Cada chunk tem o desvio
+  vertical de cada nível medido em segundo plano (`lod_error.rs`) e o nível sai de
+  `erro * escala_de_tela / distância <= max_screen_error_px`. A escala de tela vem do FOV e da
+  altura da janela (`LodFocus.screen_scale`). Limitações conscientes: (1) o erro só considera
+  altura, não a cor por vértice, que também perde resolução ao engrossar; o piso
+  `min_error_fraction` cobre isso de forma grosseira; (2) o erro é tratado como se fosse visto
+  de lado, o que é conservador para câmera alta olhando para baixo; (3) a medição amostra a grade
+  do nível 0, então detalhe abaixo de ~10 m não entra no erro. `max_screen_error_px`,
+  `min_error_fraction`, `in_flight_vertex_budget` e a resolução por nível (`europa_recipe`) são
+  chutes calibráveis, medidos só em teste headless, não com o app rodando.
+- [ ] **Sem teto de vértices no LOD.** Como o nível depende do erro em pixels, tolerância baixa
+  ou janela muito grande (2160p dobra a escala de tela) aumentam bastante os vértices (teste
+  headless com Europa: ~0,7 M a 1080p, ~1,5 M a 2160p). Se precisar, adicionar um teto total de
+  vértices que relaxa a tolerância.
 - [ ] `TerrainParams.res` só vale para a malha monolítica legada (`build_terrain_mesh`,
   `spawn_terrain`, usadas em testes). O pipeline com chunks usa `TerrainLodConfig`. Mesma
   família da duplicação de `amp` acima: não removido agora porque quebraria os literais de
   `TerrainParams` em vários testes de integração.
-- [ ] LOD decide o nível só pela distância 3D ao foco. Não considera altitude da câmera
-  (voando alto, chunks distantes em ângulo raso poderiam ficar mais grossos), não há culling
-  por oclusão, e não existe colisão (qualquer modo de caminhada futuro deve ler
+- [ ] LOD não considera se o chunk está dentro do frustum (chunks atrás da câmera são
+  refinados igual aos da frente, para a câmera poder girar sem ver terreno grosso), não há
+  culling por oclusão, e não existe colisão (qualquer modo de caminhada futuro deve ler
   `HeightResource::height_at` direto, não a malha visível).
 
 ## Cena / Visual

@@ -2,7 +2,10 @@
 //! terreno usando o HeightFn e TerrainParams fornecidos e troca o LOD de cada chunk conforme a
 //! distância ao foco.
 
-use crate::chunks::{TerrainLodStats, spawn_terrain_chunks, update_terrain_lod};
+use crate::chunks::{
+    ChunkErrorTable, TerrainLodStats, finish_chunk_builds, measure_chunk_errors,
+    spawn_terrain_chunks, update_terrain_lod,
+};
 use crate::height::{ColorFn, HeightFn};
 use crate::lod::TerrainLodConfig;
 use crate::params::TerrainParams;
@@ -43,13 +46,15 @@ impl Plugin for TerrainPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LodFocus>()
             .init_resource::<TerrainLodStats>()
+            .init_resource::<ChunkErrorTable>()
             .add_systems(
                 OnEnter(AppState::Running),
                 build_terrain_from_loaded_profile,
             )
             .add_systems(
                 Update,
-                update_terrain_lod
+                (measure_chunk_errors, finish_chunk_builds, update_terrain_lod)
+                    .chain()
                     .run_if(in_state(AppState::Running))
                     .run_if(resource_exists::<HeightResource>)
                     .run_if(resource_exists::<TerrainParams>)

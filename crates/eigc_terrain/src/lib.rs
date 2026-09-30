@@ -8,6 +8,7 @@ pub mod chunks;
 pub mod height;
 /// Configuração e matemática pura do LOD por chunks (grade, distância, escolha de nível).
 pub mod lod;
+mod lod_error;
 /// Construção da malha 3D do terreno a partir de uma fonte de altura.
 pub mod mesh;
 /// Parâmetros de geração do terreno (dimensões, resolução, etc.).
