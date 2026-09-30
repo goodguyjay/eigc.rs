@@ -5,8 +5,8 @@ use bevy::app::App;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::{
     ButtonInput, Camera3d, Commands, Component, EulerRot, IntoScheduleConfigs, KeyCode,
-    MessageReader, PerspectiveProjection, Plugin, Projection, Quat, Query, Res, ResMut, Resource,
-    Single, Startup, Time, Transform, Update, Vec3, default, resource_exists,
+    MessageReader, MouseButton, PerspectiveProjection, Plugin, Projection, Quat, Query, Res,
+    ResMut, Resource, Single, Startup, Time, Transform, Update, Vec3, default, resource_exists,
 };
 use bevy::window::{CursorGrabMode, CursorOptions};
 
@@ -55,6 +55,7 @@ impl Plugin for FreeFlyCameraPlugin {
                     keyboard_movement,
                     lock_aim_update.run_if(resource_exists::<SkySettings>),
                     cursor_release,
+                    recapture_cursor_on_click,
                 )
                     .chain(),
             );
@@ -192,6 +193,24 @@ fn cursor_release(keys: Res<ButtonInput<KeyCode>>, mut cursor_options: Single<&m
     }
 }
 
+/// Recaptura o cursor ao clicar com o botão esquerdo, permitindo retomar o controle da câmera
+/// depois que o ESC libera o cursor, sem precisar fechar e reabrir a aplicação.
+fn recapture_cursor_on_click(
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    mut cursor_options: Single<&mut CursorOptions>,
+) {
+    if !mouse_buttons.just_pressed(MouseButton::Left) {
+        return;
+    }
+
+    if cursor_options.grab_mode == CursorGrabMode::Locked {
+        return;
+    }
+
+    cursor_options.visible = false;
+    cursor_options.grab_mode = CursorGrabMode::Locked;
+}
+
 /// Atualiza a orientação da câmera para mirar no Sol ou em Júpiter, dependendo do modo de bloqueio.
 fn lock_aim_update(
     lock: Res<CamLock>,
@@ -291,6 +310,35 @@ mod tests {
             position_after_first_update,
             position_after_second_update
         );
+    }
+
+    /// Testa que, depois do cursor ser liberado (ESC), um clique esquerdo o recaptura —
+    /// sem isso, a única forma de recuperar o controle da câmera era reiniciar o app.
+    #[test]
+    fn left_click_recaptures_cursor_after_it_was_released() {
+        let mut app = App::new();
+
+        app.init_resource::<ButtonInput<MouseButton>>()
+            .add_systems(Update, recapture_cursor_on_click);
+
+        let entity = app
+            .world_mut()
+            .spawn(CursorOptions {
+                visible: true,
+                grab_mode: CursorGrabMode::None,
+                ..default()
+            })
+            .id();
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+
+        app.update();
+
+        let cursor_options = app.world().get::<CursorOptions>(entity).unwrap();
+        assert_eq!(cursor_options.grab_mode, CursorGrabMode::Locked);
+        assert!(!cursor_options.visible);
     }
 
     /// Testa que `resolve_lock_direction` retorna a direção correta pra cada
