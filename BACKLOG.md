@@ -43,6 +43,33 @@
 - [ ] Traçado em arco de linea (`LineaPath::Arc`, `height/linea.rs`) é uma aproximação
   geométrica estilizada e deliberadamente exagerada, não um modelo físico da tensão de
   maré real. Meramente estético/artístico.
+- [ ] **LOD do terreno usa skirts, não stitching.** Chunks vizinhos de níveis diferentes têm
+  vértices de borda diferentes (o grosso é subconjunto do fino), então a emenda é escondida por
+  um anel de skirt (`chunk_mesh.rs`, `skirt_depth_factor` em `TerrainLodConfig`) e não por
+  costura exata de triângulos. Trade-off: implementação simples e testável, ao custo de uma
+  face vertical visível se a diferença de altura entre níveis passar da profundidade do skirt
+  (mais provável em silhueta contra o horizonte). Revisitar se aparecer rachadura em teste
+  visual, ou trocar por stitching.
+- [ ] **Iluminação levemente descontínua entre níveis de LOD.** As normais de cada chunk vêm de
+  diferenças centrais no espaçamento do próprio nível, então a normal de um vértice de borda
+  difere um pouco entre o chunk fino e o grosso. Dentro do mesmo nível não há costura (o
+  cálculo amostra um anel extra além do chunk). Uma alternativa é calcular todas as normais
+  com um epsilon fixo (o espaçamento do nível 0), ao custo de 4 amostras de altura extras por
+  vértice.
+- [ ] **Geração de malha de LOD é síncrona, com orçamento de vértices por frame**
+  (`vertex_budget_per_frame`). Voar em alta velocidade (sprint, 2000 u/s) pode gerar mais
+  chunks por segundo do que o orçamento cobre, e o refinamento atrasa (o terreno fica grosso
+  por um instante). A evolução natural é gerar em `AsyncComputeTaskPool` e trocar o `Mesh3d`
+  quando a task terminar. Valores de distância, orçamento e resolução por nível são chutes
+  calibráveis (`europa_recipe`), ainda não medidos com o app rodando.
+- [ ] `TerrainParams.res` só vale para a malha monolítica legada (`build_terrain_mesh`,
+  `spawn_terrain`, usadas em testes). O pipeline com chunks usa `TerrainLodConfig`. Mesma
+  família da duplicação de `amp` acima: não removido agora porque quebraria os literais de
+  `TerrainParams` em vários testes de integração.
+- [ ] LOD decide o nível só pela distância 3D ao foco. Não considera altitude da câmera
+  (voando alto, chunks distantes em ângulo raso poderiam ficar mais grossos), não há culling
+  por oclusão, e não existe colisão (qualquer modo de caminhada futuro deve ler
+  `HeightResource::height_at` direto, não a malha visível).
 
 ## Cena / Visual
 - [X] Câmera e luz em eigc_app::scene_placeholder eram fixas e hardcoded, sem

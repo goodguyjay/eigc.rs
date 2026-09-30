@@ -6,8 +6,9 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::{
     ButtonInput, Camera3d, Commands, Component, EulerRot, IntoScheduleConfigs, KeyCode,
     MessageReader, PerspectiveProjection, Plugin, Projection, Quat, Query, Res, ResMut, Resource,
-    Single, Startup, Time, Transform, Update, Vec3, default, resource_exists,
+    Single, Startup, Time, Transform, Update, Vec3, With, default, resource_exists,
 };
+use eigc_common::lod_focus::LodFocus;
 use bevy::window::{CursorGrabMode, CursorOptions};
 
 /// Marca a câmera de voo livre e guarda o estado de orientação e os parâmetros de movimento.
@@ -46,6 +47,7 @@ pub struct FreeFlyCameraPlugin;
 impl Plugin for FreeFlyCameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CamLock>()
+            .init_resource::<LodFocus>()
             .add_systems(Startup, spawn_free_fly_camera)
             .add_systems(
                 Update,
@@ -55,6 +57,7 @@ impl Plugin for FreeFlyCameraPlugin {
                     keyboard_movement,
                     lock_aim_update.run_if(resource_exists::<SkySettings>),
                     cursor_release,
+                    publish_lod_focus,
                 )
                     .chain(),
             );
@@ -213,6 +216,13 @@ fn lock_aim_update(
     camera.pitch = pitch;
 }
 
+/// Publica a posição da câmera em `LodFocus`, para o terreno escolher o nível de LOD.
+///
+/// Lê o `Transform` e não o `GlobalTransform`, que só reflete o movimento do frame seguinte.
+fn publish_lod_focus(camera: Single<&Transform, With<FreeFlyCamera>>, mut focus: ResMut<LodFocus>) {
+    focus.position = camera.translation;
+}
+
 /// Alterna o modo de bloqueio da câmera entre livre, travada no Sol ou travada em Júpiter.
 fn toggle_lock(keys: Res<ButtonInput<KeyCode>>, mut lock: ResMut<CamLock>) {
     if keys.just_pressed(KeyCode::KeyF) {
@@ -260,6 +270,22 @@ mod tests {
         let pitch = 1.0;
         let clamped_pitch = clamp_pitch(pitch);
         assert_eq!(clamped_pitch, pitch);
+    }
+
+    /// Testa que a posição atual da câmera aparece em `LodFocus` depois de um update.
+    #[test]
+    fn publish_lod_focus_copies_camera_position_into_the_resource() {
+        let mut app = App::new();
+        app.init_resource::<LodFocus>()
+            .add_systems(Update, publish_lod_focus);
+
+        let position = Vec3::new(120.0, 600.0, -35.0);
+        app.world_mut()
+            .spawn((Transform::from_translation(position), FreeFlyCamera::default()));
+
+        app.update();
+
+        assert_eq!(app.world().resource::<LodFocus>().position, position);
     }
 
     /// Testa que segurar W descola a câmera para frente ao longo do tempo
