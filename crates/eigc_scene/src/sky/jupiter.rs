@@ -1,5 +1,6 @@
 //! Plugin das propriedades de Júpiter no céu.
 
+use crate::sky::shared::place_celestial_disc;
 use crate::sky::{SkyAssets, SkyAssetsLoaded, SkyState};
 use bevy::app::App;
 use bevy::camera::visibility::NoFrustumCulling;
@@ -82,15 +83,17 @@ fn place_and_scale_jupiter(
         Projection::Orthographic(o) => o.far(),
         _ => return,
     };
-    let sky_r = (far * 0.85).min(eigc_common::constants::SKY_RADIUS);
-
-    let dir = state.jupiter_dir.normalize();
-    t.translation = cam_t.translation + dir * sky_r;
-
-    let theta = profile.jupiter_angular_diameter_deg.to_radians();
-    let radius = sky_r * (0.5 * theta).tan();
+    let (position, radius) = place_celestial_disc(
+        cam_t.translation,
+        far,
+        state.jupiter_dir,
+        profile.jupiter_angular_diameter_deg,
+        eigc_common::constants::SKY_RADIUS,
+    );
+    t.translation = position;
     t.scale = Vec3::splat(radius);
 
+    let dir = state.jupiter_dir.normalize();
     let forward = (-dir).normalize_or_zero();
     let mut up_hint = Vec3::Y;
     let axis = up_hint.cross(forward).normalize_or_zero();
