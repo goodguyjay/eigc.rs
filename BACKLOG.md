@@ -90,6 +90,11 @@
   dupla andar/órbita continua pendente, não fazia parte desse fix.
 - [ ] Jupiter está com orientação incorreta no céu
 - [ ] falta damping/smoothing na transição, e não desabilitar mouse_look completamente durante o lock
+- [ ] `place_and_scale_jupiter`, `track_camera` e `dim_stars_near_sun` leem `SkyState` sem ordem
+  garantida em relação a `animate_sky_physical` (que escreve `SkyState` todo frame) — nenhum dos
+  três está em `SimSet::Animate` nem usa `.after(...)`. Na prática não costuma doer porque
+  `SkyState` já existe desde o frame anterior, mas é dívida pré-existente, não resolvida aqui
+  (issue #27 só adicionou `run_if(resource_exists::<SkySettings>)`, que não ordena nada).
 
 ## Arquitetura aceita
 - TerrainPlugin acopla carregamento de asset (`Handle<MoonProfile>`) com
