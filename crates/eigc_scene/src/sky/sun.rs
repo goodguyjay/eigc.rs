@@ -6,10 +6,10 @@ use bevy::camera::CameraProjection;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::prelude::{
-    AlphaMode, Assets, Camera3d, Color, Commands, Component, DirectionalLight,
-    GlobalAmbientLight, IntoScheduleConfigs, Mesh, Mesh3d, MeshMaterial3d, Meshable, Name, Plugin,
-    Projection, Query, Res, ResMut, Sphere, StandardMaterial, Transform, Update, Vec3, With,
-    Without, any_with_component, default, on_message, resource_exists,
+    AlphaMode, Assets, Camera3d, Color, Commands, Component, DirectionalLight, GlobalAmbientLight,
+    IntoScheduleConfigs, Mesh, Mesh3d, MeshMaterial3d, Meshable, Name, Plugin, Projection, Query,
+    Res, ResMut, Sphere, StandardMaterial, Transform, Update, Vec3, With, Without,
+    any_with_component, default, on_message, resource_exists,
 };
 use eigc_sim::SimSet;
 
@@ -30,6 +30,9 @@ impl Plugin for SunPlugin {
                 (position_sun_disc, update_sun_light)
                     .in_set(SimSet::Animate)
                     .run_if(any_with_component::<SunDisc>)
+                    // `update_sun_light` lê `SkySettings` de verdade (ver assinatura abaixo);
+                    // `position_sun_disc` não lê, mas usa a mesma guarda como proxy de "céu já
+                    // inicializado", já que `SkyState` é `init_resource` e nunca fica ausente.
                     .run_if(resource_exists::<SkySettings>),
             );
     }
@@ -135,33 +138,92 @@ fn position_sun_disc(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        App, Camera3d, DirectionalLight, GlobalAmbientLight, Projection, SkyAssetsLoaded,
+        SkySettings, SkyState, SunDisc, SunLight, SunPlugin, Transform, Vec3, default,
+    };
+    use bevy::prelude::PerspectiveProjection;
 
-    /// Testa que `position_sun_disc`/`update_sun_light` não rodam sem `SkySettings` — regressão
-    /// do padrão de bug da issue #25 (resource opcional sem `run_if` guard, lido via `SkyState`
-    /// ainda não animado em vez de panicar de forma visível).
+    /// Sem `SkySettings`, `position_sun_disc`/`update_sun_light` não devem rodar; com ela,
+    /// devem atualizar o disco e a luz (issue #27).
     #[test]
-    fn sun_disc_systems_do_not_run_without_sky_settings() {
+    fn sun_disc_and_light_only_update_with_sky_settings() {
         let mut app = App::new();
 
-        app.add_systems(
-            Update,
-            (position_sun_disc, update_sun_light)
-                .run_if(any_with_component::<SunDisc>)
-                .run_if(resource_exists::<SkySettings>),
-        );
+        app.add_message::<SkyAssetsLoaded>()
+            .insert_resource(SkyState {
+                sun_dir: Vec3::new(1.0, 0.0, 0.0),
+                eclipse_factor: 1.0,
+                ..default()
+            })
+            .insert_resource(GlobalAmbientLight {
+                brightness: 0.0,
+                ..default()
+            })
+            .add_plugins(SunPlugin);
+
+        app.world_mut().spawn((
+            Camera3d::default(),
+            Transform::from_translation(Vec3::ZERO),
+            Projection::Perspective(PerspectiveProjection {
+                far: 50_000.0,
+                ..default()
+            }),
+        ));
 
         let known_transform =
             Transform::from_translation(Vec3::new(1.0, 2.0, 3.0)).with_scale(Vec3::splat(5.0));
         let disc_entity = app.world_mut().spawn((SunDisc, known_transform)).id();
 
+        let light_entity = app
+            .world_mut()
+            .spawn((
+                SunLight,
+                DirectionalLight {
+                    illuminance: 123.0,
+                    ..default()
+                },
+                Transform::IDENTITY,
+            ))
+            .id();
+
+        // Fase 1: sem SkySettings, nada deveria rodar.
         app.update();
 
-        let disc_transform = app.world().get::<Transform>(disc_entity).unwrap();
         assert_eq!(
-            *disc_transform, known_transform,
-            "position_sun_disc não deveria rodar sem SkySettings, mas a Transform mudou de {:?} para {:?}",
-            known_transform, disc_transform
+            *app.world().get::<Transform>(disc_entity).unwrap(),
+            known_transform,
+            "position_sun_disc não deveria rodar sem SkySettings"
+        );
+        assert_eq!(
+            app.world()
+                .get::<DirectionalLight>(light_entity)
+                .unwrap()
+                .illuminance,
+            123.0,
+            "update_sun_light não deveria rodar sem SkySettings"
+        );
+
+        // Fase 2: com SkySettings, os dois devem atualizar.
+        app.insert_resource(SkySettings {
+            sun_illuminance: 999.0,
+            ambient_brightness: 0.5,
+            ..default()
+        });
+        app.update();
+
+        assert_ne!(
+            *app.world().get::<Transform>(disc_entity).unwrap(),
+            known_transform,
+            "position_sun_disc deveria rodar com SkySettings presente"
+        );
+        assert_ne!(
+            app.world()
+                .get::<DirectionalLight>(light_entity)
+                .unwrap()
+                .illuminance,
+            123.0,
+            "update_sun_light deveria rodar com SkySettings presente"
         );
     }
 }
