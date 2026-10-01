@@ -114,7 +114,10 @@ fn place_and_scale_jupiter(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        ActiveMoonProfileHandle, App, Assets, Camera3d, Jupiter, MoonProfile, Projection, SkyState,
+        Transform, Update, Vec3, default, place_and_scale_jupiter, place_celestial_disc,
+    };
     use bevy::prelude::PerspectiveProjection;
     use eigc_moons::{MoonId, SkyCalibration, TerrainCalibration};
 
@@ -175,10 +178,7 @@ mod tests {
         app.world_mut().spawn((
             Camera3d::default(),
             Transform::from_translation(cam_translation),
-            Projection::Perspective(PerspectiveProjection {
-                far,
-                ..default()
-            }),
+            Projection::Perspective(PerspectiveProjection { far, ..default() }),
         ));
 
         let jupiter_entity = app.world_mut().spawn((Jupiter, Transform::default())).id();
@@ -206,6 +206,22 @@ mod tests {
             "escala de Júpiter {:?} não bate com o esperado {:?}",
             jupiter_transform.scale,
             Vec3::splat(expected_scale)
+        );
+
+        // `place_and_scale_jupiter` termina com `t.rotate(Quat::from_axis_angle(right,
+        // -FRAC_PI_2))`, que gira o frame -90° em torno do próprio eixo `right`. Essa rotação
+        // troca `forward` por `up` (com sinal): `up_novo = forward_antigo` e
+        // `forward_novo = -up_antigo`. Como `forward_antigo` (o que entrou no `look_to`) é
+        // exatamente `-dir`, isso dá uma verificação independente da orientação final sem
+        // precisar reproduzir a libração/obliquidade: se essa rotação de correção (do PR #33)
+        // for removida ou trocada de sinal, `up()` deixa de bater com `-dir` e o teste falha.
+        let expected_up = -jupiter_dir.normalize();
+        let up = jupiter_transform.up().as_vec3();
+        assert!(
+            (up - expected_up).length() < 1e-3,
+            "up de Júpiter {:?} não bate com o esperado {:?} (regressão da correção de orientação do PR #33)",
+            up,
+            expected_up
         );
     }
 }

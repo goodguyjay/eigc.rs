@@ -7,10 +7,10 @@ use bevy::camera::CameraProjection;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::prelude::{
-    AlphaMode, Assets, Camera3d, Color, Commands, Component, DirectionalLight,
-    GlobalAmbientLight, IntoScheduleConfigs, Mesh, Mesh3d, MeshMaterial3d, Meshable, Name, Plugin,
-    Projection, Query, Res, ResMut, Sphere, StandardMaterial, Transform, Update, Vec3, With,
-    Without, any_with_component, default, on_message,
+    AlphaMode, Assets, Camera3d, Color, Commands, Component, DirectionalLight, GlobalAmbientLight,
+    IntoScheduleConfigs, Mesh, Mesh3d, MeshMaterial3d, Meshable, Name, Plugin, Projection, Query,
+    Res, ResMut, Sphere, StandardMaterial, Transform, Update, Vec3, With, Without,
+    any_with_component, default, on_message,
 };
 use eigc_sim::SimSet;
 
@@ -138,7 +138,10 @@ fn position_sun_disc(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        App, Camera3d, Projection, SkyState, SunDisc, Transform, Update, Vec3, default,
+        place_celestial_disc, position_sun_disc,
+    };
     use bevy::prelude::PerspectiveProjection;
 
     /// Testa que `position_sun_disc` posiciona e escala o disco do sol exatamente como
@@ -161,10 +164,7 @@ mod tests {
         app.world_mut().spawn((
             Camera3d::default(),
             Transform::from_translation(cam_translation),
-            Projection::Perspective(PerspectiveProjection {
-                far,
-                ..default()
-            }),
+            Projection::Perspective(PerspectiveProjection { far, ..default() }),
         ));
 
         let disc_entity = app.world_mut().spawn((SunDisc, Transform::default())).id();
@@ -192,6 +192,19 @@ mod tests {
             "escala do disco do sol {:?} não bate com o esperado {:?}",
             disc_transform.scale,
             Vec3::splat(expected_scale)
+        );
+
+        // `position_sun_disc` termina com `t.look_to(-dir_to_sun, Vec3::Y)`, então o disco deve
+        // encarar de volta a câmera. `sun_dir` entra não normalizado de propósito — confirma que
+        // a normalização interna (`state.sun_dir.normalize()`) está de fato sendo aplicada antes
+        // do look_to, não só na posição.
+        let expected_forward = -sun_dir.normalize();
+        let forward = disc_transform.forward().as_vec3();
+        assert!(
+            (forward - expected_forward).length() < 1e-3,
+            "forward do disco do sol {:?} não bate com o esperado {:?}",
+            forward,
+            expected_forward
         );
     }
 }
