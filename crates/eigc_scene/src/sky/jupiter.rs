@@ -1,5 +1,6 @@
 //! Plugin das propriedades de Júpiter no céu.
 
+use crate::sky::shared::place_celestial_disc;
 use crate::sky::{SkyAssets, SkyAssetsLoaded, SkyState};
 use bevy::app::App;
 use bevy::camera::visibility::NoFrustumCulling;
@@ -82,14 +83,18 @@ fn place_and_scale_jupiter(
         Projection::Orthographic(o) => o.far(),
         _ => return,
     };
-    let sky_r = (far * 0.85).min(eigc_common::constants::SKY_RADIUS);
 
     let dir = state.jupiter_dir.normalize();
-    t.translation = cam_t.translation + dir * sky_r;
+    let (position, scale) = place_celestial_disc(
+        cam_t.translation,
+        far,
+        dir,
+        profile.jupiter_angular_diameter_deg,
+        eigc_common::constants::SKY_RADIUS,
+    );
 
-    let theta = profile.jupiter_angular_diameter_deg.to_radians();
-    let radius = sky_r * (0.5 * theta).tan();
-    t.scale = Vec3::splat(radius);
+    t.translation = position;
+    t.scale = Vec3::splat(scale);
 
     let forward = (-dir).normalize_or_zero();
     let mut up_hint = Vec3::Y;
@@ -105,4 +110,102 @@ fn place_and_scale_jupiter(
 
     let right = t.right().as_vec3();
     t.rotate(Quat::from_axis_angle(right, -std::f32::consts::FRAC_PI_2));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::prelude::PerspectiveProjection;
+    use eigc_moons::{MoonId, SkyCalibration, TerrainCalibration};
+
+    fn test_profile(jupiter_angular_diameter_deg: f32) -> MoonProfile {
+        MoonProfile {
+            moon_id: MoonId::Europa,
+            display_name: "Perfil de teste".to_string(),
+            jupiter_angular_diameter_deg,
+            terrain: TerrainCalibration {
+                seed: 1,
+                base_frequency: 0.001,
+                feature_direction: [1.0, 0.0],
+                vertical_amplitude_meters: 10.0,
+                warp_amplitude_meters: 20.0,
+                perceptual_roughness: 0.5,
+                reflectance: 0.3,
+            },
+            terrain_base_color: [1.0, 1.0, 1.0, 1.0],
+            terrain_valley_color: [0.0, 0.0, 0.0, 1.0],
+            walkable: true,
+            sky: SkyCalibration {
+                orbital_period_seconds: 1000.0,
+                base_sun_dir: [0.0, 0.3, -1.0],
+                base_jupiter_dir: [1.0, 0.2, 0.0],
+                jupiter_libration_lat_deg: 0.0,
+                jupiter_libration_lon_deg: 0.0,
+                jupiter_ang_radius: 0.104_72,
+                sun_elevation_deg: 20.0,
+                eclipse_soft_deg: 1.0,
+                planet_shine_max: 0.006,
+            },
+        }
+    }
+
+    /// Testa que `place_and_scale_jupiter` posiciona e escala Júpiter exatamente como
+    /// `place_celestial_disc` calcularia para os mesmos parâmetros. Guarda de regressão da
+    /// refatoração que trocou a fórmula duplicada por uma chamada à função compartilhada.
+    #[test]
+    fn place_and_scale_jupiter_matches_place_celestial_disc_formula() {
+        let mut app = App::new();
+
+        let cam_translation = Vec3::new(5.0, 0.0, -5.0);
+        let far = 50_000.0;
+        let jupiter_dir = Vec3::new(0.0, 6.0, 8.0); // não normalizado de propósito
+        let angular_diameter_deg = 20.0;
+
+        let mut profiles = Assets::<MoonProfile>::default();
+        let handle = profiles.add(test_profile(angular_diameter_deg));
+
+        app.insert_resource(SkyState {
+            jupiter_dir,
+            ..default()
+        })
+        .insert_resource(profiles)
+        .insert_resource(ActiveMoonProfileHandle(handle))
+        .add_systems(Update, place_and_scale_jupiter);
+
+        app.world_mut().spawn((
+            Camera3d::default(),
+            Transform::from_translation(cam_translation),
+            Projection::Perspective(PerspectiveProjection {
+                far,
+                ..default()
+            }),
+        ));
+
+        let jupiter_entity = app.world_mut().spawn((Jupiter, Transform::default())).id();
+
+        app.update();
+
+        let jupiter_transform = app.world().get::<Transform>(jupiter_entity).unwrap();
+
+        let (expected_position, expected_scale) = place_celestial_disc(
+            cam_translation,
+            far,
+            jupiter_dir,
+            angular_diameter_deg,
+            eigc_common::constants::SKY_RADIUS,
+        );
+
+        assert!(
+            (jupiter_transform.translation - expected_position).length() < 1e-3,
+            "posição de Júpiter {:?} não bate com o esperado {:?}",
+            jupiter_transform.translation,
+            expected_position
+        );
+        assert!(
+            (jupiter_transform.scale - Vec3::splat(expected_scale)).length() < 1e-3,
+            "escala de Júpiter {:?} não bate com o esperado {:?}",
+            jupiter_transform.scale,
+            Vec3::splat(expected_scale)
+        );
+    }
 }
