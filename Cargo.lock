@@ -2276,6 +2276,7 @@ version = "0.0.0"
 dependencies = [
  "bevy",
  "ron",
+ "rstest",
  "serde",
  "thiserror 2.0.20",
 ]
@@ -2295,6 +2296,7 @@ dependencies = [
  "eigc_common",
  "eigc_moons",
  "eigc_sim",
+ "rstest",
 ]
 
 [[package]]
