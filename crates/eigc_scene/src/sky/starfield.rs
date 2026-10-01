@@ -1,13 +1,13 @@
 //! Domo de estrelas de fundo, com escurecimento perto do sol.
 
-use crate::sky::{SkyAssets, SkyAssetsLoaded, SkyState};
+use crate::sky::{SkyAssets, SkyAssetsLoaded, SkySettings, SkyState};
 use bevy::app::App;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::prelude::{
     AlphaMode, Assets, Camera3d, Color, Commands, Component, IntoScheduleConfigs, Mesh, Mesh3d,
     MeshMaterial3d, Meshable, Name, Plugin, Projection, Query, Res, ResMut, Sphere,
     StandardMaterial, Transform, Update, Vec3, With, Without, any_with_component, default,
-    on_message,
+    on_message, resource_exists,
 };
 
 /// Plugin que gerencia o domo de estrelas de fundo.
@@ -26,7 +26,9 @@ impl Plugin for StarfieldPlugin {
         )
         .add_systems(
             Update,
-            (track_camera, dim_stars_near_sun).run_if(any_with_component::<StarDome>),
+            (track_camera, dim_stars_near_sun)
+                .run_if(any_with_component::<StarDome>)
+                .run_if(resource_exists::<SkySettings>),
         );
     }
 }
@@ -112,5 +114,38 @@ fn dim_stars_near_sun(
 
     if let Some(mat) = mats.get_mut(&star_mat.0) {
         mat.base_color = Color::linear_rgb(brightness, brightness, brightness);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Testa que `track_camera`/`dim_stars_near_sun` não rodam sem `SkySettings` — regressão do
+    /// padrão de bug da issue #25 (resource opcional sem `run_if` guard, lido via `SkyState`
+    /// ainda não animado em vez de panicar de forma visível).
+    #[test]
+    fn starfield_systems_do_not_run_without_sky_settings() {
+        let mut app = App::new();
+
+        app.add_systems(
+            Update,
+            (track_camera, dim_stars_near_sun)
+                .run_if(any_with_component::<StarDome>)
+                .run_if(resource_exists::<SkySettings>),
+        );
+
+        let known_transform =
+            Transform::from_translation(Vec3::new(1.0, 2.0, 3.0)).with_scale(Vec3::splat(5.0));
+        let dome_entity = app.world_mut().spawn((StarDome, known_transform)).id();
+
+        app.update();
+
+        let dome_transform = app.world().get::<Transform>(dome_entity).unwrap();
+        assert_eq!(
+            *dome_transform, known_transform,
+            "track_camera não deveria rodar sem SkySettings, mas a Transform mudou de {:?} para {:?}",
+            known_transform, dome_transform
+        );
     }
 }

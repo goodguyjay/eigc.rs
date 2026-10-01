@@ -9,7 +9,7 @@ use bevy::prelude::{
     AlphaMode, Assets, Camera3d, Color, Commands, Component, DirectionalLight,
     GlobalAmbientLight, IntoScheduleConfigs, Mesh, Mesh3d, MeshMaterial3d, Meshable, Name, Plugin,
     Projection, Query, Res, ResMut, Sphere, StandardMaterial, Transform, Update, Vec3, With,
-    Without, any_with_component, default, on_message,
+    Without, any_with_component, default, on_message, resource_exists,
 };
 use eigc_sim::SimSet;
 
@@ -29,7 +29,8 @@ impl Plugin for SunPlugin {
                 Update,
                 (position_sun_disc, update_sun_light)
                     .in_set(SimSet::Animate)
-                    .run_if(any_with_component::<SunDisc>),
+                    .run_if(any_with_component::<SunDisc>)
+                    .run_if(resource_exists::<SkySettings>),
             );
     }
 }
@@ -130,4 +131,37 @@ fn position_sun_disc(
     t.scale = Vec3::splat(radius);
 
     t.look_to(-dir_to_sun, Vec3::Y);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Testa que `position_sun_disc`/`update_sun_light` não rodam sem `SkySettings` — regressão
+    /// do padrão de bug da issue #25 (resource opcional sem `run_if` guard, lido via `SkyState`
+    /// ainda não animado em vez de panicar de forma visível).
+    #[test]
+    fn sun_disc_systems_do_not_run_without_sky_settings() {
+        let mut app = App::new();
+
+        app.add_systems(
+            Update,
+            (position_sun_disc, update_sun_light)
+                .run_if(any_with_component::<SunDisc>)
+                .run_if(resource_exists::<SkySettings>),
+        );
+
+        let known_transform =
+            Transform::from_translation(Vec3::new(1.0, 2.0, 3.0)).with_scale(Vec3::splat(5.0));
+        let disc_entity = app.world_mut().spawn((SunDisc, known_transform)).id();
+
+        app.update();
+
+        let disc_transform = app.world().get::<Transform>(disc_entity).unwrap();
+        assert_eq!(
+            *disc_transform, known_transform,
+            "position_sun_disc não deveria rodar sem SkySettings, mas a Transform mudou de {:?} para {:?}",
+            known_transform, disc_transform
+        );
+    }
 }

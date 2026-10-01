@@ -1,6 +1,6 @@
 //! Plugin das propriedades de Júpiter no céu.
 
-use crate::sky::{SkyAssets, SkyAssetsLoaded, SkyState};
+use crate::sky::{SkyAssets, SkyAssetsLoaded, SkySettings, SkyState};
 use bevy::app::App;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::camera::{Camera3d, CameraProjection};
@@ -8,7 +8,7 @@ use bevy::prelude::{
     AlphaMode, Assets, Color, Commands, Component, IntoScheduleConfigs, Mesh, Mesh3d,
     MeshMaterial3d, Meshable, Name, Plugin, Projection, Quat, Query, Res, ResMut, Sphere,
     StandardMaterial, Transform, Update, Vec3, With, Without, any_with_component, default,
-    on_message,
+    on_message, resource_exists,
 };
 use eigc_moons::{ActiveMoonProfileHandle, MoonProfile};
 
@@ -25,7 +25,9 @@ impl Plugin for JupiterPlugin {
         app.add_systems(Update, spawn_jupiter.run_if(on_message::<SkyAssetsLoaded>))
             .add_systems(
                 Update,
-                place_and_scale_jupiter.run_if(any_with_component::<Jupiter>),
+                place_and_scale_jupiter
+                    .run_if(any_with_component::<Jupiter>)
+                    .run_if(resource_exists::<SkySettings>),
             );
     }
 }
@@ -105,4 +107,37 @@ fn place_and_scale_jupiter(
 
     let right = t.right().as_vec3();
     t.rotate(Quat::from_axis_angle(right, -std::f32::consts::FRAC_PI_2));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Testa que `place_and_scale_jupiter` não roda sem `SkySettings` — regressão do padrão de
+    /// bug da issue #25 (resource opcional sem `run_if` guard, lido via `SkyState` ainda não
+    /// animado em vez de panicar de forma visível).
+    #[test]
+    fn place_and_scale_jupiter_does_not_run_without_sky_settings() {
+        let mut app = App::new();
+
+        app.add_systems(
+            Update,
+            place_and_scale_jupiter
+                .run_if(any_with_component::<Jupiter>)
+                .run_if(resource_exists::<SkySettings>),
+        );
+
+        let known_transform =
+            Transform::from_translation(Vec3::new(1.0, 2.0, 3.0)).with_scale(Vec3::splat(5.0));
+        let jupiter_entity = app.world_mut().spawn((Jupiter, known_transform)).id();
+
+        app.update();
+
+        let jupiter_transform = app.world().get::<Transform>(jupiter_entity).unwrap();
+        assert_eq!(
+            *jupiter_transform, known_transform,
+            "place_and_scale_jupiter não deveria rodar sem SkySettings, mas a Transform mudou de {:?} para {:?}",
+            known_transform, jupiter_transform
+        );
+    }
 }
