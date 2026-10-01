@@ -7,6 +7,7 @@ use crate::height::linea::{LineaColorField, LineaField, generate_linea_specs};
 use crate::height::noise::PerlinFbm;
 use crate::height::warp::Warp2D;
 use crate::height::{ColorFn, HeightFn, arc, arc_color};
+use crate::lod::TerrainLodConfig;
 use crate::params::TerrainParams;
 use crate::pipeline::TerrainAppearance;
 use crate::systems::TerrainMaterialProperties;
@@ -41,6 +42,8 @@ pub struct TerrainRecipe {
     /// Fonte de cor por vértice, quando a receita pinta feições distintas (ex.: lineae). `None`
     /// significa que o terreno usa só a cor flat de `appearance.base_color`.
     pub color: Option<ColorFn>,
+    /// Configuração do LOD por chunks do terreno.
+    pub lod: TerrainLodConfig,
 }
 
 /// Ponto de entrada para montar a receita de geração de terreno de uma lua específica.
@@ -56,16 +59,11 @@ pub fn build_recipe(profile: &MoonProfile) -> TerrainRecipe {
 /// Monta a receita de geração de terreno para Europa.
 /// Combina ruído base suave com crista anisotrópica orientada ao longo da diração de lineae
 fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
-    // Tamanho do recorte, em metros. V1 do terreno: fundação pra iteração futura (LOD incluso),
-    // aumentado de 6000 pra acompanhar o novo comprimento de linea (6000-14000m, ver
-    // LINEA_LENGTH_MIN_M/MAX_M em height/linea.rs).
+    // Tamanho do recorte, em metros. Aumentado de 6000 pra acompanhar o novo comprimento de
+    // linea (6000-14000m, ver LINEA_LENGTH_MIN_M/MAX_M em height/linea.rs).
     const TERRAIN_SIZE_M: f32 = 22000.0;
-    // Resolução da malha (vértices por lado). 
-    // 
-    // TODO (jay): Deliberadamente NÃO alterada nesta mudança de escala.
-    // Mapa maior com a mesma resolução degrada a legibilidade do ruído de detalhe fino
-    // da encosta (LINEA_DETAIL_AMPLITUDE_M), aceito por ora até LOD existir (ver BACKLOG.md).
-    // Ainda uma malha única sem LOD.
+    // Resolução da malha monolítica legada (vértices por lado). O terreno em jogo usa chunks
+    // com LOD (ver `lod` abaixo), então isto só alimenta `TerrainParams.res` (ver BACKLOG.md).
     const TERRAIN_RES: u32 = 1536;
 
     let calibration = &profile.terrain;
@@ -199,12 +197,30 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         reflectance: calibration.reflectance,
     };
 
+    // 64x64 chunks de 343,75 m. O nível 0 tem espaçamento de ~10,7 m (melhor que os 14,3 m da
+    // malha monolítica) e o mais grosso ~86 m, ainda menor que a largura das lineae (100-300 m).
+    // O nível de cada chunk sai do erro geométrico medido (ver `lod_error.rs`) projetado na tela:
+    // `max_screen_error_px` menor = mais detalhe de mais longe. `min_error_fraction` é o piso
+    // para chunks lisos (e para a cor por vértice, que também perde resolução ao engrossar).
+    // Valores calibráveis: medir com o app rodando antes de mexer.
+    let lod = TerrainLodConfig {
+        chunks_per_side: 64,
+        quads_per_chunk: [64, 32, 16, 8],
+        max_screen_error_px: 1.5,
+        min_error_fraction: 0.2,
+        hysteresis_fraction: 0.1,
+        skirt_depth_factor: 0.35,
+        in_flight_vertex_budget: 30_000,
+        max_error_tasks_in_flight: 16,
+    };
+
     TerrainRecipe {
         height: arc(terrain_with_clearing),
         params: terrain_params,
         appearance: terrain_appearance,
         material_properties,
         color: Some(arc_color(color_with_clearing)),
+        lod,
     }
 }
 

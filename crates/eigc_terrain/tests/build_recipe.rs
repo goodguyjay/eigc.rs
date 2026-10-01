@@ -64,6 +64,44 @@ fn europa_recipe_produces_height_function_and_matching_params() {
     );
 }
 
+/// Testa se a configuração de LOD de Europa é coerente: níveis do mais fino ao mais grosso,
+/// distâncias crescentes e uma grade de chunks que cobre exatamente o terreno.
+#[test]
+fn europa_recipe_produces_a_consistent_lod_config() {
+    let profile = minimal_profile_for(MoonId::Europa);
+    let recipe = build_recipe(&profile);
+    let lod = &recipe.lod;
+
+    assert!(lod.chunks_per_side > 0);
+    assert!(
+        lod.quads_per_chunk.windows(2).all(|pair| pair[0] > pair[1]),
+        "quads por chunk deveriam decrescer do nível 0 para o mais grosso: {:?}",
+        lod.quads_per_chunk
+    );
+    assert!(
+        lod.quads_per_chunk
+            .windows(2)
+            .all(|pair| pair[0] % pair[1] == 0),
+        "cada nível deveria dividir o anterior, para as bordas coincidirem: {:?}",
+        lod.quads_per_chunk
+    );
+    assert!(
+        lod.max_screen_error_px > 0.0,
+        "a tolerância de erro em pixels deveria ser positiva: {}",
+        lod.max_screen_error_px
+    );
+    assert!(lod.min_error_fraction >= 0.0);
+    assert!(lod.hysteresis_fraction >= 0.0 && lod.hysteresis_fraction < 1.0);
+    assert!(lod.in_flight_vertex_budget > 0);
+    assert!(lod.max_error_tasks_in_flight > 0);
+
+    let chunk_size = recipe.params.size / lod.chunks_per_side as f32;
+    assert!(
+        (chunk_size * lod.chunks_per_side as f32 - recipe.params.size).abs() < 1e-3,
+        "a grade de chunks deveria cobrir o terreno inteiro"
+    );
+}
+
 /// Testa se a origem (onde câmera/jogador aparecem) e uma vizinhança ao redor dela ficam planas.
 #[test]
 fn europa_recipe_keeps_spawn_clearing_flat_around_origin() {

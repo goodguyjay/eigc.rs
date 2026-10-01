@@ -12,6 +12,20 @@ pub struct TerrainMaterialProperties {
     pub reflectance: f32,
 }
 
+/// Monta o material do terreno a partir da aparência e das propriedades físicas.
+pub fn build_terrain_material(
+    appearance: &TerrainAppearance,
+    material_properties: TerrainMaterialProperties,
+) -> StandardMaterial {
+    StandardMaterial {
+        base_color: appearance.base_color,
+        perceptual_roughness: material_properties.perceptual_roughness,
+        reflectance: material_properties.reflectance,
+        metallic: 0.0,
+        ..Default::default()
+    }
+}
+
 /// Spawna uma entidade de terreno no Bevy usando os parâmetros e a função de altura fornecidos,
 /// sem cor por vértice.
 pub fn build_and_spawn_terrain(
@@ -50,13 +64,7 @@ pub fn build_and_spawn_terrain_with_color(
     let mesh = build_terrain_mesh_with_color(params, height, color);
     let mesh_handle = meshes.add(mesh);
 
-    let material = materials.add(StandardMaterial {
-        base_color: appearance.base_color,
-        perceptual_roughness: material_properties.perceptual_roughness,
-        reflectance: material_properties.reflectance,
-        metallic: 0.0,
-        ..Default::default()
-    });
+    let material = materials.add(build_terrain_material(appearance, material_properties));
 
     commands.spawn((
         Mesh3d(mesh_handle),
