@@ -145,7 +145,7 @@ mod tests {
     use bevy::prelude::PerspectiveProjection;
 
     /// Sem `SkySettings`, `position_sun_disc`/`update_sun_light` não devem rodar; com ela,
-    /// devem atualizar o disco e a luz (issue #27).
+    /// devem atualizar o disco e a luz.
     #[test]
     fn sun_disc_and_light_only_update_with_sky_settings() {
         let mut app = App::new();

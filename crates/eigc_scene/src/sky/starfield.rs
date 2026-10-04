@@ -28,7 +28,7 @@ impl Plugin for StarfieldPlugin {
             Update,
             (track_camera, dim_stars_near_sun)
                 .run_if(any_with_component::<StarDome>)
-                // Nenhum dos dois lê `SkySettings` diretamente — a guarda funciona como proxy
+                // Nenhum dos dois lê `SkySettings` diretamente; a guarda funciona como proxy
                 // de "céu já inicializado" (`SkyState` é `init_resource`, nunca fica ausente).
                 // `track_camera` em particular nem depende de dado real do céu, só da posição
                 // da câmera; a guarda aqui é só para não rodar solto antes do resto do céu.
@@ -130,7 +130,7 @@ mod tests {
     use bevy::prelude::PerspectiveProjection;
 
     /// Sem `SkySettings`, `track_camera`/`dim_stars_near_sun` não devem rodar; com ela, devem
-    /// atualizar o domo de estrelas (issue #27).
+    /// atualizar o domo de estrelas.
     #[test]
     fn starfield_only_updates_with_sky_settings() {
         let mut app = App::new();

@@ -27,7 +27,7 @@ impl Plugin for JupiterPlugin {
                 Update,
                 place_and_scale_jupiter
                     .run_if(any_with_component::<Jupiter>)
-                    // `place_and_scale_jupiter` não lê `SkySettings` diretamente — a guarda
+                    // `place_and_scale_jupiter` não lê `SkySettings` diretamente; a guarda
                     // funciona como proxy de "céu já inicializado", já que `SkyState` é
                     // `init_resource` e nunca fica ausente.
                     .run_if(resource_exists::<SkySettings>),
@@ -153,7 +153,7 @@ mod tests {
     }
 
     /// Sem `SkySettings`, `place_and_scale_jupiter` não deve rodar; com ela, deve posicionar
-    /// Júpiter (issue #27).
+    /// Júpiter.
     #[test]
     fn jupiter_only_updates_with_sky_settings() {
         let mut app = App::new();
