@@ -1,13 +1,13 @@
 //! Domo de estrelas de fundo, com escurecimento perto do sol.
 
-use crate::sky::{SkyAssets, SkyAssetsLoaded, SkySettings, SkyState};
+use crate::sky::{SkyAssets, SkyAssetsLoaded, SkyState};
 use bevy::app::App;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::prelude::{
     AlphaMode, Assets, Camera3d, Color, Commands, Component, IntoScheduleConfigs, Mesh, Mesh3d,
     MeshMaterial3d, Meshable, Name, Plugin, Projection, Query, Res, ResMut, Sphere,
     StandardMaterial, Transform, Update, Vec3, With, Without, any_with_component, default,
-    on_message, resource_exists,
+    on_message,
 };
 
 /// Plugin que gerencia o domo de estrelas de fundo.
@@ -26,13 +26,7 @@ impl Plugin for StarfieldPlugin {
         )
         .add_systems(
             Update,
-            (track_camera, dim_stars_near_sun)
-                .run_if(any_with_component::<StarDome>)
-                // Nenhum dos dois lê `SkySettings` diretamente; a guarda funciona como proxy
-                // de "céu já inicializado" (`SkyState` é `init_resource`, nunca fica ausente).
-                // `track_camera` em particular nem depende de dado real do céu, só da posição
-                // da câmera; a guarda aqui é só para não rodar solto antes do resto do céu.
-                .run_if(resource_exists::<SkySettings>),
+            (track_camera, dim_stars_near_sun).run_if(any_with_component::<StarDome>),
         );
     }
 }
@@ -118,94 +112,5 @@ fn dim_stars_near_sun(
 
     if let Some(mat) = mats.get_mut(&star_mat.0) {
         mat.base_color = Color::linear_rgb(brightness, brightness, brightness);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        App, Assets, Camera3d, Color, MeshMaterial3d, Projection, SkyAssetsLoaded, SkySettings,
-        SkyState, StandardMaterial, StarDome, StarfieldPlugin, Transform, Vec3, default,
-    };
-    use bevy::prelude::PerspectiveProjection;
-
-    /// Sem `SkySettings`, `track_camera`/`dim_stars_near_sun` não devem rodar; com ela, devem
-    /// atualizar o domo de estrelas.
-    #[test]
-    fn starfield_only_updates_with_sky_settings() {
-        let mut app = App::new();
-
-        app.add_message::<SkyAssetsLoaded>()
-            .insert_resource(Assets::<StandardMaterial>::default())
-            .insert_resource(SkyState {
-                sun_dir: Vec3::new(1.0, 0.0, 0.0),
-                ..default()
-            })
-            .add_plugins(StarfieldPlugin);
-
-        app.world_mut().spawn((
-            Camera3d::default(),
-            Transform::from_translation(Vec3::new(10.0, 0.0, 0.0)),
-            Projection::Perspective(PerspectiveProjection {
-                far: 50_000.0,
-                ..default()
-            }),
-        ));
-
-        let material_handle = app
-            .world_mut()
-            .resource_mut::<Assets<StandardMaterial>>()
-            .add(StandardMaterial {
-                base_color: Color::BLACK,
-                ..default()
-            });
-
-        let known_transform =
-            Transform::from_translation(Vec3::ZERO).with_scale(Vec3::splat(20_000.0));
-        let dome_entity = app
-            .world_mut()
-            .spawn((
-                StarDome,
-                known_transform,
-                MeshMaterial3d(material_handle.clone()),
-            ))
-            .id();
-
-        // Fase 1: sem SkySettings, nada deveria rodar.
-        app.update();
-
-        assert_eq!(
-            *app.world().get::<Transform>(dome_entity).unwrap(),
-            known_transform,
-            "track_camera não deveria rodar sem SkySettings"
-        );
-        assert_eq!(
-            app.world()
-                .resource::<Assets<StandardMaterial>>()
-                .get(&material_handle)
-                .unwrap()
-                .base_color,
-            Color::BLACK,
-            "dim_stars_near_sun não deveria rodar sem SkySettings"
-        );
-
-        // Fase 2: com SkySettings, os dois devem atualizar.
-        app.insert_resource(SkySettings::default());
-        app.update();
-
-        assert_ne!(
-            *app.world().get::<Transform>(dome_entity).unwrap(),
-            known_transform,
-            "track_camera deveria rodar com SkySettings presente"
-        );
-        assert_ne!(
-            app.world()
-                .resource::<Assets<StandardMaterial>>()
-                .get(&material_handle)
-                .unwrap()
-                .base_color,
-            Color::BLACK,
-            "dim_stars_near_sun deveria rodar com SkySettings presente"
-        );
     }
 }
