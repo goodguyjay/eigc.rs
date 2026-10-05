@@ -114,10 +114,7 @@ fn place_and_scale_jupiter(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ActiveMoonProfileHandle, App, Assets, Camera3d, Jupiter, MoonProfile, Projection, SkyState,
-        Transform, Update, Vec3, default, place_and_scale_jupiter, place_celestial_disc,
-    };
+    use super::*;
     use bevy::prelude::PerspectiveProjection;
     use eigc_moons::{MoonId, SkyCalibration, TerrainCalibration};
 

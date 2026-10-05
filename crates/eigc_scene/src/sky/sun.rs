@@ -138,10 +138,7 @@ fn position_sun_disc(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        App, Camera3d, Projection, SkyState, SunDisc, Transform, Update, Vec3, default,
-        place_celestial_disc, position_sun_disc,
-    };
+    use super::*;
     use bevy::prelude::PerspectiveProjection;
 
     /// Testa que `position_sun_disc` posiciona e escala o disco do sol exatamente como
