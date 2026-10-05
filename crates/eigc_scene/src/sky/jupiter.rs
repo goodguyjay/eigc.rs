@@ -27,9 +27,6 @@ impl Plugin for JupiterPlugin {
                 Update,
                 place_and_scale_jupiter
                     .run_if(any_with_component::<Jupiter>)
-                    // `place_and_scale_jupiter` não lê `SkySettings` diretamente; a guarda
-                    // funciona como proxy de "céu já inicializado", já que `SkyState` é
-                    // `init_resource` e nunca fica ausente.
                     .run_if(resource_exists::<SkySettings>),
             );
     }
@@ -114,10 +111,7 @@ fn place_and_scale_jupiter(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ActiveMoonProfileHandle, App, Assets, Camera3d, Jupiter, JupiterPlugin, MoonProfile,
-        Projection, SkyAssetsLoaded, SkySettings, SkyState, Transform, Vec3, default,
-    };
+    use super::*;
     use bevy::prelude::PerspectiveProjection;
     use eigc_moons::{MoonId, SkyCalibration, TerrainCalibration};
 
@@ -183,7 +177,6 @@ mod tests {
             Transform::from_translation(Vec3::new(1.0, 2.0, 3.0)).with_scale(Vec3::splat(5.0));
         let jupiter_entity = app.world_mut().spawn((Jupiter, known_transform)).id();
 
-        // Fase 1: sem SkySettings, nada deveria rodar.
         app.update();
 
         assert_eq!(
@@ -192,7 +185,6 @@ mod tests {
             "place_and_scale_jupiter não deveria rodar sem SkySettings"
         );
 
-        // Fase 2: com SkySettings, deveria rodar.
         app.insert_resource(SkySettings::default());
         app.update();
 

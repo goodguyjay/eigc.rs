@@ -30,9 +30,6 @@ impl Plugin for SunPlugin {
                 (position_sun_disc, update_sun_light)
                     .in_set(SimSet::Animate)
                     .run_if(any_with_component::<SunDisc>)
-                    // `update_sun_light` lê `SkySettings` de verdade (ver assinatura abaixo);
-                    // `position_sun_disc` não lê, mas usa a mesma guarda como proxy de "céu já
-                    // inicializado", já que `SkyState` é `init_resource` e nunca fica ausente.
                     .run_if(resource_exists::<SkySettings>),
             );
     }
@@ -138,10 +135,7 @@ fn position_sun_disc(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        App, Camera3d, DirectionalLight, GlobalAmbientLight, Projection, SkyAssetsLoaded,
-        SkySettings, SkyState, SunDisc, SunLight, SunPlugin, Transform, Vec3, default,
-    };
+    use super::*;
     use bevy::prelude::PerspectiveProjection;
 
     /// Sem `SkySettings`, `position_sun_disc`/`update_sun_light` não devem rodar; com ela,
@@ -187,7 +181,6 @@ mod tests {
             ))
             .id();
 
-        // Fase 1: sem SkySettings, nada deveria rodar.
         app.update();
 
         assert_eq!(
@@ -204,7 +197,6 @@ mod tests {
             "update_sun_light não deveria rodar sem SkySettings"
         );
 
-        // Fase 2: com SkySettings, os dois devem atualizar.
         app.insert_resource(SkySettings {
             sun_illuminance: 999.0,
             ambient_brightness: 0.5,
