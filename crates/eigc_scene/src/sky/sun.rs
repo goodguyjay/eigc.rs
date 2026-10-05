@@ -141,9 +141,7 @@ mod tests {
     use super::*;
     use bevy::prelude::PerspectiveProjection;
 
-    /// Testa que `position_sun_disc` posiciona e escala o disco do sol exatamente como
-    /// `place_celestial_disc` calcularia para os mesmos parâmetros. Guarda de regressão da
-    /// refatoração que trocou a fórmula duplicada por uma chamada à função compartilhada.
+    /// Testa que `position_sun_disc` posiciona, escala e orienta o disco do sol corretamente.
     #[test]
     fn position_sun_disc_matches_place_celestial_disc_formula() {
         let mut app = App::new();

@@ -149,9 +149,7 @@ mod tests {
         }
     }
 
-    /// Testa que `place_and_scale_jupiter` posiciona e escala Júpiter exatamente como
-    /// `place_celestial_disc` calcularia para os mesmos parâmetros. Guarda de regressão da
-    /// refatoração que trocou a fórmula duplicada por uma chamada à função compartilhada.
+    /// Testa que `place_and_scale_jupiter` posiciona, escala e orienta Júpiter corretamente.
     #[test]
     fn place_and_scale_jupiter_matches_place_celestial_disc_formula() {
         let mut app = App::new();
