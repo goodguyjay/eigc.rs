@@ -5,10 +5,12 @@ use bevy::app::App;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::{
     ButtonInput, Camera, Camera3d, Commands, Component, EulerRot, IntoScheduleConfigs, KeyCode,
-    MessageReader, MouseButton, PerspectiveProjection, Plugin, Projection, Quat, Query, Res, ResMut, Resource,
-    Single, Startup, Time, Transform, Update, Vec3, With, default, resource_exists,
+    MessageReader, MouseButton, OnEnter, PerspectiveProjection, Plugin, Projection, Quat, Query,
+    Res, ResMut, Resource, Single, Time, Transform, Update, Vec3, With, default, in_state,
+    resource_exists,
 };
 use eigc_common::lod_focus::{LodFocus, screen_scale_from_fov};
+use eigc_moons::AppState;
 use bevy::window::{CursorGrabMode, CursorOptions};
 
 /// Marca a câmera de voo livre e guarda o estado de orientação e os parâmetros de movimento.
@@ -48,7 +50,7 @@ impl Plugin for FreeFlyCameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CamLock>()
             .init_resource::<LodFocus>()
-            .add_systems(Startup, spawn_free_fly_camera)
+            .add_systems(OnEnter(AppState::Running), spawn_free_fly_camera)
             .add_systems(
                 Update,
                 (
@@ -60,7 +62,8 @@ impl Plugin for FreeFlyCameraPlugin {
                     publish_lod_focus,
                     recapture_cursor_on_click,
                 )
-                    .chain(),
+                    .chain()
+                    .run_if(in_state(AppState::Running)),
             );
     }
 }
@@ -81,6 +84,7 @@ enum LockMode {
 }
 
 /// Spawna a câmera de voo livre com projeção perspectiva e captura o cursor imediatamente.
+/// Roda em `OnEnter(Running)`, para que o cursor fique livre enquanto o menu está aberto.
 fn spawn_free_fly_camera(mut commands: Commands, mut cursor_options: Single<&mut CursorOptions>) {
     let translation = Vec3::new(0.0, 600.0, 1200.0);
     let mut transform = Transform::from_translation(translation);

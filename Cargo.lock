@@ -2259,6 +2259,7 @@ name = "eigc_app"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "eigc_menu",
  "eigc_moons",
  "eigc_perf",
  "eigc_scene",
@@ -2271,6 +2272,14 @@ name = "eigc_common"
 version = "0.1.0"
 dependencies = [
  "bevy",
+]
+
+[[package]]
+name = "eigc_menu"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "eigc_moons",
 ]
 
 [[package]]

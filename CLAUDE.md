@@ -15,6 +15,7 @@ Por isso, para qualquer tarefa envolvendo Bevy:
 ## Mapa dos crates
 
 - `eigc_app` — binário principal, monta os plugins e o `App` do Bevy.
+- `eigc_menu` - menu inicial de seleção de lua (cena 3D com os GLB, ficha da lua, tela de carregamento). Depende só de `eigc_moons`.
 - `eigc_moons` — perfis de lua (`MoonProfile`), carregamento via RON/`AssetServer`.
 - `eigc_scene` — câmera (free-fly, camera lock sol/Júpiter), céu (sol, Júpiter, starfield, eclipse).
 - `eigc_terrain` — geração procedural de terreno, kit-of-parts por lua.
@@ -38,7 +39,8 @@ Use os aliases já configurados em `.cargo/config.toml` quando existirem, em vez
 
 ## Convenções de código (resumo — ver `CONTRIBUTING.md` para o texto completo)
 
-- Sem `use bevy::prelude::*` nem outro wildcard import — todo import explícito.
+- Sem `use bevy::prelude::*` nem outro wildcard import em código que não é teste: todo import explícito.
+- Em testes (unitários e de integração) o wildcard é esperado: `use super::*;` no `mod tests`, e só importe explicitamente o que o módulo pai não traz. Repetir um import que o glob já cobre é ruído.
 - Doc comment (`///`, `//!`) obrigatório em todo item público, escrito em português.
 - Identificadores em inglês.
 - Sem `.unwrap()` fora de teste.
