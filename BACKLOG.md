@@ -47,6 +47,41 @@
 - [ ] Traçado em arco de linea (`LineaPath::Arc`, `height/linea.rs`) é uma aproximação
   geométrica estilizada e deliberadamente exagerada, não um modelo físico da tensão de
   maré real. Meramente estético/artístico.
+- [ ] **LOD do terreno usa skirts, não stitching.** Chunks vizinhos de níveis diferentes têm
+  vértices de borda diferentes (o grosso é subconjunto do fino), então a emenda é escondida por
+  um anel de skirt (`chunk_mesh.rs`, `skirt_depth_factor` em `TerrainLodConfig`) e não por
+  costura exata de triângulos. Trade-off: implementação simples e testável, ao custo de uma
+  face vertical visível se a diferença de altura entre níveis passar da profundidade do skirt
+  (mais provável em silhueta contra o horizonte). Revisitar se aparecer rachadura em teste
+  visual, ou trocar por stitching.
+- [ ] **Iluminação levemente descontínua entre níveis de LOD.** As normais de cada chunk vêm de
+  diferenças centrais no espaçamento do próprio nível, então a normal de um vértice de borda
+  difere um pouco entre o chunk fino e o grosso. Dentro do mesmo nível não há costura (o
+  cálculo amostra um anel extra além do chunk). Uma alternativa é calcular todas as normais
+  com um epsilon fixo (o espaçamento do nível 0), ao custo de 4 amostras de altura extras por
+  vértice.
+- [ ] **Nível de LOD vem do erro geométrico medido, projetado na tela.** Cada chunk tem o desvio
+  vertical de cada nível medido em segundo plano (`lod_error.rs`) e o nível sai de
+  `erro * escala_de_tela / distância <= max_screen_error_px`. A escala de tela vem do FOV e da
+  altura da janela (`LodFocus.screen_scale`). Limitações conscientes: (1) o erro só considera
+  altura, não a cor por vértice, que também perde resolução ao engrossar; o piso
+  `min_error_fraction` cobre isso de forma grosseira; (2) o erro é tratado como se fosse visto
+  de lado, o que é conservador para câmera alta olhando para baixo; (3) a medição amostra a grade
+  do nível 0, então detalhe abaixo de ~10 m não entra no erro. `max_screen_error_px`,
+  `min_error_fraction`, `in_flight_vertex_budget` e a resolução por nível (`europa_recipe`) são
+  chutes calibráveis, medidos só em teste headless, não com o app rodando.
+- [ ] **Sem teto de vértices no LOD.** Como o nível depende do erro em pixels, tolerância baixa
+  ou janela muito grande (2160p dobra a escala de tela) aumentam bastante os vértices (teste
+  headless com Europa: ~0,7 M a 1080p, ~1,5 M a 2160p). Se precisar, adicionar um teto total de
+  vértices que relaxa a tolerância.
+- [ ] `TerrainParams.res` só vale para a malha monolítica legada (`build_terrain_mesh`,
+  `spawn_terrain`, usadas em testes). O pipeline com chunks usa `TerrainLodConfig`. Mesma
+  família da duplicação de `amp` acima: não removido agora porque quebraria os literais de
+  `TerrainParams` em vários testes de integração.
+- [ ] LOD não considera se o chunk está dentro do frustum (chunks atrás da câmera são
+  refinados igual aos da frente, para a câmera poder girar sem ver terreno grosso), não há
+  culling por oclusão, e não existe colisão (qualquer modo de caminhada futuro deve ler
+  `HeightResource::height_at` direto, não a malha visível).
 
 ## Cena / Visual
 - [X] Câmera e luz em eigc_app::scene_placeholder eram fixas e hardcoded, sem
@@ -67,25 +102,21 @@
   acoplamento virar dor real. Provavelmente não, mas sei lá.
 
 ## Acoplamento geral
-onde: `sky::animate_sky_physical`, `sky::sun::position_sun_disc`,
-`sky::starfield::dim_stars_near_sun`.
+onde: `sky::animate_sky_physical`, `sky::jupiter::place_and_scale_jupiter`, 
+`sky::sun::position_sun_disc`, `sky::starfield::dim_stars_near_sun`.
 
-(`sky::jupiter::place_and_scale_jupiter` saiu desta lista na issue #8: posição e escala agora
-vêm de `place_celestial_disc`; só a orientação do disco ficou no system.)
+Essas funções concentram lógica matemática não trivial (libração orbital, eclipse via
+smoothstep, orientação de disco celeste, glare de estrelas) direto em Bevy systems.
 
-Essas três funções concentram lógica matemática não trivial (libração orbital, cálculo de 
-eclipse via smoothstep, posicionamento/escala angular de disco celeste, composição de dois 
-smoothstep para o glare de estrelas) diretamente como Bevy systems, recebendo `Query/Res/ResMut`
-do ECS. Diferente de `sky::shared::place_celestial_disc`, que já isola a matemática numa função pura (Vec3/f32 in, 
-Vec3/f32 out), essas três não tiveram a mesma extração.
+`place_and_scale_jupiter` e `position_sun_disc` já usam `place_celestial_disc` para posição
+e escala; a orientação continua inline. `animate_sky_physical` e `dim_stars_near_sun` seguem
+sem extração.
 
-por quê foi aceito assim por agora: extrair cada uma para uma função pura testável sem ECS
-exigiria redesenhar a assinatura dos três systems (transformá-los em wrappers finos 
-que só leem `Query/Res`, chamam a função pura, e escrevem o resultado de volta), o que 
-é retrabalho não trivial em cima de código que acabou de ser portado e validado.
+Motivo: extrair exigiria transformar os systems em wrappers finos, retrabalho grande em
+código recém-validado.
 
-o trade-off aceito: cobertura vem via teste de integração (montar App mínimo, rodar app.update(), inspecionar o 
-resource/transform resultante), não via teste unitário isolado de função pura.
+Trade-off: a orientação é coberta por teste de integração (App mínimo + `app.update()`),
+não por teste unitário de função pura.
 
 ## Plataformas
 - Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS

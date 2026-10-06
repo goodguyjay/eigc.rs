@@ -4,10 +4,11 @@ use crate::sky::{SkySettings, SkyState};
 use bevy::app::App;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::{
-    ButtonInput, Camera3d, Commands, Component, EulerRot, IntoScheduleConfigs, KeyCode,
-    MessageReader, MouseButton, PerspectiveProjection, Plugin, Projection, Quat, Query, Res,
-    ResMut, Resource, Single, Startup, Time, Transform, Update, Vec3, default, resource_exists,
+    ButtonInput, Camera, Camera3d, Commands, Component, EulerRot, IntoScheduleConfigs, KeyCode,
+    MessageReader, MouseButton, PerspectiveProjection, Plugin, Projection, Quat, Query, Res, ResMut, Resource,
+    Single, Startup, Time, Transform, Update, Vec3, With, default, resource_exists,
 };
+use eigc_common::lod_focus::{LodFocus, screen_scale_from_fov};
 use bevy::window::{CursorGrabMode, CursorOptions};
 
 /// Marca a câmera de voo livre e guarda o estado de orientação e os parâmetros de movimento.
@@ -46,6 +47,7 @@ pub struct FreeFlyCameraPlugin;
 impl Plugin for FreeFlyCameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CamLock>()
+            .init_resource::<LodFocus>()
             .add_systems(Startup, spawn_free_fly_camera)
             .add_systems(
                 Update,
@@ -55,6 +57,7 @@ impl Plugin for FreeFlyCameraPlugin {
                     keyboard_movement,
                     lock_aim_update.run_if(resource_exists::<SkySettings>),
                     cursor_release,
+                    publish_lod_focus,
                     recapture_cursor_on_click,
                 )
                     .chain(),
@@ -232,6 +235,25 @@ fn lock_aim_update(
     camera.pitch = pitch;
 }
 
+/// Publica em `LodFocus` a posição da câmera e a escala de tela (FOV e altura da janela), para o
+/// terreno escolher o nível de LOD por erro em pixels.
+///
+/// Lê o `Transform` e não o `GlobalTransform`, que só reflete o movimento do frame seguinte.
+/// Enquanto o viewport da câmera não é conhecido, mantém a escala de tela anterior.
+fn publish_lod_focus(
+    camera: Single<(&Transform, &Projection, &Camera), With<FreeFlyCamera>>,
+    mut focus: ResMut<LodFocus>,
+) {
+    let (transform, projection, camera) = *camera;
+    focus.position = transform.translation;
+
+    if let (Projection::Perspective(perspective), Some(viewport)) =
+        (projection, camera.physical_viewport_size())
+    {
+        focus.screen_scale = screen_scale_from_fov(perspective.fov, viewport.y as f32);
+    }
+}
+
 /// Alterna o modo de bloqueio da câmera entre livre, travada no Sol ou travada em Júpiter.
 fn toggle_lock(keys: Res<ButtonInput<KeyCode>>, mut lock: ResMut<CamLock>) {
     if keys.just_pressed(KeyCode::KeyF) {
@@ -279,6 +301,30 @@ mod tests {
         let pitch = 1.0;
         let clamped_pitch = clamp_pitch(pitch);
         assert_eq!(clamped_pitch, pitch);
+    }
+
+    /// Testa que a posição atual da câmera aparece em `LodFocus` depois de um update, e que a
+    /// escala de tela padrão é mantida enquanto a câmera não tem viewport conhecido.
+    #[test]
+    fn publish_lod_focus_copies_camera_position_and_keeps_screen_scale_without_viewport() {
+        let mut app = App::new();
+        app.init_resource::<LodFocus>()
+            .add_systems(Update, publish_lod_focus);
+
+        let position = Vec3::new(120.0, 600.0, -35.0);
+        app.world_mut().spawn((
+            Transform::from_translation(position),
+            Camera::default(),
+            Projection::default(),
+            FreeFlyCamera::default(),
+        ));
+        let default_scale = app.world().resource::<LodFocus>().screen_scale;
+
+        app.update();
+
+        let focus = app.world().resource::<LodFocus>();
+        assert_eq!(focus.position, position);
+        assert_eq!(focus.screen_scale, default_scale);
     }
 
     /// Testa que segurar W descola a câmera para frente ao longo do tempo

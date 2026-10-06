@@ -10,6 +10,7 @@ noise.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
+proptest.workspace = true
 eigc_moons.workspace = true
 
 [features]
