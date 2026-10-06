@@ -189,10 +189,7 @@ mod tests {
             Vec3::splat(expected_scale)
         );
 
-        // `position_sun_disc` termina com `t.look_to(-dir_to_sun, Vec3::Y)`, então o disco deve
-        // encarar de volta a câmera. `sun_dir` entra não normalizado de propósito — confirma que
-        // a normalização interna (`state.sun_dir.normalize()`) está de fato sendo aplicada antes
-        // do look_to, não só na posição.
+        // O disco encara a câmera; `sun_dir` não normalizado confirma a normalização interna.
         let expected_forward = -sun_dir.normalize();
         let forward = disc_transform.forward().as_vec3();
         assert!(

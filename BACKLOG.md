@@ -66,30 +66,18 @@
 onde: `sky::animate_sky_physical`, `sky::jupiter::place_and_scale_jupiter`, 
 `sky::sun::position_sun_disc`, `sky::starfield::dim_stars_near_sun`.
 
-Essas quatro funções concentram lógica matemática não trivial (libração orbital, cálculo de 
-eclipse via smoothstep, orientação/rotação de disco celeste, composição de dois 
-smoothstep para o glare de estrelas) diretamente como Bevy systems, recebendo `Query/Res/ResMut`
-do ECS.
+Essas funções concentram lógica matemática não trivial (libração orbital, eclipse via
+smoothstep, orientação de disco celeste, glare de estrelas) direto em Bevy systems.
 
-**Atualização**: `place_and_scale_jupiter` e `position_sun_disc` já tiveram a parte de
-*posição e escala* extraída para `sky::shared::place_celestial_disc` (função pura, testada
-isoladamente em `shared.rs`) — não são mais "quatro funções sem nenhuma extração". O que ainda
-fica inline em cada uma: a orientação (`look_to`, tilt de obliquidade de Júpiter, rotação de
-correção `-FRAC_PI_2` do PR #33) e, no caso de Júpiter, a leitura de `MoonProfile`/
-`ActiveMoonProfileHandle`. `animate_sky_physical` e `dim_stars_near_sun` continuam sem nenhuma
-extração.
+`place_and_scale_jupiter` e `position_sun_disc` já usam `place_celestial_disc` para posição
+e escala; a orientação continua inline. `animate_sky_physical` e `dim_stars_near_sun` seguem
+sem extração.
 
-por quê foi aceito assim por agora: extrair a parte de orientação para uma função pura testável
-sem ECS exigiria redesenhar a assinatura dos systems (transformá-los em wrappers finos 
-que só leem `Query/Res`, chamam a função pura, e escrevem o resultado de volta), o que 
-é retrabalho não trivial em cima de código que acabou de ser portado e validado.
+Motivo: extrair exigiria transformar os systems em wrappers finos, retrabalho grande em
+código recém-validado.
 
-o trade-off aceito: cobertura da orientação vem via teste de integração (montar App mínimo, rodar
-`app.update()`, inspecionar `Transform::forward()`/`Transform::up()` resultante — ver
-`sky::sun::tests::position_sun_disc_matches_place_celestial_disc_formula` e
-`sky::jupiter::tests::place_and_scale_jupiter_matches_place_celestial_disc_formula`), não via
-teste unitário isolado de função pura. Posição/escala, por outro lado, já tem cobertura de função
-pura (`sky::shared::tests`), já que passaram a chamar `place_celestial_disc`.
+Trade-off: a orientação é coberta por teste de integração (App mínimo + `app.update()`),
+não por teste unitário de função pura.
 
 ## Plataformas
 - Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS
