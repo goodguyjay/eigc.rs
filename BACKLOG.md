@@ -114,6 +114,54 @@ código recém-validado.
 Trade-off: a orientação é coberta por teste de integração (App mínimo + `app.update()`),
 não por teste unitário de função pura.
 
+## Menu inicial
+- [ ] **Voltar ao menu a partir da simulação não existe.** O menu só aparece na entrada
+  (`AppState::MainMenu` é o estado inicial e nada leva de volta a ele). Foi cortado de propósito
+  do escopo: voltar exigiria `DespawnOnExit` em terreno, céu e câmera, reset de todos os
+  resources da simulação (`ChunkErrorTable`, `SimTime`, `SkySettings`, `SkyAssets`,
+  `GlobalAmbientLight` etc.) e mover o spawn de `PlanetShineLight` do `Startup` para
+  `OnEnter(Running)`. Sem isso, reentrar em `Running` duplicaria Sol, Júpiter e estrelas e
+  estouraria o teste de orçamento de `DirectionalLight`. Trade-off: troca de lua exige reiniciar
+  o app.
+- [ ] `transition_when_moon_profile_loaded` (`eigc_app::moon_loading`) não trata
+  `LoadState::Failed`. Se o `.ron` da lua escolhida falhar ao carregar, o app fica preso em
+  `LoadingMoonProfile` com a tela de carregamento. Hoje só Europa é selecionável e o RON dela é
+  válido, então não dispara. Passa a importar quando as outras luas forem liberadas.
+- [ ] **`MoonInfo` (`eigc_moons::moon_info`) duplica três dados do `MoonProfile`.** São eles o
+  nome (`display_name`), a disponibilidade (`available` vs `walkable`) e o período orbital
+  (`orbital_period_days` vs `sky.orbital_period_seconds`, o segundo com o valor exato, o primeiro
+  arredondado). Diâmetro, gravidade, distância de Júpiter e textos existem só no `MoonInfo`, então
+  não duplicam. É duplicação consciente, aceita por três motivos:
+  1. Os `.ron` de Io, Ganimedes e Calisto estão vazios (0 bytes), e o menu precisa mostrar as
+     quatro luas na partida, sem esperar o carregamento assíncrono de perfis que falhariam no
+     parse.
+  2. O `MoonProfile` não tem campos de apresentação (descrição, estatísticas). Acrescentá-los
+     exigiria RON válido para as três luas não calibradas, o que quebra o loader e os testes que
+     esperam `unimplemented!()` em `build_recipe` para elas.
+  3. Tabela estática em código foi a escolha explícita do desenvolvedor para o menu.
+  Mitigação parcial: `eigc_moons/tests/moon_info_stays_consistent_with_profiles.rs`
+  falha se nome, `available`/`walkable` ou período (tolerância de 0,5%) divergirem em qualquer lua
+  com `.ron` preenchido, e se uma lua `available` tiver `.ron` vazio. Não resolve a causa. Unificar,
+  com o menu lendo o perfil, quando os `.ron` das outras luas existirem. Ao liberar uma lua, mudar
+  o `MoonInfo` e o `.ron` juntos.
+- [ ] **Textos e números de `MoonInfo` foram escritos sem fonte citada** (diâmetro, gravidade,
+  período orbital, distância de Júpiter e os resumos). Valores de ordem de grandeza correta, mas
+  precisam ser conferidos contra NASA/USGS antes de a ficha ser considerada final.
+- [ ] As teclas 0 a 4 de `TimeFlow` (`handle_time_flow_keyboard_controls`, `eigc_sim`) ainda
+  respondem no menu e na tela de carregamento, mudando `time_scale` antes da simulação. O
+  sistema é privado e não está em nenhum `SimSet`, então o gate de estado de `eigc_app` não o
+  alcança. Gatear exigiria que `eigc_sim` conhecesse `AppState` ou que o sistema entrasse num
+  `SimSet`. Efeito é só de conveniência (a escolha do jogador é mantida).
+- [ ] **Sem transições suaves no menu.** O painel de detalhes desliza, mas título, rótulos e
+  aviso aparecem e somem de uma vez. O Bevy 0.18 não tem opacidade de grupo; fazer fade exigiria
+  animar o alfa de cada fundo, borda e texto.
+- [ ] As texturas dos modelos das luas (`assets/moons/textures/*.glb`) de Europa e Io têm
+  4096x2048 e ocupam ~32 MB de VRAM cada depois de descomprimidas (RGBA8), independente do
+  formato no disco. Considerar KTX2 ou redução de resolução.
+- [ ] A tela de carregamento é estática. O terreno é construído em `OnEnter(Running)`, então a
+  tela provavelmente congela por um instante na transição. Não medido; confirmar em teste
+  visual antes de investir num indicador animado.
+
 ## Plataformas
 - Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS
 e X11 não possuem suporte completo e o bevy pode recair silenciosamente para `CursorGrabMode::Confined`.

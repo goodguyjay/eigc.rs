@@ -2,6 +2,8 @@
 
 /// Carregador de asset `.ron` para `MoonProfile`.
 pub mod loader;
+/// Dados descritivos estáticos de cada lua, usados em menus e fichas.
+pub mod moon_info;
 /// Plugin Bevy que registra o loader e os recursos de perfil de lua.
 pub mod plugin;
 /// Estruturas de dados que descrevem o perfil físico e visual de uma lua.
@@ -10,6 +12,7 @@ pub mod profile;
 pub mod state;
 
 pub use loader::{MoonProfileLoader, MoonProfileLoaderError};
+pub use moon_info::{MOON_DISPLAY_ORDER, MoonInfo, moon_info};
 pub use plugin::MoonPlugin;
 pub use profile::{MoonId, MoonProfile, TerrainCalibration, SkyCalibration};
 pub use state::{ActiveMoonProfileHandle, AppState};

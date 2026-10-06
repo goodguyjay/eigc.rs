@@ -2,6 +2,7 @@
 members = [
     "crates/eigc_app",
     "crates/eigc_common",
+    "crates/eigc_menu",
     "crates/eigc_moons",
     "crates/eigc_perf",
     "crates/eigc_scene",
@@ -25,6 +26,7 @@ thiserror = "2.0.20"
 
 eigc_app = { path = "crates/eigc_app" }
 eigc_common = { path = "crates/eigc_common" }
+eigc_menu = { path = "crates/eigc_menu" }
 eigc_sim = { path = "crates/eigc_sim" }
 eigc_moons = { path = "crates/eigc_moons" }
 eigc_terrain = { path = "crates/eigc_terrain" }
