@@ -128,10 +128,23 @@ resource/transform resultante), não via teste unitário isolado de função pur
   `LoadState::Failed`. Se o `.ron` da lua escolhida falhar ao carregar, o app fica preso em
   `LoadingMoonProfile` com a tela de carregamento. Hoje só Europa é selecionável e o RON dela é
   válido, então não dispara. Passa a importar quando as outras luas forem liberadas.
-- [ ] `MoonInfo.available` (`eigc_moons::moon_info`) duplica conceitualmente
-  `MoonProfile.walkable`. É duplicação consciente: os `.ron` de Io, Ganimedes e Calisto estão
-  vazios (0 bytes), então o menu não pode consultar o perfil delas. Unificar, com o menu lendo o
-  perfil, quando os RON existirem. Ao liberar uma lua, mudar os dois.
+- [ ] **`MoonInfo` (`eigc_moons::moon_info`) duplica três dados do `MoonProfile`.** São eles o
+  nome (`display_name`), a disponibilidade (`available` vs `walkable`) e o período orbital
+  (`orbital_period_days` vs `sky.orbital_period_seconds`, o segundo com o valor exato, o primeiro
+  arredondado). Diâmetro, gravidade, distância de Júpiter e textos existem só no `MoonInfo`, então
+  não duplicam. É duplicação consciente, aceita por três motivos:
+  1. Os `.ron` de Io, Ganimedes e Calisto estão vazios (0 bytes), e o menu precisa mostrar as
+     quatro luas na partida, sem esperar o carregamento assíncrono de perfis que falhariam no
+     parse.
+  2. O `MoonProfile` não tem campos de apresentação (descrição, estatísticas). Acrescentá-los
+     exigiria RON válido para as três luas não calibradas, o que quebra o loader e os testes que
+     esperam `unimplemented!()` em `build_recipe` para elas.
+  3. Tabela estática em código foi a escolha explícita do desenvolvedor para o menu.
+  Mitigação parcial: `eigc_moons/tests/moon_info_stays_consistent_with_profiles.rs`
+  falha se nome, `available`/`walkable` ou período (tolerância de 0,5%) divergirem em qualquer lua
+  com `.ron` preenchido, e se uma lua `available` tiver `.ron` vazio. Não resolve a causa. Unificar,
+  com o menu lendo o perfil, quando os `.ron` das outras luas existirem. Ao liberar uma lua, mudar
+  o `MoonInfo` e o `.ron` juntos.
 - [ ] **Textos e números de `MoonInfo` foram escritos sem fonte citada** (diâmetro, gravidade,
   período orbital, distância de Júpiter e os resumos). Valores de ordem de grandeza correta, mas
   precisam ser conferidos contra NASA/USGS antes de a ficha ser considerada final.

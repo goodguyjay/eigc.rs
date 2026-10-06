@@ -97,11 +97,16 @@ pub(crate) fn moon_position(moon_id: MoonId) -> Vec3 {
 mod tests {
     use super::*;
 
+    /// Testa que, sem lua em foco, a câmera tem como alvo a posição da visão
+    /// geral.
     #[test]
     fn camera_without_focus_stays_in_overview_position() {
         assert_eq!(camera_target(None), overview_camera_position());
     }
 
+    /// Testa que, com qualquer lua em foco, a câmera chega mais perto que na
+    /// visão geral e fica deslocada para a direita da lua, deixando-a à
+    /// esquerda do centro.
     #[test]
     fn focused_camera_gets_closer_than_overview_and_keeps_moon_left_of_center() {
         for moon_id in MOON_DISPLAY_ORDER {
@@ -111,6 +116,8 @@ mod tests {
         }
     }
 
+    /// Testa que a distância da câmera em foco é proporcional ao tamanho da
+    /// lua: Europa, menor, fica mais perto que Ganimedes.
     #[test]
     fn focus_distance_is_proportional_to_moon_size() {
         let europa = camera_target(Some(MoonId::Europa)).z;
@@ -118,12 +125,16 @@ mod tests {
         assert!(europa < ganymede);
     }
 
+    /// Testa que a lua sob o cursor ou em foco é ampliada, e que a lua em
+    /// repouso mantém a escala 1.
     #[test]
     fn active_moon_is_scaled_up() {
         assert!(active_scale_factor(true) > active_scale_factor(false));
         assert_eq!(active_scale_factor(false), 1.0);
     }
 
+    /// Testa que o amortecimento converge para o alvo em 10 s a 60 quadros por
+    /// segundo, sem nunca o ultrapassar (a distância ao alvo só diminui).
     #[test]
     fn damping_converges_to_target_without_overshoot() {
         let target = Vec3::new(4.0, 0.0, 2.0);
@@ -136,12 +147,14 @@ mod tests {
         assert!(current.distance(target) < 1e-3);
     }
 
+    /// Testa que o ponto de ancoragem do rótulo fica abaixo da lua, na mesma
+    /// coluna, e mais distante quanto maior é a lua.
     #[test]
     fn label_sits_below_its_moon_and_scales_with_moon_size() {
         let europa_gap =
-            moon_position(MoonId::Europa).y - super::label_anchor_world(MoonId::Europa).y;
+            moon_position(MoonId::Europa).y - label_anchor_world(MoonId::Europa).y;
         let ganymede_gap =
-            moon_position(MoonId::Ganymede).y - super::label_anchor_world(MoonId::Ganymede).y;
+            moon_position(MoonId::Ganymede).y - label_anchor_world(MoonId::Ganymede).y;
         assert!(europa_gap > 0.0);
         assert!(europa_gap < ganymede_gap);
         assert_eq!(
@@ -150,24 +163,31 @@ mod tests {
         );
     }
 
+    /// Testa que a versão escalar do amortecimento dá o mesmo resultado que a
+    /// vetorial.
     #[test]
     fn scalar_damping_matches_vector_damping() {
         let vector = damp_towards(Vec3::new(3.0, 0.0, 0.0), Vec3::ZERO, 5.0, 0.1);
-        assert!((super::damp_f32(3.0, 0.0, 5.0, 0.1) - vector.x).abs() < 1e-6);
+        assert!((damp_f32(3.0, 0.0, 5.0, 0.1) - vector.x).abs() < 1e-6);
     }
 
+    /// Testa que um quadro de duração zero não move o valor amortecido.
     #[test]
     fn damping_with_zero_delta_does_not_move() {
         let current = Vec3::new(1.0, 2.0, 3.0);
         assert_eq!(damp_towards(current, Vec3::ZERO, 6.0, 0.0), current);
     }
 
+    /// Testa que a maior lua (Ganimedes) recebe exatamente o raio de referência
+    /// do menu.
     #[test]
     fn largest_moon_gets_the_reference_world_radius() {
         let world_radius = moon_uniform_scale(MoonId::Ganymede) * GLB_SPHERE_RADIUS;
         assert!((world_radius - LARGEST_MOON_WORLD_RADIUS).abs() < 1e-5);
     }
 
+    /// Testa que a escala segue a ordem real dos raios: Europa, Io, Calisto e
+    /// Ganimedes, do menor para o maior.
     #[test]
     fn smaller_moons_have_smaller_scale() {
         assert!(moon_uniform_scale(MoonId::Europa) < moon_uniform_scale(MoonId::Io));
@@ -175,6 +195,8 @@ mod tests {
         assert!(moon_uniform_scale(MoonId::Callisto) < moon_uniform_scale(MoonId::Ganymede));
     }
 
+    /// Testa que as luas ficam em fileira, da esquerda para a direita, na ordem
+    /// de exibição.
     #[test]
     fn moons_are_laid_out_left_to_right_in_display_order() {
         let xs: Vec<f32> = MOON_DISPLAY_ORDER
@@ -184,6 +206,7 @@ mod tests {
         assert!(xs.windows(2).all(|pair| pair[0] < pair[1]));
     }
 
+    /// Testa que a fileira de luas é centralizada na origem.
     #[test]
     fn row_is_centered_on_the_origin() {
         let sum: f32 = MOON_DISPLAY_ORDER

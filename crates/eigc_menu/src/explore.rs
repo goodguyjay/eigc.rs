@@ -99,6 +99,8 @@ mod tests {
         app
     }
 
+    /// Testa que pedir a exploração de Europa insere o handle do perfil, vai
+    /// para `LoadingMoonProfile` e não gera aviso de lua não implementada.
     #[test]
     fn exploring_europa_starts_loading_its_profile() {
         let mut app = menu_app();
@@ -115,6 +117,9 @@ mod tests {
         assert!(app.world().resource::<NoticeLog>().0.is_empty());
     }
 
+    /// Testa que pedir a exploração de uma lua não implementada (Io) mantém o
+    /// estado em `MainMenu`, não carrega perfil e emite só o aviso de não
+    /// implementada.
     #[test]
     fn exploring_an_unimplemented_moon_only_raises_a_notice() {
         let mut app = menu_app();
@@ -130,6 +135,8 @@ mod tests {
         assert_eq!(app.world().resource::<NoticeLog>().0, vec![MoonId::Io]);
     }
 
+    /// Testa que a decisão para uma lua disponível (Europa) é iniciar a
+    /// exploração.
     #[test]
     fn available_moon_starts_exploration() {
         assert_eq!(
@@ -138,6 +145,8 @@ mod tests {
         );
     }
 
+    /// Testa que a decisão para toda lua indisponível é só avisar que ela ainda
+    /// não está implementada.
     #[test]
     fn unavailable_moons_are_not_implemented() {
         for moon_id in MOON_DISPLAY_ORDER {

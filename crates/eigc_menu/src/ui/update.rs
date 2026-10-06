@@ -214,12 +214,16 @@ pub(crate) fn update_toast(
 mod tests {
     use super::*;
 
+    /// Testa que o painel aberto fica na margem direita e o fechado fica
+    /// totalmente fora da tela.
     #[test]
     fn open_panel_sits_on_the_margin_and_closed_panel_is_off_screen() {
         assert_eq!(panel_right_target(true), theme::PANEL_MARGIN);
         assert!(panel_right_target(false) < -theme::PANEL_WIDTH);
     }
 
+    /// Testa que o painel só é ocultado depois de sair da tela sem foco, e
+    /// nunca enquanto há lua em foco ou ele ainda está aberto.
     #[test]
     fn panel_is_hidden_only_after_leaving_the_screen_without_focus() {
         let closed = panel_right_target(false);
@@ -228,6 +232,8 @@ mod tests {
         assert!(!panel_is_hidden(theme::PANEL_MARGIN, false));
     }
 
+    /// Testa que os campos do painel (nome, resumo e estatística) vêm da lua em
+    /// foco, e que um índice de estatística inexistente resulta em texto vazio.
     #[test]
     fn panel_fields_come_from_the_focused_moon() {
         let info = moon_info(MoonId::Europa);
@@ -244,6 +250,8 @@ mod tests {
         assert_eq!(panel_field_text(PanelField::Stat(99), info, &stats), "");
     }
 
+    /// Testa que os dois tipos de botão mudam de cor ao receber hover e ao
+    /// serem pressionados.
     #[test]
     fn buttons_change_colors_on_hover_and_press() {
         for kind in [ButtonKind::Primary, ButtonKind::Ghost] {
@@ -253,6 +261,8 @@ mod tests {
         }
     }
 
+    /// Testa que a mensagem do aviso cita o nome da lua em português
+    /// (`Ganimedes`).
     #[test]
     fn toast_message_names_the_moon() {
         assert_eq!(

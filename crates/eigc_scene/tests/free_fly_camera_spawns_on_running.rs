@@ -37,6 +37,8 @@ fn cursor(app: &mut App) -> (bool, CursorGrabMode) {
     (options.visible, options.grab_mode)
 }
 
+/// Testa que, em `MainMenu` e em `LoadingMoonProfile`, não existe câmera de voo
+/// livre e o cursor continua visível e solto.
 #[test]
 fn camera_is_absent_and_cursor_stays_free_before_running() {
     let mut app = app_with_camera_plugin();
@@ -57,6 +59,8 @@ fn camera_is_absent_and_cursor_stays_free_before_running() {
     }
 }
 
+/// Testa que, ao entrar em `Running`, nasce exatamente uma câmera de voo livre
+/// e o cursor fica oculto e travado.
 #[test]
 fn camera_spawns_and_captures_the_cursor_on_entering_running() {
     let mut app = app_with_camera_plugin();

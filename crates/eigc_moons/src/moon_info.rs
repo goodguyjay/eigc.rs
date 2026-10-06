@@ -124,6 +124,8 @@ pub fn moon_info(moon_id: MoonId) -> &'static MoonInfo {
 mod tests {
     use super::*;
 
+    /// Testa que `moon_info` devolve, para cada lua da ordem de exibição, os
+    /// dados cuja `moon_id` é a própria lua.
     #[test]
     fn every_moon_has_matching_info() {
         for moon_id in MOON_DISPLAY_ORDER {
@@ -131,6 +133,8 @@ mod tests {
         }
     }
 
+    /// Testa que a ordem de exibição não repete nenhuma lua e cobre as quatro
+    /// luas galileanas.
     #[test]
     fn display_order_has_no_duplicates_and_covers_all_moons() {
         for (i, a) in MOON_DISPLAY_ORDER.iter().enumerate() {
@@ -141,6 +145,8 @@ mod tests {
         assert_eq!(MOON_DISPLAY_ORDER.len(), 4);
     }
 
+    /// Testa que, por enquanto, só Europa está marcada como disponível para
+    /// exploração.
     #[test]
     fn only_europa_is_available_for_now() {
         for moon_id in MOON_DISPLAY_ORDER {
@@ -148,11 +154,15 @@ mod tests {
         }
     }
 
+    /// Testa que o caminho do perfil de Europa aponta para o `europa.ron` que
+    /// existe em `assets/moons/`.
     #[test]
     fn profile_asset_path_matches_existing_europa_ron() {
         assert_eq!(MoonId::Europa.profile_asset_path(), "moons/europa.ron");
     }
 
+    /// Testa que o raio é metade do diâmetro, usando Europa (3.122 km) como
+    /// referência.
     #[test]
     fn radius_is_half_the_diameter() {
         assert_eq!(moon_info(MoonId::Europa).radius_km(), 1_561.0);

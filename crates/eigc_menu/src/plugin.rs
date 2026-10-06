@@ -4,6 +4,7 @@
 use crate::explore::{ExploreRequested, NotImplementedNotice, handle_explore_requests};
 use crate::interaction::{
     MenuSelection, animate_menu_camera, animate_moon_scale, exit_focus_on_escape,
+    restrict_mesh_picking_to_marked_cameras,
 };
 use crate::scene::{spawn_menu_scene, spin_menu_moons};
 use crate::ui::{
@@ -30,6 +31,10 @@ impl Plugin for MenuPlugin {
                 (spawn_menu_scene, spawn_menu_ui),
             )
             .add_systems(OnEnter(AppState::LoadingMoonProfile), spawn_loading_overlay)
+            .add_systems(
+                OnEnter(AppState::Running),
+                restrict_mesh_picking_to_marked_cameras,
+            )
             .add_systems(
                 Update,
                 (

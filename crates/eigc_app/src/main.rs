@@ -83,7 +83,9 @@ mod tests {
         }
     }
 
-    /// Sem o gate, `SimTime` acumulava durante o menu e o céu começava numa fase arbitrária.
+    /// Testa que o relógio da simulação (`SimTime`) não avança em `MainMenu`
+    /// nem em `LoadingMoonProfile`, e só avança em `Running`. Sem o gate, o
+    /// tempo acumulava durante o menu e o céu começava numa fase arbitrária.
     #[test]
     fn sim_time_only_advances_while_running() {
         let mut app = clock_app();

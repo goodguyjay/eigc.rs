@@ -45,6 +45,8 @@ mod tests {
     use super::*;
     use eigc_moons::{MoonId, moon_info};
 
+    /// Testa que inteiros grandes recebem ponto como separador de milhar
+    /// (`671100` vira `671.100`).
     #[test]
     fn thousands_are_separated_by_dots() {
         assert_eq!(format_thousands(0), "0");
@@ -55,6 +57,8 @@ mod tests {
         assert_eq!(format_thousands(1_882_700), "1.882.700");
     }
 
+    /// Testa que decimais usam vírgula como separador e a quantidade de casas
+    /// pedida.
     #[test]
     fn decimals_use_a_comma() {
         assert_eq!(format_decimal(1.31, 2), "1,31");
@@ -62,6 +66,8 @@ mod tests {
         assert_eq!(format_decimal(2.0, 2), "2,00");
     }
 
+    /// Testa que as estatísticas de Europa saem formatadas em português, na
+    /// mesma ordem dos rótulos.
     #[test]
     fn europa_stats_are_formatted_in_portuguese() {
         let values = stat_values(moon_info(MoonId::Europa));

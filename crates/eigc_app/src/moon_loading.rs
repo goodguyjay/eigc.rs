@@ -74,6 +74,9 @@ mod tests {
         }
     }
 
+    /// Testa que, com o perfil já carregado, a transição para `Running`
+    /// acontece e `OnEnter(Running)` dispara exatamente uma vez, mesmo após
+    ///  vários updates.
     #[test]
     fn moon_profile_loaded_transitions_to_running_only_once() {
         let mut app = App::new();
