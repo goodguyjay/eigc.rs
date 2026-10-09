@@ -13,6 +13,18 @@ pub enum MoonId {
     Callisto,
 }
 
+impl MoonId {
+    /// Caminho do `.ron` de perfil desta lua, relativo à raiz de assets.
+    pub fn profile_asset_path(self) -> &'static str {
+        match self {
+            MoonId::Europa => "moons/europa.ron",
+            MoonId::Io => "moons/io.ron",
+            MoonId::Ganymede => "moons/ganymede.ron",
+            MoonId::Callisto => "moons/callisto.ron",
+        }
+    }
+}
+
 /// Parâmetros de calibração de geração procedural de terreno para uma lua específica.
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct TerrainCalibration {

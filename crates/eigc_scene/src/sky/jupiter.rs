@@ -1,5 +1,6 @@
 //! Plugin das propriedades de Júpiter no céu.
 
+use crate::sky::shared::place_celestial_disc;
 use crate::sky::{SkyAssets, SkyAssetsLoaded, SkySettings, SkyState};
 use bevy::app::App;
 use bevy::camera::visibility::NoFrustumCulling;
@@ -84,14 +85,18 @@ fn place_and_scale_jupiter(
         Projection::Orthographic(o) => o.far(),
         _ => return,
     };
-    let sky_r = (far * 0.85).min(eigc_common::constants::SKY_RADIUS);
 
     let dir = state.jupiter_dir.normalize();
-    t.translation = cam_t.translation + dir * sky_r;
+    let (position, scale) = place_celestial_disc(
+        cam_t.translation,
+        far,
+        dir,
+        profile.jupiter_angular_diameter_deg,
+        eigc_common::constants::SKY_RADIUS,
+    );
 
-    let theta = profile.jupiter_angular_diameter_deg.to_radians();
-    let radius = sky_r * (0.5 * theta).tan();
-    t.scale = Vec3::splat(radius);
+    t.translation = position;
+    t.scale = Vec3::splat(scale);
 
     let forward = (-dir).normalize_or_zero();
     let mut up_hint = Vec3::Y;
@@ -192,6 +197,71 @@ mod tests {
             *app.world().get::<Transform>(jupiter_entity).unwrap(),
             known_transform,
             "place_and_scale_jupiter deveria rodar com SkySettings presente"
+        );
+    }
+
+    /// Testa que `place_and_scale_jupiter` posiciona, escala e orienta Júpiter corretamente.
+    #[test]
+    fn place_and_scale_jupiter_matches_place_celestial_disc_formula() {
+        let mut app = App::new();
+
+        let cam_translation = Vec3::new(5.0, 0.0, -5.0);
+        let far = 50_000.0;
+        let jupiter_dir = Vec3::new(0.0, 6.0, 8.0); // não normalizado de propósito
+        let angular_diameter_deg = 20.0;
+
+        let mut profiles = Assets::<MoonProfile>::default();
+        let handle = profiles.add(test_profile(angular_diameter_deg));
+
+        app.insert_resource(SkyState {
+            jupiter_dir,
+            ..default()
+        })
+        .insert_resource(profiles)
+        .insert_resource(ActiveMoonProfileHandle(handle))
+        .add_systems(Update, place_and_scale_jupiter);
+
+        app.world_mut().spawn((
+            Camera3d::default(),
+            Transform::from_translation(cam_translation),
+            Projection::Perspective(PerspectiveProjection { far, ..default() }),
+        ));
+
+        let jupiter_entity = app.world_mut().spawn((Jupiter, Transform::default())).id();
+
+        app.update();
+
+        let jupiter_transform = app.world().get::<Transform>(jupiter_entity).unwrap();
+
+        let (expected_position, expected_scale) = place_celestial_disc(
+            cam_translation,
+            far,
+            jupiter_dir,
+            angular_diameter_deg,
+            eigc_common::constants::SKY_RADIUS,
+        );
+
+        assert!(
+            (jupiter_transform.translation - expected_position).length() < 1e-3,
+            "posição de Júpiter {:?} não bate com o esperado {:?}",
+            jupiter_transform.translation,
+            expected_position
+        );
+        assert!(
+            (jupiter_transform.scale - Vec3::splat(expected_scale)).length() < 1e-3,
+            "escala de Júpiter {:?} não bate com o esperado {:?}",
+            jupiter_transform.scale,
+            Vec3::splat(expected_scale)
+        );
+
+        // A rotação final de -90° em `right` faz `up()` apontar para `-dir`.
+        let expected_up = -jupiter_dir.normalize();
+        let up = jupiter_transform.up().as_vec3();
+        assert!(
+            (up - expected_up).length() < 1e-3,
+            "up de Júpiter {:?} não bate com o esperado {:?}",
+            up,
+            expected_up
         );
     }
 }

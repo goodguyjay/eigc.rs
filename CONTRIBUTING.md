@@ -25,8 +25,13 @@ mesmo que o código em si seja trivial. Trivialidade não isenta de documentaç�
 
 ## 3. Imports
 
-- Proibido wildcard import (`use bevy::prelude::*;`, `use crate::foo::*;`), mesmo quando o
-  módulo de origem é enorme (ex: `bevy::prelude`). Sempre explícito, item por item.
+- Proibido wildcard import (`use bevy::prelude::*;`, `use crate::foo::*;`) em código que não é
+  teste, mesmo quando o módulo de origem é enorme (ex: `bevy::prelude`). Sempre explícito, item
+  por item.
+- **Em testes o wildcard é esperado e reforçado.** Vale para teste unitário
+  (`#[cfg(test)] mod tests`, que começa com `use super::*;`) e para teste de integração
+  (`/tests/`). Só importe explicitamente, depois do glob, o que o módulo pai não já traz para o
+  escopo. Repetir um import que `use super::*;` já cobre é ruído e deve ser removido.
 
 ## 4. Formatação e tipagem
 

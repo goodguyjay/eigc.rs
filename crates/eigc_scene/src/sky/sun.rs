@@ -1,5 +1,6 @@
 //! Luz direcional do sol e disco visual no céu.
 
+use crate::sky::shared::place_celestial_disc;
 use crate::sky::{SkyAssets, SkyAssetsLoaded, SkySettings, SkyState};
 use bevy::app::App;
 use bevy::camera::CameraProjection;
@@ -117,18 +118,21 @@ fn position_sun_disc(
         _ => return,
     };
 
-    let sky_r = (far * 0.85).min(eigc_common::constants::SKY_RADIUS);
-
-    let dir_to_sun = state.sun_dir.normalize();
     let Ok(mut t) = disc_q.single_mut() else {
         return;
     };
 
-    t.translation = cam_t.translation + dir_to_sun * sky_r;
+    let dir_to_sun = state.sun_dir.normalize();
+    let (position, scale) = place_celestial_disc(
+        cam_t.translation,
+        far,
+        dir_to_sun,
+        eigc_common::constants::SUN_ANGULAR_DIAMETER_DEG,
+        eigc_common::constants::SKY_RADIUS,
+    );
 
-    let theta = eigc_common::constants::SUN_ANGULAR_DIAMETER_DEG.to_radians();
-    let radius = sky_r * (0.5 * theta).tan();
-    t.scale = Vec3::splat(radius);
+    t.translation = position;
+    t.scale = Vec3::splat(scale);
 
     t.look_to(-dir_to_sun, Vec3::Y);
 }
@@ -216,6 +220,65 @@ mod tests {
                 .illuminance,
             123.0,
             "update_sun_light deveria rodar com SkySettings presente"
+        );
+    }
+
+    /// Testa que `position_sun_disc` posiciona, escala e orienta o disco do sol corretamente.
+    #[test]
+    fn position_sun_disc_matches_place_celestial_disc_formula() {
+        let mut app = App::new();
+
+        let cam_translation = Vec3::new(10.0, 20.0, 30.0);
+        let far = 50_000.0;
+        let sun_dir = Vec3::new(3.0, 0.0, 4.0); // não normalizado de propósito
+
+        app.insert_resource(SkyState {
+            sun_dir,
+            ..default()
+        })
+        .add_systems(Update, position_sun_disc);
+
+        app.world_mut().spawn((
+            Camera3d::default(),
+            Transform::from_translation(cam_translation),
+            Projection::Perspective(PerspectiveProjection { far, ..default() }),
+        ));
+
+        let disc_entity = app.world_mut().spawn((SunDisc, Transform::default())).id();
+
+        app.update();
+
+        let disc_transform = app.world().get::<Transform>(disc_entity).unwrap();
+
+        let (expected_position, expected_scale) = place_celestial_disc(
+            cam_translation,
+            far,
+            sun_dir,
+            eigc_common::constants::SUN_ANGULAR_DIAMETER_DEG,
+            eigc_common::constants::SKY_RADIUS,
+        );
+
+        assert!(
+            (disc_transform.translation - expected_position).length() < 1e-3,
+            "posição do disco do sol {:?} não bate com o esperado {:?}",
+            disc_transform.translation,
+            expected_position
+        );
+        assert!(
+            (disc_transform.scale - Vec3::splat(expected_scale)).length() < 1e-3,
+            "escala do disco do sol {:?} não bate com o esperado {:?}",
+            disc_transform.scale,
+            Vec3::splat(expected_scale)
+        );
+
+        // O disco encara a câmera; `sun_dir` não normalizado confirma a normalização interna.
+        let expected_forward = -sun_dir.normalize();
+        let forward = disc_transform.forward().as_vec3();
+        assert!(
+            (forward - expected_forward).length() < 1e-3,
+            "forward do disco do sol {:?} não bate com o esperado {:?}",
+            forward,
+            expected_forward
         );
     }
 }
