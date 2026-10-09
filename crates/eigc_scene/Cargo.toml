@@ -9,5 +9,8 @@ eigc_moons.workspace = true
 eigc_sim.workspace = true
 eigc_common.workspace = true
 
+[dev-dependencies]
+rstest.workspace = true
+
 [features]
 dev = ["bevy/dynamic_linking"]

@@ -8,5 +8,8 @@ bevy.workspace = true
 thiserror.workspace = true
 ron.workspace = true
 
+[dev-dependencies]
+rstest.workspace = true
+
 [features]
 dev = ["bevy/dynamic_linking"]
