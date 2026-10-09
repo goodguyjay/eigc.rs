@@ -10,7 +10,7 @@ use bevy::prelude::{
     AlphaMode, Assets, Camera3d, Color, Commands, Component, DirectionalLight, GlobalAmbientLight,
     IntoScheduleConfigs, Mesh, Mesh3d, MeshMaterial3d, Meshable, Name, Plugin, Projection, Query,
     Res, ResMut, Sphere, StandardMaterial, Transform, Update, Vec3, With, Without,
-    any_with_component, default, on_message,
+    any_with_component, default, on_message, resource_exists,
 };
 use eigc_sim::SimSet;
 
@@ -30,7 +30,8 @@ impl Plugin for SunPlugin {
                 Update,
                 (position_sun_disc, update_sun_light)
                     .in_set(SimSet::Animate)
-                    .run_if(any_with_component::<SunDisc>),
+                    .run_if(any_with_component::<SunDisc>)
+                    .run_if(resource_exists::<SkySettings>),
             );
     }
 }
@@ -140,6 +141,87 @@ fn position_sun_disc(
 mod tests {
     use super::*;
     use bevy::prelude::PerspectiveProjection;
+
+    /// Sem `SkySettings`, `position_sun_disc`/`update_sun_light` não devem rodar; com ela,
+    /// devem atualizar o disco e a luz.
+    #[test]
+    fn sun_disc_and_light_only_update_with_sky_settings() {
+        let mut app = App::new();
+
+        app.add_message::<SkyAssetsLoaded>()
+            .insert_resource(SkyState {
+                sun_dir: Vec3::new(1.0, 0.0, 0.0),
+                eclipse_factor: 1.0,
+                ..default()
+            })
+            .insert_resource(GlobalAmbientLight {
+                brightness: 0.0,
+                ..default()
+            })
+            .add_plugins(SunPlugin);
+
+        app.world_mut().spawn((
+            Camera3d::default(),
+            Transform::from_translation(Vec3::ZERO),
+            Projection::Perspective(PerspectiveProjection {
+                far: 50_000.0,
+                ..default()
+            }),
+        ));
+
+        let known_transform =
+            Transform::from_translation(Vec3::new(1.0, 2.0, 3.0)).with_scale(Vec3::splat(5.0));
+        let disc_entity = app.world_mut().spawn((SunDisc, known_transform)).id();
+
+        let light_entity = app
+            .world_mut()
+            .spawn((
+                SunLight,
+                DirectionalLight {
+                    illuminance: 123.0,
+                    ..default()
+                },
+                Transform::IDENTITY,
+            ))
+            .id();
+
+        app.update();
+
+        assert_eq!(
+            *app.world().get::<Transform>(disc_entity).unwrap(),
+            known_transform,
+            "position_sun_disc não deveria rodar sem SkySettings"
+        );
+        assert_eq!(
+            app.world()
+                .get::<DirectionalLight>(light_entity)
+                .unwrap()
+                .illuminance,
+            123.0,
+            "update_sun_light não deveria rodar sem SkySettings"
+        );
+
+        app.insert_resource(SkySettings {
+            sun_illuminance: 999.0,
+            ambient_brightness: 0.5,
+            ..default()
+        });
+        app.update();
+
+        assert_ne!(
+            *app.world().get::<Transform>(disc_entity).unwrap(),
+            known_transform,
+            "position_sun_disc deveria rodar com SkySettings presente"
+        );
+        assert_ne!(
+            app.world()
+                .get::<DirectionalLight>(light_entity)
+                .unwrap()
+                .illuminance,
+            123.0,
+            "update_sun_light deveria rodar com SkySettings presente"
+        );
+    }
 
     /// Testa que `position_sun_disc` posiciona, escala e orienta o disco do sol corretamente.
     #[test]

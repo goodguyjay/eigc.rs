@@ -1,7 +1,7 @@
 //! Plugin das propriedades de Júpiter no céu.
 
 use crate::sky::shared::place_celestial_disc;
-use crate::sky::{SkyAssets, SkyAssetsLoaded, SkyState};
+use crate::sky::{SkyAssets, SkyAssetsLoaded, SkySettings, SkyState};
 use bevy::app::App;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::camera::{Camera3d, CameraProjection};
@@ -9,7 +9,7 @@ use bevy::prelude::{
     AlphaMode, Assets, Color, Commands, Component, IntoScheduleConfigs, Mesh, Mesh3d,
     MeshMaterial3d, Meshable, Name, Plugin, Projection, Quat, Query, Res, ResMut, Sphere,
     StandardMaterial, Transform, Update, Vec3, With, Without, any_with_component, default,
-    on_message,
+    on_message, resource_exists,
 };
 use eigc_moons::{ActiveMoonProfileHandle, MoonProfile};
 
@@ -26,7 +26,9 @@ impl Plugin for JupiterPlugin {
         app.add_systems(Update, spawn_jupiter.run_if(on_message::<SkyAssetsLoaded>))
             .add_systems(
                 Update,
-                place_and_scale_jupiter.run_if(any_with_component::<Jupiter>),
+                place_and_scale_jupiter
+                    .run_if(any_with_component::<Jupiter>)
+                    .run_if(resource_exists::<SkySettings>),
             );
     }
 }
@@ -147,6 +149,55 @@ mod tests {
                 planet_shine_max: 0.006,
             },
         }
+    }
+
+    /// Sem `SkySettings`, `place_and_scale_jupiter` não deve rodar; com ela, deve posicionar
+    /// Júpiter.
+    #[test]
+    fn jupiter_only_updates_with_sky_settings() {
+        let mut app = App::new();
+
+        let mut profiles = Assets::<MoonProfile>::default();
+        let handle = profiles.add(test_profile(20.0));
+
+        app.add_message::<SkyAssetsLoaded>()
+            .insert_resource(SkyState {
+                jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
+                ..default()
+            })
+            .insert_resource(profiles)
+            .insert_resource(ActiveMoonProfileHandle(handle))
+            .add_plugins(JupiterPlugin);
+
+        app.world_mut().spawn((
+            Camera3d::default(),
+            Transform::from_translation(Vec3::ZERO),
+            Projection::Perspective(PerspectiveProjection {
+                far: 50_000.0,
+                ..default()
+            }),
+        ));
+
+        let known_transform =
+            Transform::from_translation(Vec3::new(1.0, 2.0, 3.0)).with_scale(Vec3::splat(5.0));
+        let jupiter_entity = app.world_mut().spawn((Jupiter, known_transform)).id();
+
+        app.update();
+
+        assert_eq!(
+            *app.world().get::<Transform>(jupiter_entity).unwrap(),
+            known_transform,
+            "place_and_scale_jupiter não deveria rodar sem SkySettings"
+        );
+
+        app.insert_resource(SkySettings::default());
+        app.update();
+
+        assert_ne!(
+            *app.world().get::<Transform>(jupiter_entity).unwrap(),
+            known_transform,
+            "place_and_scale_jupiter deveria rodar com SkySettings presente"
+        );
     }
 
     /// Testa que `place_and_scale_jupiter` posiciona, escala e orienta Júpiter corretamente.
