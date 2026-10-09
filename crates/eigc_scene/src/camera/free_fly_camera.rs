@@ -4,10 +4,13 @@ use crate::sky::{SkySettings, SkyState};
 use bevy::app::App;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::{
-    ButtonInput, Camera3d, Commands, Component, EulerRot, IntoScheduleConfigs, KeyCode,
-    MessageReader, PerspectiveProjection, Plugin, Projection, Quat, Query, Res, ResMut, Resource,
-    Single, Startup, Time, Transform, Update, Vec3, default, resource_exists,
+    ButtonInput, Camera, Camera3d, Commands, Component, EulerRot, IntoScheduleConfigs, KeyCode,
+    MessageReader, MouseButton, OnEnter, PerspectiveProjection, Plugin, Projection, Quat, Query,
+    Res, ResMut, Resource, Single, Time, Transform, Update, Vec3, With, default, in_state,
+    resource_exists,
 };
+use eigc_common::lod_focus::{LodFocus, screen_scale_from_fov};
+use eigc_moons::AppState;
 use bevy::window::{CursorGrabMode, CursorOptions};
 
 /// Marca a câmera de voo livre e guarda o estado de orientação e os parâmetros de movimento.
@@ -31,7 +34,7 @@ impl Default for FreeFlyCamera {
             yaw: 0.0,
             pitch: 0.0,
             speed: 20.0,
-            sprint_multiplier: 10.0,
+            sprint_multiplier: 100.0,
             sensitivity: 0.02,
         }
     }
@@ -46,7 +49,8 @@ pub struct FreeFlyCameraPlugin;
 impl Plugin for FreeFlyCameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CamLock>()
-            .add_systems(Startup, spawn_free_fly_camera)
+            .init_resource::<LodFocus>()
+            .add_systems(OnEnter(AppState::Running), spawn_free_fly_camera)
             .add_systems(
                 Update,
                 (
@@ -55,8 +59,11 @@ impl Plugin for FreeFlyCameraPlugin {
                     keyboard_movement,
                     lock_aim_update.run_if(resource_exists::<SkySettings>),
                     cursor_release,
+                    publish_lod_focus,
+                    recapture_cursor_on_click,
                 )
-                    .chain(),
+                    .chain()
+                    .run_if(in_state(AppState::Running)),
             );
     }
 }
@@ -77,6 +84,7 @@ enum LockMode {
 }
 
 /// Spawna a câmera de voo livre com projeção perspectiva e captura o cursor imediatamente.
+/// Roda em `OnEnter(Running)`, para que o cursor fique livre enquanto o menu está aberto.
 fn spawn_free_fly_camera(mut commands: Commands, mut cursor_options: Single<&mut CursorOptions>) {
     let translation = Vec3::new(0.0, 600.0, 1200.0);
     let mut transform = Transform::from_translation(translation);
@@ -107,7 +115,12 @@ fn spawn_free_fly_camera(mut commands: Commands, mut cursor_options: Single<&mut
 fn mouse_look(
     mut mouse_motion: MessageReader<MouseMotion>,
     mut cameras: Query<(&mut Transform, &mut FreeFlyCamera)>,
+    cursor_options: Single<&CursorOptions>,
 ) {
+    if cursor_options.grab_mode != CursorGrabMode::Locked {
+        mouse_motion.clear();
+        return;
+    }
     let Ok((mut transform, mut camera)) = cameras.single_mut() else {
         return;
     };
@@ -187,6 +200,24 @@ fn cursor_release(keys: Res<ButtonInput<KeyCode>>, mut cursor_options: Single<&m
     }
 }
 
+/// Recaptura o cursor ao clicar com o botão esquerdo, permitindo retomar o controle da câmera
+/// depois que o ESC libera o cursor, sem precisar fechar e reabrir a aplicação.
+fn recapture_cursor_on_click(
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    mut cursor_options: Single<&mut CursorOptions>,
+) {
+    if !mouse_buttons.just_pressed(MouseButton::Left) {
+        return;
+    }
+
+    if cursor_options.grab_mode == CursorGrabMode::Locked {
+        return;
+    }
+
+    cursor_options.visible = false;
+    cursor_options.grab_mode = CursorGrabMode::Locked;
+}
+
 /// Atualiza a orientação da câmera para mirar no Sol ou em Júpiter, dependendo do modo de bloqueio.
 fn lock_aim_update(
     lock: Res<CamLock>,
@@ -206,6 +237,25 @@ fn lock_aim_update(
     let (yaw, pitch, _roll) = transform.rotation.to_euler(EulerRot::YXZ);
     camera.yaw = yaw;
     camera.pitch = pitch;
+}
+
+/// Publica em `LodFocus` a posição da câmera e a escala de tela (FOV e altura da janela), para o
+/// terreno escolher o nível de LOD por erro em pixels.
+///
+/// Lê o `Transform` e não o `GlobalTransform`, que só reflete o movimento do frame seguinte.
+/// Enquanto o viewport da câmera não é conhecido, mantém a escala de tela anterior.
+fn publish_lod_focus(
+    camera: Single<(&Transform, &Projection, &Camera), With<FreeFlyCamera>>,
+    mut focus: ResMut<LodFocus>,
+) {
+    let (transform, projection, camera) = *camera;
+    focus.position = transform.translation;
+
+    if let (Projection::Perspective(perspective), Some(viewport)) =
+        (projection, camera.physical_viewport_size())
+    {
+        focus.screen_scale = screen_scale_from_fov(perspective.fov, viewport.y as f32);
+    }
 }
 
 /// Alterna o modo de bloqueio da câmera entre livre, travada no Sol ou travada em Júpiter.
@@ -257,6 +307,30 @@ mod tests {
         assert_eq!(clamped_pitch, pitch);
     }
 
+    /// Testa que a posição atual da câmera aparece em `LodFocus` depois de um update, e que a
+    /// escala de tela padrão é mantida enquanto a câmera não tem viewport conhecido.
+    #[test]
+    fn publish_lod_focus_copies_camera_position_and_keeps_screen_scale_without_viewport() {
+        let mut app = App::new();
+        app.init_resource::<LodFocus>()
+            .add_systems(Update, publish_lod_focus);
+
+        let position = Vec3::new(120.0, 600.0, -35.0);
+        app.world_mut().spawn((
+            Transform::from_translation(position),
+            Camera::default(),
+            Projection::default(),
+            FreeFlyCamera::default(),
+        ));
+        let default_scale = app.world().resource::<LodFocus>().screen_scale;
+
+        app.update();
+
+        let focus = app.world().resource::<LodFocus>();
+        assert_eq!(focus.position, position);
+        assert_eq!(focus.screen_scale, default_scale);
+    }
+
     /// Testa que segurar W descola a câmera para frente ao longo do tempo
     #[test]
     fn keyboard_movement_moves_camera_forward_when_w_pressed() {
@@ -286,6 +360,35 @@ mod tests {
             position_after_first_update,
             position_after_second_update
         );
+    }
+
+    /// Testa que, depois do cursor ser liberado (ESC), um clique esquerdo o recaptura —
+    /// sem isso, a única forma de recuperar o controle da câmera era reiniciar o app.
+    #[test]
+    fn left_click_recaptures_cursor_after_it_was_released() {
+        let mut app = App::new();
+
+        app.init_resource::<ButtonInput<MouseButton>>()
+            .add_systems(Update, recapture_cursor_on_click);
+
+        let entity = app
+            .world_mut()
+            .spawn(CursorOptions {
+                visible: true,
+                grab_mode: CursorGrabMode::None,
+                ..default()
+            })
+            .id();
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+
+        app.update();
+
+        let cursor_options = app.world().get::<CursorOptions>(entity).unwrap();
+        assert_eq!(cursor_options.grab_mode, CursorGrabMode::Locked);
+        assert!(!cursor_options.visible);
     }
 
     /// Testa que `resolve_lock_direction` retorna a direção correta pra cada
@@ -324,12 +427,12 @@ mod tests {
         app.insert_resource(CamLock {
             mode: LockMode::Sun,
         })
-            .insert_resource(SkyState {
-                sun_dir,
-                jupiter_dir,
-                ..default()
-            })
-            .add_systems(Update, lock_aim_update);
+        .insert_resource(SkyState {
+            sun_dir,
+            jupiter_dir,
+            ..default()
+        })
+        .add_systems(Update, lock_aim_update);
 
         // câmera arbitrária, olhando pra uma direção que não é nem sol nem
         // júpiter, com yaw/pitch velhos que não deviam sobreviver ao lock.
@@ -383,12 +486,12 @@ mod tests {
         app.insert_resource(CamLock {
             mode: LockMode::Free,
         })
-            .insert_resource(SkyState {
-                sun_dir: Vec3::new(1.0, 0.0, 0.0),
-                jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
-                ..default()
-            })
-            .add_systems(Update, lock_aim_update);
+        .insert_resource(SkyState {
+            sun_dir: Vec3::new(1.0, 0.0, 0.0),
+            jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
+            ..default()
+        })
+        .add_systems(Update, lock_aim_update);
 
         let transform = Transform::from_translation(Vec3::ZERO);
         let camera = FreeFlyCamera {

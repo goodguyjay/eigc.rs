@@ -20,6 +20,7 @@ fn test_profile() -> MoonProfile {
             reflectance: 0.3,
         },
         terrain_base_color: [1.0, 1.0, 1.0, 1.0],
+        terrain_valley_color: [0.3, 0.2, 0.1, 1.0],
         walkable: true,
         sky: SkyCalibration {
             orbital_period_seconds: 1000.0,

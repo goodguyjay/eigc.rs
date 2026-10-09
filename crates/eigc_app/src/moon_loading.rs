@@ -1,20 +1,14 @@
-//! Sistemas responsáveis por iniciar o carregamento do perfil de lua ativa e transicionar
-//! a aplicação para o estado running assim que o asset termina de carregar.
+//! Sistema responsável por transicionar a aplicação para o estado running assim que o perfil da
+//! lua escolhida no menu termina de carregar. O carregamento em si é disparado pelo `eigc_menu`.
 
-use bevy::prelude::{AssetServer, Assets, Commands, NextState, Res, ResMut, State};
+use bevy::prelude::{Assets, NextState, Res, ResMut, State};
 use eigc_moons::profile::MoonProfile;
 use eigc_moons::state::{ActiveMoonProfileHandle, AppState};
 
-/// Dispara o carregamento do perfil da lua ativa assim que a aplicação inicia.
-pub fn start_loading_active_moon_profile(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let handle = asset_server.load::<MoonProfile>("moons/europa.ron");
-    commands.insert_resource(ActiveMoonProfileHandle(handle));
-}
-
-/// Dispara o carregamento do perfil da lua ativa assim que a aplicação
-/// inicia.
-/// todo: Hoje aponta direto para europa.ron; escolha de lua ativa em runtime (menu de seleção) fica
-/// para quando eigc_app tiver um menu de verdade.
+/// Transiciona para `Running` assim que o perfil da lua ativa estiver carregado.
+///
+/// Deve ser registrado com `run_if(resource_exists::<ActiveMoonProfileHandle>)`, pois o handle só
+/// existe depois que o menu escolhe uma lua.
 pub fn transition_when_moon_profile_loaded(
     active_handle: Res<ActiveMoonProfileHandle>,
     moon_profiles: Res<Assets<MoonProfile>>,
@@ -33,12 +27,10 @@ pub fn transition_when_moon_profile_loaded(
 
 #[cfg(test)]
 mod tests {
-    use crate::moon_loading::transition_when_moon_profile_loaded;
-    use bevy::prelude::{App, AppExtStates, Assets, OnEnter, ResMut, Resource, State, Update};
+    use super::*;
+    use bevy::prelude::*;
     use bevy::state::app::StatesPlugin;
-    use eigc_moons::{
-        ActiveMoonProfileHandle, AppState, MoonId, MoonProfile, SkyCalibration, TerrainCalibration,
-    };
+    use eigc_moons::{MoonId, SkyCalibration, TerrainCalibration};
 
     /// Conta quantas vezes `OnEnter(AppState::Running)` disparou.
     /// Esse teste vem da correção de um bug em que o sistema `transition_when_moon_profile_loaded`
@@ -66,6 +58,7 @@ mod tests {
                 reflectance: 0.3,
             },
             terrain_base_color: [1.0, 1.0, 1.0, 1.0],
+            terrain_valley_color: [0.0, 0.0, 0.0, 1.0],
             walkable: true,
             sky: SkyCalibration {
                 orbital_period_seconds: 1000.0,
@@ -81,6 +74,9 @@ mod tests {
         }
     }
 
+    /// Testa que, com o perfil já carregado, a transição para `Running`
+    /// acontece e `OnEnter(Running)` dispara exatamente uma vez, mesmo após
+    ///  vários updates.
     #[test]
     fn moon_profile_loaded_transitions_to_running_only_once() {
         let mut app = App::new();

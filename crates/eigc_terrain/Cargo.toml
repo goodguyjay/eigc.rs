@@ -9,7 +9,6 @@ bevy.workspace = true
 noise.workspace = true
 
 [dev-dependencies]
-eigc_testkit.workspace = true
 rstest.workspace = true
 proptest.workspace = true
 eigc_moons.workspace = true

@@ -14,19 +14,24 @@ foi lançada em 2023 e chegará a Júpiter em 2030.
 cargo run -p eigc_app
 ```
 
-Isso sobe a aplicação, carrega o perfil da lua e spawna o terreno gerado.
+Isso sobe o menu inicial, com as quatro luas lado a lado. Clique em Europa para ver a ficha e em
+"Explorar" para carregar o perfil da lua, gerar o terreno e entrar na simulação. As outras luas
+ainda não estão implementadas e mostram apenas um aviso.
 
 - `eigc_common`: matemática pura e constantes universais
 - `eigc_sim`: estado de simulação (`TimeFlow`, `SimSet`)
 - `eigc_moons`: dados de calibração por lua (`MoonProfile`), carregados como
-  asset `.ron` via `AssetServer`, com hot reload
+  asset `.ron` via `AssetServer`, com hot reload, e dados descritivos estáticos de cada lua
+  (`MoonInfo`) usados pelo menu
+- `eigc_menu`: menu inicial de seleção de lua (cena 3D com os modelos `.glb`, ficha da lua e
+  tela de carregamento)
 - `eigc_terrain`: geração procedural de terreno, composta por um kit de
   peças genérico (`height/`, `mesh.rs`) e receitas específicas por lua
   (`recipe.rs`)
-- `eigc_scene`: câmera, iluminação e céu (ainda não implementado de verdade,
-  ver `eigc_app::scene_placeholder` como estado atual)
-- `eigc_app`: binário principal, amarra os plugins e o estado de
-  carregamento
+- `eigc_scene`: câmera de voo livre e céu (sol, Júpiter, estrelas, eclipse e luz refletida de
+  Júpiter)
+- `eigc_app`: binário principal, amarra os plugins e o estado da aplicação (menu, carregamento
+  e simulação)
 - `eigc_perf`: instrumentação de performance
 - `eigc_testkit`: fixtures de teste compartilhadas entre crates
   (`dev-dependency` apenas)

@@ -13,6 +13,18 @@ pub enum MoonId {
     Callisto,
 }
 
+impl MoonId {
+    /// Caminho do `.ron` de perfil desta lua, relativo à raiz de assets.
+    pub fn profile_asset_path(self) -> &'static str {
+        match self {
+            MoonId::Europa => "moons/europa.ron",
+            MoonId::Io => "moons/io.ron",
+            MoonId::Ganymede => "moons/ganymede.ron",
+            MoonId::Callisto => "moons/callisto.ron",
+        }
+    }
+}
+
 /// Parâmetros de calibração de geração procedural de terreno para uma lua específica.
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct TerrainCalibration {
@@ -66,8 +78,10 @@ pub struct MoonProfile {
     pub jupiter_angular_diameter_deg: f32,
     /// Parâmetros de geração procedural de terreno específico dessa lua
     pub terrain: TerrainCalibration,
-    /// Cor base do material do terreno
+    /// Cor base do material do terreno (crista/encosta, ex.: gelo claro)
     pub terrain_base_color: [f32; 4],
+    /// Cor do vale entre as duas cristas de uma linea (escuro/avermelhado)
+    pub terrain_valley_color: [f32; 4],
     /// Se esta lua tem modo de caminha completo implementado
     pub walkable: bool,
     /// Parâmetros de calibração do céu e ajustes artísticos
