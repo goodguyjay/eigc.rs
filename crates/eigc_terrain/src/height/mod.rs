@@ -4,10 +4,14 @@ use std::sync::Arc;
 
 /// Combinadores de `HeightSource` (soma, escala, viés).
 pub mod comb;
+/// Fonte de altura baseada em DTM real (heightmap 16 bits amostrado por interpolação bicúbica).
+pub mod heightmap;
 /// Lineae de Europa: pares de cristas com vale, em traçado reto ou em arco estilizado.
 pub mod linea;
 /// Fontes de altura baseadas em ruído Perlin (fbm e ridged).
 pub mod noise;
+/// Cor por vértice derivada da inclinação de uma fonte de altura.
+pub mod slope;
 /// Distorção de domínio e projeção anisotrópica de `HeightSource`.
 pub mod warp;
 
