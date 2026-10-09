@@ -60,7 +60,7 @@ fn europa_recipe_produces_height_function_and_matching_params() {
 
     assert!(
         recipe.color.is_some(),
-        "Europa deveria produzir uma fonte de cor por vértice para as lineae"
+        "Europa deveria produzir uma fonte de cor por vértice (inclinação do DTM)"
     );
 }
 
@@ -116,6 +116,40 @@ fn europa_recipe_keeps_spawn_clearing_flat_around_origin() {
             "ponto ({x}, {z}) dentro da clareira deveria ter a mesma altura plana da origem"
         );
     }
+}
+
+/// Testa se o relevo de Europa vem do DTM real: fora da clareira, varia em centenas de metros
+/// (o ruído de fundo sozinho variava ~12 m) e fica recentrado em torno de y=0, não nas
+/// elevações absolutas do DTM (-514 a -64 m).
+#[test]
+fn europa_recipe_relief_follows_the_real_dtm_recentered_around_zero() {
+    let profile = minimal_profile_for(MoonId::Europa);
+    let recipe = build_recipe(&profile);
+
+    let half_size = recipe.params.size * 0.5;
+    let steps = 40;
+    let mut lowest = f32::MAX;
+    let mut highest = f32::MIN;
+    for i in 0..=steps {
+        for j in 0..=steps {
+            let x = -half_size + recipe.params.size * i as f32 / steps as f32;
+            let z = -half_size + recipe.params.size * j as f32 / steps as f32;
+            let height = recipe.height.height_at(x, z);
+            assert!(height.is_finite(), "altura não finita em ({x}, {z})");
+            lowest = lowest.min(height);
+            highest = highest.max(height);
+        }
+    }
+
+    assert!(
+        highest - lowest > 300.0,
+        "o relevo deveria vir do DTM e variar centenas de metros, variou {}",
+        highest - lowest
+    );
+    assert!(
+        lowest < 0.0 && highest > 0.0,
+        "o relevo deveria ficar recentrado em torno de zero: de {lowest} a {highest}"
+    );
 }
 
 /// Testa se a receita para luas não calibradas (Io, Ganymede, Callisto) causa pânico ao invés de

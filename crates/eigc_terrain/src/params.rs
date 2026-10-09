@@ -15,4 +15,9 @@ pub struct TerrainParams {
     pub line_dir: Vec2,
     /// Semente do gerador de números aleatórios
     pub seed: u32,
+    /// Fator multiplicado sobre o relevo de origem real (DTM), para o terreno ler melhor na
+    /// escala de passo humano. Licença artística consciente (a elevação real é suave demais
+    /// para a câmera em primeira pessoa), no mesmo espírito do traçado em arco das lineae.
+    /// `1.0` reproduz a elevação medida.
+    pub vertical_exaggeration: f32,
 }
