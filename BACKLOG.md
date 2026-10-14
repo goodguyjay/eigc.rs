@@ -165,6 +165,38 @@ não por teste unitário de função pura.
   tela provavelmente congela por um instante na transição. Não medido; confirmar em teste
   visual antes de investir num indicador animado.
 
+## Ciclo de vida e saída (#42)
+- [ ] **A saída só loga e solta o cursor.** `ShutdownPlugin` (`eigc_app::shutdown`) reage a
+  `AppExit` em `Last`. Hoje não há nada a persistir (sem escrita em disco nem preferências), então
+  não há flush. Quando surgir persistência (luas visitadas, configurações), o flush entra em
+  `handle_app_exit`. Também não há atalho de teclado para sair; só o fechar da janela emite
+  `AppExit`.
+- [ ] **Tasks de chunk em voo ao encerrar não foram verificadas.** `chunks.rs` guarda
+  `Task<Mesh>` (`PendingChunkMesh`) e `Task<LevelErrors>` (`ChunkErrorTable`) no
+  `AsyncComputeTaskPool`. Falta confirmar na 0.18.1 se uma task em voo atrasa o fechamento. Se
+  atrasar, cancelar as tasks (drop) no `Last`.
+- [ ] **Auditoria de spawn sem remoção.** Nenhum dos spawns abaixo tem `DespawnOnExit` nem
+  despawn explícito. Hoje não vaza, porque não existe transição que saia de `Running`. Vira bug
+  no dia em que existir "voltar ao menu". Não foi corrigido agora porque, sem rota de saída de
+  `Running`, o `DespawnOnExit` não seria exercitado por nenhum teste real. O menu
+  (`eigc_menu`) já faz certo, com `DespawnOnEnter(Running)`.
+
+  | Local | Quando spawna |
+  |---|---|
+  | `eigc_scene` `camera/free_fly_camera.rs` (`spawn_free_fly_camera`) | `OnEnter(Running)` |
+  | `eigc_scene` `sky/sun.rs` (`spawn_sun`, 2 spawns) | `Update`, `on_message::<SkyAssetsLoaded>` |
+  | `eigc_scene` `sky/jupiter.rs` (`spawn_jupiter`) | `Update`, `on_message::<SkyAssetsLoaded>` |
+  | `eigc_scene` `sky/starfield.rs` (`spawn_starfield`) | `Update`, `on_message::<SkyAssetsLoaded>` |
+  | `eigc_scene` `sky/planet_shine.rs` (`spawn_planet_shine`) | `Startup` |
+  | `eigc_terrain` `chunks.rs` (`spawn_terrain_chunks`) | `OnEnter(Running)` |
+- [ ] **`planet_shine` spawna em `Startup`**, enquanto o resto do céu só spawna em `Running`. A
+  entidade existe já durante o menu. Provavelmente deveria seguir o resto; confirmar antes de
+  mover.
+- [ ] **Spawns do céu em `Update` sem guard de `State`.** `sun`, `jupiter` e `starfield` spawnam
+  por `on_message::<SkyAssetsLoaded>` sem `in_state(Running)`. A mensagem limita o risco, mas a
+  regra do `CLAUDE.md` pede o guard antes de qualquer `spawn` em `Update`. Se `SkyAssetsLoaded`
+  for emitida mais de uma vez, entidades duplicam.
+
 ## Plataformas
 - Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS
 e X11 não possuem suporte completo e o bevy pode recair silenciosamente para `CursorGrabMode::Confined`.
