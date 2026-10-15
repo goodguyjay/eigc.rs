@@ -2323,9 +2323,13 @@ dependencies = [
  "bevy",
  "eigc_common",
  "eigc_moons",
+ "image",
  "noise",
  "proptest",
+ "ron",
  "rstest",
+ "serde",
+ "thiserror 2.0.20",
 ]
 
 [[package]]

@@ -30,6 +30,7 @@ fn spawn_terrain_creates_exactly_one_terrain_entity() {
         freq: 1.0,
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
+        vertical_exaggeration: 1.0,
     };
 
     let terrain_appearance = TerrainAppearance {
@@ -79,6 +80,7 @@ fn spawn_terrain_applies_material_properties_from_resource() {
         freq: 1.0,
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
+        vertical_exaggeration: 1.0,
     };
 
     let terrain_appearance = TerrainAppearance {

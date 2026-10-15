@@ -78,6 +78,33 @@
   refinados igual aos da frente, para a câmera poder girar sem ver terreno grosso), não há
   culling por oclusão, e não existe colisão (qualquer modo de caminhada futuro deve ler
   `HeightResource::height_at` direto, não a malha visível).
+- [ ] **Heightmap de Europa embutido no binário (`include_bytes!` em `recipe.rs`).** Os
+  arquivos continuam em `assets/terrain/europa/` (uma única cópia dos dados), mas são lidos
+  em tempo de compilação. Motivo: `build_recipe` é síncrona e pura, chamada em testes sem
+  nenhum caminho de assets configurado, e o caminho de assets em runtime é relativo ao
+  manifest do binário (`eigc_app`), que `eigc_terrain` não conhece. Custo: sem hot reload
+  do heightmap (ao contrário do `MoonProfile`) e ~40 KB a mais no binário por lua. Se mais
+  luas ganharem heightmap ou o tamanho crescer, migrar para carregar via `AssetServer`.
+- [ ] **Constantes visuais do relevo híbrido de Europa não foram calibradas com o app
+  rodando.** `DETAIL_AMPLITUDE_M`, `DETAIL_FREQUENCY_FACTOR` e
+  os limiares `SLOPE_COLOR_START/END` em `recipe.rs` são valores de partida, não resultado de
+  inspeção visual sistemática. A interpolação já é bicúbica (Catmull-Rom) em
+  `HeightmapHeight::height_at`: a bilinear inicial deixava o terreno em tabuleiro (gradiente
+  descontínuo a cada pixel de 227,65 m, visível nas normais e na cor por inclinação). A
+  Catmull-Rom pode ter pequeno overshoot além da faixa de elevação do DTM, aceito.
+  `VERTICAL_EXAGGERATION` ficou em 1.0 (elevação medida) por decisão consciente. O relevo
+  parece baixo de longe porque o dado é suave: precisão vertical efetiva de 36 a 100 m RMS,
+  feições identificáveis de ~450 a 700 m e declive mediano de 2,5 graus (máximo 21,6). Subir o
+  exagero é uma escolha visual, não uma correção física, e exigiria rever a câmera de spawn
+  (y=600) contra o ponto mais alto do terreno.
+- [ ] **Código de lineae sintéticas ficou sem uso em Europa.** `height::linea`
+  (`LineaField`, `LineaColorField`, `generate_linea_specs`) e `height::warp` não são mais
+  chamados por `europa_recipe`, já que as cristas agora vêm do DTM. Também ficaram sem
+  efeito para Europa `warp_amplitude_meters`, `feature_direction` e (já era o caso)
+  `vertical_amplitude_meters`, que só chega em `TerrainParams.amp`. Mantidos porque outra
+  lua pode reaproveitar as lineae e remover campos de `TerrainCalibration` mexe no `.ron` e
+  nos testes de `eigc_moons`. O destaque das cristas reais é só por inclinação
+  (`SlopeColorField`), sem identificar cada crista individualmente.
 
 ## Cena / Visual
 - [X] Câmera e luz em eigc_app::scene_placeholder eram fixas e hardcoded, sem
