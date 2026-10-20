@@ -7,7 +7,13 @@ use bevy::prelude::{
     App, AppExtStates, AssetPlugin, IntoScheduleConfigs, PluginGroup, SystemCondition, Update,
     default, in_state, resource_exists,
 };
+#[cfg(feature = "dev")]
+use bevy::prelude::{MessageWriter, Startup};
+#[cfg(feature = "dev")]
+use eigc_menu::ExploreRequested;
 use eigc_menu::MenuPlugin;
+#[cfg(feature = "dev")]
+use eigc_moons::MoonId;
 use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonPlugin};
 use eigc_scene::camera::free_fly_camera::FreeFlyCameraPlugin;
 use eigc_scene::sky::SkyPlugin;
@@ -47,6 +53,14 @@ fn main() {
 
     #[cfg(feature = "dev")]
     app.add_plugins(eigc_perf::debug_tools::DebugToolsPlugin);
+
+    // Só debug: o MenuPlugin consome o pedido na primeira Update, ainda em MainMenu.
+    #[cfg(feature = "dev")]
+    if std::env::args().any(|arg| arg == "--europa") {
+        app.add_systems(Startup, |mut requests: MessageWriter<ExploreRequested>| {
+            requests.write(ExploreRequested(MoonId::Europa));
+        });
+    }
 
     app.run();
 }
