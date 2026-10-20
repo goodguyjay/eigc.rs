@@ -3,6 +3,7 @@
 use crate::sky::{SkyAssets, SkyAssetsLoaded, SkyState};
 use bevy::app::App;
 use bevy::camera::visibility::NoFrustumCulling;
+use bevy::light::NotShadowCaster;
 use bevy::prelude::{
     AlphaMode, Assets, Camera3d, Color, Commands, Component, IntoScheduleConfigs, Mesh, Mesh3d,
     MeshMaterial3d, Meshable, Name, Plugin, Projection, Query, Res, ResMut, Sphere,
@@ -53,6 +54,7 @@ fn spawn_starfield(
         Transform::from_scale(Vec3::splat(20_000.0)),
         StarDome,
         NoFrustumCulling,
+        NotShadowCaster,
         Name::new("Domo de Estrelas"),
     ));
 }
@@ -112,5 +114,37 @@ fn dim_stars_near_sun(
 
     if let Some(mat) = mats.get_mut(&star_mat.0) {
         mat.base_color = Color::linear_rgb(brightness, brightness, brightness);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::MinimalPlugins;
+    use bevy::prelude::{App, AssetApp, AssetPlugin, Handle, Image, Mesh, Startup};
+
+    /// O domo envolve a câmera e a luz do sol vem de fora dele. Se projetar sombra, o chão dentro
+    /// do alcance das cascatas fica todo preto.
+    #[test]
+    fn star_dome_does_not_cast_shadows() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_plugins(AssetPlugin::default())
+            .init_asset::<Mesh>()
+            .init_asset::<StandardMaterial>()
+            .insert_resource(SkyAssets {
+                jupiter_tex: Handle::<Image>::default(),
+                sun_tex: Handle::<Image>::default(),
+                starfield_tex: Handle::<Image>::default(),
+                all_loaded: true,
+            })
+            .add_systems(Startup, spawn_starfield);
+
+        app.update();
+
+        let mut dome = app
+            .world_mut()
+            .query_filtered::<&NotShadowCaster, With<StarDome>>();
+        assert_eq!(dome.iter(app.world()).count(), 1);
     }
 }

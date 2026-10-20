@@ -8,6 +8,7 @@
 //! - a construção das malhas novas ([`update_terrain_lod`] começa, [`finish_chunk_builds`]
 //!   termina). Uma construção obsoleta é cancelada quando o chunk volta a querer o nível atual.
 
+use bevy::pbr::Material;
 use crate::chunk_mesh::{ChunkRegion, build_chunk_mesh};
 use crate::height::{ColorFn, ColorSource, HeightFn, HeightSource};
 use crate::lod::{
@@ -20,7 +21,7 @@ use crate::params::TerrainParams;
 use crate::pipeline::{ColorResource, HeightResource};
 use bevy::prelude::{
     Assets, Commands, Component, Entity, Handle, Mesh, Mesh3d, MeshMaterial3d, Query, Res, ResMut,
-    Resource, StandardMaterial, Transform,
+    Resource, Transform,
 };
 use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, poll_once};
 use eigc_common::lod_focus::LodFocus;
@@ -97,11 +98,11 @@ impl ChunkErrorTable {
 
 /// Spawna todos os chunks do terreno com a malha do nível mais grosso.
 ///
-/// O `material` é compartilhado por todos os chunks.
-pub fn spawn_terrain_chunks(
+/// O `material` é compartilhado por todos os chunks e pode ser de qualquer tipo de `Material`.
+pub fn spawn_terrain_chunks<M: Material>(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    material: Handle<StandardMaterial>,
+    material: Handle<M>,
     params: &TerrainParams,
     lod: &TerrainLodConfig,
     height: &dyn HeightSource,
@@ -312,5 +313,5 @@ fn build_level_mesh(
         center: chunk_center(coord, terrain_size, lod.chunks_per_side),
         size,
     };
-    build_chunk_mesh(region, quads, skirt_depth, terrain_size, height, color)
+    build_chunk_mesh(region, quads, skirt_depth, height, color)
 }
