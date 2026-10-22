@@ -2,6 +2,7 @@
 //! escolhida e simulação rodando com o terreno já spawnado.
 
 use crate::moon_loading::transition_when_moon_profile_loaded;
+use crate::shutdown::ShutdownPlugin;
 use bevy::DefaultPlugins;
 use bevy::prelude::{
     App, AppExtStates, AssetPlugin, IntoScheduleConfigs, PluginGroup, SystemCondition, Update,
@@ -16,6 +17,9 @@ use eigc_terrain::pipeline::TerrainPlugin;
 
 /// Sistemas de transição de estado ao concluir o carregamento do perfil da lua escolhida.
 pub mod moon_loading;
+
+/// Ponto de saída controlado: reage ao `AppExit` com log e liberação do cursor.
+pub mod shutdown;
 
 /// Faz o relógio da simulação avançar só em `Running`, para o céu não começar numa fase
 /// arbitrária depois do tempo gasto no menu e no carregamento.
@@ -36,7 +40,8 @@ fn main() {
     .add_plugins(TimeFlowPlugin)
     .add_plugins(FreeFlyCameraPlugin)
     .add_plugins(SkyPlugin)
-    .add_plugins(MenuPlugin);
+    .add_plugins(MenuPlugin)
+    .add_plugins(ShutdownPlugin);
 
     gate_simulation_clock(&mut app).add_systems(
         Update,
