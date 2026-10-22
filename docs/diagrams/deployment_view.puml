@@ -1,0 +1,45 @@
+@startuml eigc_deployment_view
+title eigc.rs — Visão de Implantação (Seção 7)\nExecutável nativo único, sem servidor nem back-end
+
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam nodeStyle rectangle
+
+actor "Jogador" as player
+
+node "PC do usuário (Windows)" as pc {
+  artifact "eigc_app.exe" as exe <<executável>>
+
+  folder "pasta de assets (ao lado do .exe)" as assets_folder {
+    artifact "texturas (.png/.jpg)" as textures
+    artifact "arquivos de ajuste (.ron)\nperfis de lua, calibração" as ron_files
+  }
+
+  component "AssetServer\n(motor gráfico Bevy)" as asset_server
+
+  exe --> asset_server : usa
+  asset_server --> textures : lê localmente
+  asset_server --> ron_files : lê localmente
+}
+
+player --> exe : executa
+
+cloud "Internet" as internet #F5F5F5 {
+  database "Dados públicos\nNASA / USGS" as nasa_usgs
+}
+
+note as PrepNote
+  **Preparação dos assets (uma única vez, antes da distribuição)**
+  Os dados públicos da NASA/USGS são consumidos apenas durante
+  a etapa de preparação dos assets, fora do runtime do jogo.
+end note
+
+nasa_usgs ..> PrepNote : consumidos uma vez
+PrepNote ..> assets_folder : gera texturas + .ron
+
+note bottom of pc
+  Não há nenhuma dependência de rede durante a
+  execução do software — tudo é lido localmente.
+end note
+
+@enduml

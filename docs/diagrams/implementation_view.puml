@@ -1,0 +1,83 @@
+@startuml eigc_implementation_view
+title eigc.rs — Visão de Implementação (Seção 6)\nDivisão em crates do workspace Cargo
+
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+legend right
+  linha sólida (-->) = dependência de build (runtime)
+  linha tracejada (..>) = dependência de dev/test (dev-dependencies)
+end legend
+
+note as ImplNote
+  Cada crate é compilado como unidade independente dentro do
+  workspace Cargo, com dependências próprias declaradas em seu
+  Cargo.toml. Regras compartilhadas (documentação obrigatória em
+  itens públicos, proibição de imports "*", testes obrigatórios
+  para lógica) são descritas no CONTRIBUTING.md do repositório e
+  aplicadas de forma consistente em todos os crates.
+end note
+
+package "eigc_app" as app <<binário>> {
+  component "main" as app_main
+}
+
+package "eigc_scene" as scene {
+  component "camera / sky" as scene_comp
+}
+
+package "eigc_terrain" as terrain {
+  component "geração de terreno" as terrain_comp
+}
+
+package "eigc_sim" as sim {
+  component "tempo de simulação" as sim_comp
+}
+
+package "eigc_moons" as moons {
+  component "perfis de lua (.ron)" as moons_comp
+}
+
+package "eigc_perf" as perf {
+  component "ferramentas de debug" as perf_comp
+}
+
+package "eigc_common" as common {
+  component "constantes / math" as common_comp
+}
+
+package "eigc_testkit" as testkit <<somente teste>> {
+  component "utilitários de teste" as testkit_comp
+}
+
+' ===== Dependências de runtime (crate binário -> libs) =====
+app --> moons
+app --> terrain
+app --> sim
+app --> scene
+app --> perf
+
+scene --> moons
+scene --> sim
+scene --> common
+
+terrain --> common
+terrain --> moons
+
+' ===== Dependências de dev/test =====
+terrain ..> testkit
+testkit ..> common
+testkit ..> moons
+
+note bottom of testkit
+  eigc_testkit só é usado como dev-dependency
+  (ex.: por eigc_terrain), nunca em build de release
+end note
+
+note bottom of common
+  eigc_moons, eigc_sim e eigc_perf não dependem de
+  nenhum outro crate interno — são as folhas do grafo
+end note
+
+@enduml
