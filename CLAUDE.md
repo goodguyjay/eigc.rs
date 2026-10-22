@@ -58,6 +58,18 @@ Use os aliases já configurados em `.cargo/config.toml` quando existirem, em vez
 - **Extraia lógica de sistema para função pura sempre que possível** (ex.: `clamp_pitch`, `resolve_lock_direction`). Função pura testa sem infraestrutura de ECS; sistema que só chama a função pura fica fino e mais fácil de revisar.
 - **Caminho de asset é relativo ao manifest dir do crate binário, não à raiz do workspace.** Configuração correta: `AssetPlugin { file_path: "../../assets".to_string(), ..default() }`.
 
+## bevy: escalares multiplicam textura, sempre confira o neutro
+
+StandardMaterial multiplica cada textura pelo escalar correspondente:
+base_color × base_color_texture, perceptual_roughness × metallic_roughness_texture
+(canal g), metallic × metallic_roughness_texture (canal b). toda vez que uma
+textura for adicionada a um campo, confira se o escalar irmão está no valor
+neutro (branco / 1.0), não só o base_color. foi exatamente isso que causou
+o bug do terreno branco antes desta task.
+
+Normal map e ARM guardam dados, não cor: carregue com `is_srgb = false`
+(`ImageLoaderSettings`), senão o loader de JPEG assume sRGB e curva os valores.
+
 ## Convenção de branch
 
 `{tipo}/{label}/nome-da-branch` — exemplos: `feature/melhoria/claude-code-setup`, `bugfix/terreno/nome-da-branch`, `feature/europa/nome-da-branch`. Se uma tarefa não se encaixar em nenhum tipo/label já visto, pergunte ao desenvolvedor humano em vez de inventar um novo.

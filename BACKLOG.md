@@ -23,15 +23,12 @@
   sqrt(x²+z²)`, não a distância à própria linea), o que pode ler como a crista "convergindo"
   pro centro. Resolver de vez exigiria testar interseção do traçado inteiro (segmento/arco)
   contra o disco de exclusão, não só a distância do centro. Não fizemos isso ainda.
-- [ ] **criar issue separada.** A câmera free-fly spawna em posição mundial
-  fixa (`Vec3::new(0.0, 600.0, 1200.0)`, `eigc_scene::camera::free_fly_camera::
-  spawn_free_fly_camera`), sem nenhuma leitura do `HeightResource` do terreno e sem
-  coincidir com o centro (`x=0, z=0`) onde fica a clareira de spawn (`SPAWN_CLEARING_RADIUS_M`
-  em `eigc_terrain::recipe`), o `z=1200` da câmera cai fora do raio de ~350m da clareira.
-  Não é bloqueante hoje (a câmera só não fica dentro do relevo por sorte de escala: altura
-  máxima física agora limitada a ~300m pelo fix de `LineaField::height_at` abaixo), mas o
-  deve ser resolvido/revisitado numa issue própria, fazendo possivelmente a câmera
-  nascer dentro da clareira e/ou ler a altura real do terreno no ponto de spawn.
+- [ ] A câmera free-fly spawna em posição mundial fixa
+  (`SPAWN_POSITION` em `eigc_scene::camera::free_fly_camera`, hoje `(0.0, 0.3, 0.0)`, no centro
+  da clareira de spawn), sem nenhuma leitura do `HeightResource` do terreno. O `y = 0.3` vem de
+  medir o platô da clareira em Europa (y = -1,45 m, a ~1,75 m de altura de olho): se a receita
+  mudar o DTM, o `SPAWN_CLEARING_RADIUS_M` ou a elevação de referência, a câmera pode nascer
+  dentro do relevo ou flutuando.
 - [X] **Crateras desligadas (feedback visual: terreno "artificial", alturas
   empilhadas, crateras em lugares estranhos).** Não existe um sistema de "cratera" dedicado
   no projeto, o que lia como cratera era o ruído `PerlinRidged`/`Oriented` (`ridged_noise`/
@@ -95,8 +92,8 @@
   `VERTICAL_EXAGGERATION` ficou em 1.0 (elevação medida) por decisão consciente. O relevo
   parece baixo de longe porque o dado é suave: precisão vertical efetiva de 36 a 100 m RMS,
   feições identificáveis de ~450 a 700 m e declive mediano de 2,5 graus (máximo 21,6). Subir o
-  exagero é uma escolha visual, não uma correção física, e exigiria rever a câmera de spawn
-  (y=600) contra o ponto mais alto do terreno.
+  exagero é uma escolha visual, não uma correção física, e exigiria rever o `y` de spawn da câmera contra o relevo
+  da clareira.
 - [ ] **Código de lineae sintéticas ficou sem uso em Europa.** `height::linea`
   (`LineaField`, `LineaColorField`, `generate_linea_specs`) e `height::warp` não são mais
   chamados por `europa_recipe`, já que as cristas agora vêm do DTM. Também ficaram sem
@@ -105,6 +102,35 @@
   lua pode reaproveitar as lineae e remover campos de `TerrainCalibration` mexe no `.ron` e
   nos testes de `eigc_moons`. O destaque das cristas reais é só por inclinação
   (`SlopeColorField`), sem identificar cada crista individualmente.
+
+- [X] **Textura de superfície de Europa (`snow_02`) sem mipmaps.** O loader de JPEG do Bevy
+  não gera mipmaps e o tile físico é de 2 m (`TILE_SIZE_M` em `chunk_mesh.rs`), o que deixava o
+  chão como ruído de sal e pimenta. Resolvido com geração de mips em CPU depois do carregamento
+  (`surface_mips.rs`: sRGB em espaço linear, normal map renormalizado) e anisotropia 16 no
+  sampler. Trade-off: custo único de CPU na thread principal ao entrar em `Running` e mips que
+  não persistem em disco. Se incomodar, trocar por KTX2 pré-mipado. Ainda avaliar tile
+  repetitivo de perto e blend de baixa frequência de cor para quebrar a repetição.
+- [ ] **Mistura de duas escalas do chão de Europa (`terrain_detail.wgsl`) deixa a repetição do
+  tile longo visível de cima.** O chão é um `ExtendedMaterial` (`surface_material.rs`): a escala
+  curta é o tile físico de 2 m e a longa é o mesmo conjunto de texturas a 16 m
+  (`MACRO_SCALE_RATIO`), misturadas por distância (`BLEND_START_M`/`BLEND_END_M`, 4 a 30 m).
+  De perto (centímetros) fica como antes, e à altura dos olhos o detalhe longe melhorou, mas a
+  30 m de altura o padrão de 16 m aparece em grade. Trade-off: reusar as mesmas imagens evita
+  baixar mais assets e mantém a cor coerente, ao custo da repetição. Mitigar com uma terceira
+  escala (ex.: 64 m), rotação/offset por camada ou uma máscara de baixa frequência. Os valores
+  de escala e de distância são de partida, ajustar visualmente. O shader é carregado de
+  `assets/shaders/` em runtime (não embutido), e `TerrainPlugin` só registra o `MaterialPlugin`
+  quando existe `RenderApp` (testes headless só registram o asset).
+- [ ] **UVs em metros perdem precisão longe da origem.** `uv = world / 2.0` chega a ~5500 nas
+  bordas do recorte de 22 km; em `f32` isso dá ~0,0005 de passo, cerca de 1 texel num tile de
+  2048 px. Aceito por ora (não observado como artefato). Se aparecer tremor de textura, passar a
+  UV relativa à origem do chunk com offset por material.
+- [ ] **A máscara de cor das cristas de Europa é inclinação do DTM, não a máscara de linea.** As
+  lineae sintéticas não participam mais da altura (ver item acima), então o tingimento por
+  vértice reaproveita o `SlopeColorField` (mesma fonte de altura do relevo) com
+  `terrain_base_color` branco e `terrain_valley_color` acastanhado em `europa.ron`. O nome
+  `terrain_valley_color` ficou impreciso: hoje é a cor das encostas íngremes. Renomear mexe no
+  `.ron` e nos testes de `eigc_moons`.
 
 ## Cena / Visual
 - [X] Câmera e luz em eigc_app::scene_placeholder eram fixas e hardcoded, sem

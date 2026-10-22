@@ -48,8 +48,6 @@ fn spawn_sun(
         DirectionalLight {
             illuminance: settings.sun_illuminance,
             shadows_enabled: true,
-            shadow_depth_bias: 0.005,
-            shadow_normal_bias: 0.6,
             ..default()
         },
         Transform::IDENTITY.looking_to(-settings.base_jupiter_dir.normalize(), Vec3::Y),

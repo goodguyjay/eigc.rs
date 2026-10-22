@@ -22,5 +22,5 @@ pub fn build_terrain_mesh_with_color(
         center: Vec2::ZERO,
         size: p.size,
     };
-    build_chunk_mesh(region, p.res, 0.0, p.size, height, color)
+    build_chunk_mesh(region, p.res, 0.0, height, color)
 }
