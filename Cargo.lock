@@ -2272,6 +2272,9 @@ name = "eigc_common"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "ron",
+ "rstest",
+ "serde",
 ]
 
 [[package]]
