@@ -9,7 +9,7 @@ use bevy::prelude::{
 };
 use eigc_menu::MenuPlugin;
 use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonPlugin};
-use eigc_scene::camera::free_fly_camera::FreeFlyCameraPlugin;
+use eigc_scene::camera::plugin::CameraPlugin;
 use eigc_scene::sky::SkyPlugin;
 use eigc_sim::{SimSet, TimeFlowPlugin};
 use eigc_terrain::pipeline::TerrainPlugin;
@@ -34,7 +34,7 @@ fn main() {
     .add_plugins(MoonPlugin)
     .add_plugins(TerrainPlugin)
     .add_plugins(TimeFlowPlugin)
-    .add_plugins(FreeFlyCameraPlugin)
+    .add_plugins(CameraPlugin)
     .add_plugins(SkyPlugin)
     .add_plugins(MenuPlugin);
 
