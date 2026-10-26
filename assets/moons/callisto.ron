@@ -1,0 +1,31 @@
+MoonProfile(
+    moon_id: Callisto,
+    display_name: "Calisto",
+    jupiter_angular_diameter_deg: 4.3,
+    // PLACEHOLDER: receita de terreno desta lua ainda não calibrada (recipe.rs cai em
+    // unimplemented!). Valores copiados de europa só para o perfil desserializar. Ver BACKLOG.md.
+    terrain: TerrainCalibration(
+        seed: 504,
+        base_frequency: 0.001666667,
+        feature_direction: (0.8, 0.2),
+        vertical_amplitude_meters: 12.0,
+        warp_amplitude_meters: 40.0,
+        perceptual_roughness: 0.7,
+        reflectance: 0.5,
+    ),
+    terrain_base_color: (0.42, 0.38, 0.34, 1.0),
+    terrain_valley_color: (0.18, 0.16, 0.14, 1.0),
+    walkable: false,
+    sky: SkyCalibration(
+        orbital_period_seconds: 1441931.2, // 16.689018 dias * 86400
+        // direções base e libração copiadas de europa (artísticas, sem calibração própria ainda)
+        base_sun_dir: (-0.15, 0.35, -0.92),
+        base_jupiter_dir: (0.35, 0.25, -0.90),
+        jupiter_libration_lat_deg: 2.0,
+        jupiter_libration_lon_deg: 2.0,
+        jupiter_ang_radius: 0.03752458, // (4.3 * 0.5).to_radians()
+        sun_elevation_deg: 25.0,
+        eclipse_soft_deg: 1.0,
+        planet_shine_max: 0.006,
+    ),
+)

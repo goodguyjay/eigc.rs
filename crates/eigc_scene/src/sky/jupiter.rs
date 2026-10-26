@@ -98,6 +98,7 @@ fn place_and_scale_jupiter(
     t.translation = position;
     t.scale = Vec3::splat(scale);
 
+    let dir = state.jupiter_dir.normalize();
     let forward = (-dir).normalize_or_zero();
     let mut up_hint = Vec3::Y;
     let axis = up_hint.cross(forward).normalize_or_zero();

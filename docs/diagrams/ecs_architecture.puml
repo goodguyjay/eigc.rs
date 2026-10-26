@@ -1,0 +1,359 @@
+@startuml eigc_ecs_architecture
+title eigc.rs — Arquitetura ECS (Bevy)\n(Components, Resources, Systems, Plugins, States)
+
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+skinparam class {
+  BackgroundColor<<Component>> #FFE0B2
+  BackgroundColor<<Resource>> #B3E5FC
+  BackgroundColor<<System>> #C8E6C9
+  BackgroundColor<<Plugin>> #D1C4E9
+  BackgroundColor<<State>> #FFCDD2
+  BackgroundColor<<Asset>> #F0F4C3
+  BackgroundColor<<Message>> #F8BBD0
+  BackgroundColor<<SystemSet>> #CFD8DC
+}
+
+legend right
+  |= Cor |= Elemento ECS |
+  |<#FFE0B2>| Component (dado ligado a uma entidade) |
+  |<#B3E5FC>| Resource (estado global único) |
+  |<#C8E6C9>| System (função que roda em um Schedule) |
+  |<#D1C4E9>| Plugin (registra Systems/Resources/Components na App) |
+  |<#FFCDD2>| State (máquina de estados da aplicação) |
+  |<#F0F4C3>| Asset (dado carregado de arquivo, ex: .ron) |
+  |<#F8BBD0>| Message (evento interno) |
+  |<#CFD8DC>| SystemSet (ordenação entre Systems) |
+end legend
+
+package "eigc_app" {
+  class main <<Entry Point>> {
+    monta a App e registra todos os Plugins
+    app.run()
+  }
+  class start_loading_active_moon_profile <<System>> {
+    Schedule: Startup
+  }
+  class transition_when_moon_profile_loaded <<System>> {
+    Schedule: Update
+  }
+}
+
+package "eigc_moons" {
+  enum AppState <<State>> {
+    LoadingMoonProfile
+    Running
+  }
+  class MoonProfile <<Asset>> {
+    moon_id: MoonId
+    display_name: String
+    terrain: TerrainCalibration
+    sky: SkyCalibration
+    walkable: bool
+  }
+  class ActiveMoonProfileHandle <<Resource>> {
+    0: Handle<MoonProfile>
+  }
+  class MoonPlugin <<Plugin>>
+}
+
+package "eigc_sim" {
+  enum SimSet <<SystemSet>> {
+    Advance
+    Animate
+  }
+  class TimeFlow <<Resource>> {
+    time_scale: f32
+  }
+  class SimTime <<Resource>> {
+    0: f32
+  }
+  class TimeFlowPlugin <<Plugin>>
+  class advance_simulation_time <<System>> {
+    Schedule: Update
+    SystemSet: Advance
+  }
+  class handle_time_flow_keyboard_controls <<System>> {
+    Schedule: Update
+  }
+}
+
+package "eigc_terrain" {
+  class TerrainParams <<Resource>> {
+    size: f32
+    res: u32
+    amp: f32
+    freq: f32
+    line_dir: Vec2
+    seed: u32
+  }
+  class HeightResource <<Resource>>
+  class TerrainAppearance <<Resource>> {
+    base_color: Color
+    display_name: String
+  }
+  class TerrainMaterialProperties <<Resource>> {
+    perceptual_roughness: f32
+    reflectance: f32
+  }
+  class TerrainPlugin <<Plugin>>
+  class build_terrain_from_loaded_profile <<System>> {
+    Schedule: OnEnter(AppState::Running)
+  }
+}
+
+package "eigc_scene.camera" {
+  class FreeFlyCamera <<Component>> {
+    yaw: f32
+    pitch: f32
+    speed: f32
+    sprint_multiplier: f32
+    sensitivity: f32
+  }
+  class CamLock <<Resource>> {
+    mode: LockMode
+  }
+  enum LockMode {
+    Free
+    Sun
+    Jupiter
+  }
+  class FreeFlyCameraPlugin <<Plugin>>
+  class spawn_free_fly_camera <<System>> {
+    Schedule: Startup
+  }
+  class toggle_lock <<System>> {
+    Schedule: Update (.chain 1/5)
+  }
+  class mouse_look <<System>> {
+    Schedule: Update (.chain 2/5)
+  }
+  class keyboard_movement <<System>> {
+    Schedule: Update (.chain 3/5)
+  }
+  class lock_aim_update <<System>> {
+    Schedule: Update (.chain 4/5)
+    run_if: resource_exists::<SkySettings>
+  }
+  class cursor_release <<System>> {
+    Schedule: Update (.chain 5/5)
+  }
+}
+
+package "eigc_scene.sky" {
+  class SkyAssets <<Resource>> {
+    jupiter_tex, sun_tex, starfield_tex: Handle<Image>
+    all_loaded: bool
+  }
+  class SkyState <<Resource>> {
+    eclipse_factor: f32
+    planet_shine_factor: f32
+    sun_dir: Vec3
+    jupiter_dir: Vec3
+  }
+  class SkySettings <<Resource>> {
+    calibração física derivada do MoonProfile ativo
+  }
+  class SkyAssetsLoaded <<Message>>
+  class SkyPlugin <<Plugin>>
+  class build_sky_settings <<System>> {
+    Schedule: OnEnter(AppState::Running)
+  }
+  class load_sky_assets <<System>> {
+    Schedule: OnEnter(AppState::Running)
+  }
+  class check_sky_assets_loaded <<System>> {
+    Schedule: Update
+  }
+  class animate_sky_physical <<System>> {
+    Schedule: Update
+    SystemSet: Animate
+    run_if: resource_exists::<SkySettings>
+  }
+
+  package "sun" {
+    class SunLight <<Component>>
+    class SunDisc <<Component>>
+    class SunPlugin <<Plugin>>
+    class spawn_sun <<System>> {
+      Schedule: Update
+      run_if: on_message::<SkyAssetsLoaded>
+    }
+    class update_sun_light <<System>> {
+      Schedule: Update
+      SystemSet: Animate
+    }
+    class position_sun_disc <<System>> {
+      Schedule: Update
+      SystemSet: Animate
+    }
+  }
+
+  package "jupiter" {
+    class Jupiter <<Component>>
+    class JupiterPlugin <<Plugin>>
+    class spawn_jupiter <<System>> {
+      Schedule: Update
+      run_if: on_message::<SkyAssetsLoaded>
+    }
+    class place_and_scale_jupiter <<System>> {
+      Schedule: Update
+      run_if: any_with_component::<Jupiter>
+    }
+  }
+
+  package "starfield" {
+    class StarDome <<Component>>
+    class StarfieldPlugin <<Plugin>>
+    class spawn_starfield <<System>> {
+      Schedule: Update
+      run_if: on_message::<SkyAssetsLoaded>
+    }
+    class track_camera <<System>> {
+      Schedule: Update
+    }
+    class dim_stars_near_sun <<System>> {
+      Schedule: Update
+    }
+  }
+
+  package "planet_shine" {
+    class PlanetShineLight <<Component>>
+    class PlanetShinePlugin <<Plugin>>
+    class spawn_planet_shine <<System>> {
+      Schedule: Startup
+    }
+    class update_planet_shine <<System>> {
+      Schedule: Update
+      SystemSet: Animate
+    }
+  }
+}
+
+package "eigc_perf" {
+  class DebugToolsPlugin <<Plugin>> {
+    feature = "dev"
+    agrega FpsOverlayPlugin, LogDiagnosticsPlugin
+    e EntityCountDiagnosticsPlugin (do próprio Bevy)
+  }
+}
+
+' ===== Registro de Plugins/Systems na App =====
+main ..> MoonPlugin : add_plugins
+main ..> TerrainPlugin : add_plugins
+main ..> TimeFlowPlugin : add_plugins
+main ..> FreeFlyCameraPlugin : add_plugins
+main ..> SkyPlugin : add_plugins
+main ..> DebugToolsPlugin : add_plugins (feature dev)
+main ..> AppState : init_state
+main ..> start_loading_active_moon_profile : Startup
+main ..> transition_when_moon_profile_loaded : Update
+
+MoonPlugin ..> MoonProfile : init_asset
+SkyPlugin ..> SunPlugin : add_plugins
+SkyPlugin ..> JupiterPlugin : add_plugins
+SkyPlugin ..> StarfieldPlugin : add_plugins
+SkyPlugin ..> PlanetShinePlugin : add_plugins
+FreeFlyCameraPlugin ..> CamLock : init_resource
+TimeFlowPlugin ..> TimeFlow : init_resource
+TimeFlowPlugin ..> SimTime : init_resource
+TimeFlowPlugin ..> SimSet : configure_sets(Advance antes de Animate)
+TerrainPlugin ..> build_terrain_from_loaded_profile : OnEnter(Running)
+SkyPlugin ..> build_sky_settings : OnEnter(Running)
+SkyPlugin ..> load_sky_assets : OnEnter(Running)
+SkyPlugin ..> check_sky_assets_loaded : Update
+SkyPlugin ..> animate_sky_physical : Update
+SkyPlugin ..> SkyState : init_resource
+
+' ===== Fluxo: carregamento do perfil de lua -> transição de estado =====
+start_loading_active_moon_profile --> ActiveMoonProfileHandle : insert_resource
+transition_when_moon_profile_loaded ..> ActiveMoonProfileHandle : Res
+transition_when_moon_profile_loaded ..> MoonProfile : Res<Assets<>>
+transition_when_moon_profile_loaded --> AppState : NextState::set(Running)
+
+' ===== Terreno =====
+build_terrain_from_loaded_profile ..> ActiveMoonProfileHandle : Res
+build_terrain_from_loaded_profile ..> MoonProfile : Res<Assets<>>
+build_terrain_from_loaded_profile --> TerrainParams : insert_resource
+build_terrain_from_loaded_profile --> HeightResource : insert_resource
+build_terrain_from_loaded_profile --> TerrainAppearance : insert_resource
+build_terrain_from_loaded_profile --> TerrainMaterialProperties : insert_resource
+
+' ===== Simulação de tempo =====
+advance_simulation_time ..> TimeFlow : Res
+advance_simulation_time --> SimTime : ResMut
+handle_time_flow_keyboard_controls --> TimeFlow : ResMut (teclas 0-4)
+
+' ===== Céu: assets, calibração e estado físico =====
+build_sky_settings ..> ActiveMoonProfileHandle : Res
+build_sky_settings ..> MoonProfile : Res<Assets<>>
+build_sky_settings --> SkySettings : insert_resource
+load_sky_assets --> SkyAssets : insert_resource
+check_sky_assets_loaded --> SkyAssets : ResMut
+check_sky_assets_loaded --> SkyAssetsLoaded : write (message)
+animate_sky_physical ..> SkySettings : Res
+animate_sky_physical ..> SimTime : Res
+animate_sky_physical --> SkyState : ResMut
+
+' ===== Sol =====
+spawn_sun ..> SkyAssetsLoaded : run_if
+spawn_sun ..> SkySettings : Res
+spawn_sun ..> SkyAssets : Res
+spawn_sun --> SunLight : spawn
+spawn_sun --> SunDisc : spawn
+update_sun_light ..> SkyState : Res
+update_sun_light ..> SkySettings : Res
+update_sun_light --> SunLight : Query<&mut>
+position_sun_disc ..> SkyState : Res
+position_sun_disc --> SunDisc : Query<&mut>
+
+' ===== Júpiter =====
+spawn_jupiter ..> SkyAssetsLoaded : run_if
+spawn_jupiter ..> SkyAssets : Res
+spawn_jupiter --> Jupiter : spawn
+place_and_scale_jupiter ..> SkyState : Res
+place_and_scale_jupiter ..> MoonProfile : Res<Assets<>>
+place_and_scale_jupiter --> Jupiter : Query<&mut>
+
+' ===== Estrelas =====
+spawn_starfield ..> SkyAssetsLoaded : run_if
+spawn_starfield ..> SkyAssets : Res
+spawn_starfield --> StarDome : spawn
+track_camera --> StarDome : Query<&mut>
+dim_stars_near_sun ..> SkyState : Res
+dim_stars_near_sun --> StarDome : Query
+
+' ===== Planet shine =====
+spawn_planet_shine --> PlanetShineLight : spawn
+update_planet_shine ..> SkySettings : Res
+update_planet_shine ..> SkyState : Res
+update_planet_shine --> PlanetShineLight : Query<&mut>
+
+' ===== Câmera de voo livre =====
+spawn_free_fly_camera --> FreeFlyCamera : spawn
+mouse_look --> FreeFlyCamera : Query<&mut>
+keyboard_movement ..> CamLock : Res
+keyboard_movement --> FreeFlyCamera : Query (lê Transform)
+toggle_lock --> CamLock : ResMut
+lock_aim_update ..> CamLock : Res
+lock_aim_update ..> SkyState : Res
+lock_aim_update --> FreeFlyCamera : Query<&mut>
+
+note as ScheduleNote
+  **Ordem de execução (Schedules)**
+  1. **Startup** (uma vez, ao iniciar): spawn_free_fly_camera, spawn_planet_shine,
+     start_loading_active_moon_profile
+  2. **OnEnter(AppState::Running)** (uma vez, quando o MoonProfile termina de carregar):
+     build_sky_settings, load_sky_assets, build_terrain_from_loaded_profile
+  3. **Update** (todo frame). SimSet::Advance sempre roda antes de SimSet::Animate:
+     - Advance: advance_simulation_time (avança SimTime)
+     - Animate: animate_sky_physical, update_sun_light, position_sun_disc,
+       update_planet_shine (dependem de SkySettings/SkyState já recalculados)
+  4. **Câmera** (Update, `.chain()`, ordem fixa):
+     toggle_lock -> mouse_look -> keyboard_movement -> lock_aim_update -> cursor_release
+end note
+
+@enduml
