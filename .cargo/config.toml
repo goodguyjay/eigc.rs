@@ -26,3 +26,5 @@ test-eigc-terrain-verbose = "test --package eigc_terrain --features dev --verbos
 
 # run
 run-eigc-app = "run --package eigc_app --features dev"
+# só debug: pula o menu e entra direto em Europa
+run-eigc-europa = "run --package eigc_app --features dev -- --europa"

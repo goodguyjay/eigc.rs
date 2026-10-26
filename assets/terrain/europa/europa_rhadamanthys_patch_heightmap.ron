@@ -1,0 +1,12 @@
+(
+    source: "NASA/USGS Controlled Europa DTMs (Galileo SSI stereophotogrammetry, SOCET SET), site: Rhadamanthys",
+    crs: "IAU_2015:50215",
+    pixel_scale_m: 227.6509363851065,
+    patch_width_px: 97,
+    patch_height_px: 97,
+    patch_width_m: 22082.14082935533,
+    patch_height_m: 22082.14082935533,
+    elevation_min_m: -513.57763671875,
+    elevation_max_m: -64.11154174804688,
+    crop_in_source_px: "(86, 256, 183, 353)",
+)

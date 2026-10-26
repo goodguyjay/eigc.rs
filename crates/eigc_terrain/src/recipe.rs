@@ -3,10 +3,10 @@
 //! parâmetros visuais correspondem a uma lua específica.
 
 use crate::height::comb::{Add2, Bias, FlattenColorNearOrigin, FlattenNearOrigin, Scale};
-use crate::height::linea::{LineaColorField, LineaField, generate_linea_specs};
+use crate::height::heightmap::HeightmapHeight;
 use crate::height::noise::PerlinFbm;
-use crate::height::warp::Warp2D;
-use crate::height::{ColorFn, HeightFn, arc, arc_color};
+use crate::height::slope::SlopeColorField;
+use crate::height::{ColorFn, HeightFn, HeightSource, arc, arc_color};
 use crate::lod::TerrainLodConfig;
 use crate::params::TerrainParams;
 use crate::pipeline::TerrainAppearance;
@@ -15,11 +15,38 @@ use bevy::prelude::{Color, Vec2};
 use eigc_moons::profile::{MoonId, MoonProfile};
 use noise::Perlin;
 
-/// Quantidade de lineae geradas no recorte (2 protagonistas + regulares) no momento.
-const LINEA_COUNT: usize = 8;
+/// PNG de 16 bits do DTM real de Europa (USGS/Galileo, sítio Rhadamanthys), gerado por
+/// `tools/dtm_to_heightmap.py`. Embutido no binário para `build_recipe`.
+const EUROPA_HEIGHTMAP_PNG: &[u8] =
+    include_bytes!("../../../assets/terrain/europa/europa_rhadamanthys_patch_heightmap.png");
 
-/// Amplitude do ruído de detalhe fino na encosta das lineae, em metros.
-const LINEA_DETAIL_AMPLITUDE_M: f32 = 3.0;
+/// Metadados RON do heightmap embutido (escala em metros e faixa de elevação).
+const EUROPA_HEIGHTMAP_RON: &str =
+    include_str!("../../../assets/terrain/europa/europa_rhadamanthys_patch_heightmap.ron");
+
+/// Exagero vertical aplicado ao relevo real (ver `TerrainParams::vertical_exaggeration`).
+/// `1.0` mantém a elevação medida no DTM.
+const VERTICAL_EXAGGERATION: f32 = 1.0;
+
+/// Amplitude da rugosidade fina procedural somada por cima do DTM, em metros. É a única parte
+/// sintética do relevo: nenhuma fonte real cobre a escala de passo humano. A calibrar.
+const DETAIL_AMPLITUDE_M: f32 = 1.5;
+
+/// Quantas vezes a frequência base do perfil é multiplicada para a rugosidade fina (comprimento
+/// de onda de ~60 m com `base_frequency` de 1/600 m), de modo que o ruído fique acima do
+/// espaçamento de ~10,7 m do nível 0 de LOD.
+const DETAIL_FREQUENCY_FACTOR: f32 = 10.0;
+
+/// Distância, em metros, entre as amostras usadas para estimar a inclinação do DTM na cor.
+/// Da ordem de meio pixel do DTM (227,65 m).
+const SLOPE_SAMPLE_STEP_M: f32 = 100.0;
+
+/// Inclinação do DTM (subida/avanço) abaixo da qual o terreno recebe só a cor de gelo plano.
+/// A inclinação média do recorte é ~0,05 e o percentil 95 ~0,16.
+const SLOPE_COLOR_START: f32 = 0.06;
+
+/// Inclinação do DTM (subida/avanço) a partir da qual o terreno recebe totalmente a cor de vale.
+const SLOPE_COLOR_END: f32 = 0.20;
 
 /// Raio da clareira plana ao redor da origem (diâmetro ~300m), onde o jogador/câmera aparece.
 const SPAWN_CLEARING_RADIUS_M: f32 = 150.0;
@@ -57,10 +84,11 @@ pub fn build_recipe(profile: &MoonProfile) -> TerrainRecipe {
 }
 
 /// Monta a receita de geração de terreno para Europa.
-/// Combina ruído base suave com crista anisotrópica orientada ao longo da diração de lineae
+/// A forma macro vem de um DTM real (USGS/Galileo) recentrado em zero e exagerado
+/// verticalmente, por cima entra só uma rugosidade fina procedural. Cor por inclinação do DTM.
 fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
-    // Tamanho do recorte, em metros. Aumentado de 6000 pra acompanhar o novo comprimento de
-    // linea (6000-14000m, ver LINEA_LENGTH_MIN_M/MAX_M em height/linea.rs).
+    // Tamanho do recorte, em metros. Casa com o DTM (~22082 m); o excedente de ~41 m por lado
+    // do DTM fica fora do terreno.
     const TERRAIN_SIZE_M: f32 = 22000.0;
     // Resolução da malha monolítica legada (vértices por lado). O terreno em jogo usa chunks
     // com LOD (ver `lod` abaixo), então isto só alimenta `TerrainParams.res` (ver BACKLOG.md).
@@ -73,110 +101,13 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
 
     let feature_direction = Vec2::from(calibration.feature_direction).normalize();
 
-    let base_noise = PerlinFbm {
-        perlin: Perlin::new(seed),
-        freq: base_frequency,
-        octaves: 5,
-        lacunarity: 2.0,
-        gain: 0.5,
-        amplitude: 1.0,
-    };
+    let heightmap = HeightmapHeight::from_png_and_ron(EUROPA_HEIGHTMAP_PNG, EUROPA_HEIGHTMAP_RON)
+        .expect("o heightmap de Europa embutido deveria ser valido");
 
-    // Ruído "ridged" (cristas isotrópicas fora do eixo das lineae) DESLIGADO por ora:
-    // mesmo rebaixado a amplitude baixa (scale: 0.15), ainda produzia bumps isolados lidos como
-    // "crateras" em lugares estranhos do terreno; artefato do PerlinRidged fora de contexto. Bloco 
-    // mantido comentado (não removido) pra religar fácil depois
-    // let ridged_noise = PerlinRidged {
-    //     perlin: Perlin::new(seed ^ 0xB529_7A4D),
-    //     freq: base_frequency * 2.5,
-    //     octaves: 4,
-    //     lacunarity: 2.2,
-    //     gain: 0.75,
-    //     amplitude: 1.0,
-    //     z_anisotropy: 2.0,
-    // };
-    //
-    // let oriented_ridges = Oriented {
-    //     source: ridged_noise,
-    //     dir: feature_direction,
-    //     main_scale: 1.0,
-    //     ortho_scale: 0.35,
-    // };
-    //
-    // let subtle_ridges = Scale {
-    //     s: oriented_ridges,
-    //     scale: 0.15,
-    // };
-
-    let combined_features = base_noise;
-
-    let warped_terrain = Warp2D {
-        source: combined_features,
-        perlin: Perlin::new(seed ^ 0x9E37_79B9),
-        warp_amp: calibration.warp_amplitude_meters,
-        warp_freq: base_frequency * 0.6,
-        octaves: 3,
-        lacunarity: 2.1,
-        gain: 0.55,
-    };
-
-    let scaled_terrain = Scale {
-        s: warped_terrain,
-        scale: calibration.vertical_amplitude_meters,
-    };
-
-    // exclui células da grade de posicionamento dentro do alcance total da clareira de spawn
-    // (platô + blend), pra nenhuma linea nascer ancorada em cima do platô.
-    let spawn_exclusion_radius_m = SPAWN_CLEARING_RADIUS_M + SPAWN_CLEARING_BLEND_M;
-    let linea_specs = generate_linea_specs(
-        seed,
-        feature_direction,
-        TERRAIN_SIZE_M * 0.5,
-        LINEA_COUNT,
-        spawn_exclusion_radius_m,
-    );
-
-    let linea_height = LineaField {
-        specs: linea_specs.clone(),
-        detail_noise: Perlin::new(seed ^ 0x1B87_3593),
-        detail_amplitude_m: LINEA_DETAIL_AMPLITUDE_M,
-        detail_frequency: base_frequency * 40.0,
-    };
-
-    // lineae somadas em metros absolutos depois do Scale: a escala física das cristas (100-300m)
-    // não deve depender do knob vertical_amplitude_meters do ruído de fundo.
-    let terrain_with_linea = Add2 {
-        a: scaled_terrain,
-        b: linea_height,
-    };
-
-    // bias: -0.1 é um ajuste estético. Não corresponde à precisão dos dados reais de Europa.
-    // TODO (leticia.rodrigues): testar visualmente quando a cena tiver câmera/luz.
-    let biased_terrain = Bias {
-        s: terrain_with_linea,
-        bias: -0.1,
-    };
-
-    // clareira plana na origem: garante um ponto de spawn legível e sem relevo caótico, com
-    // transição suave até o terreno completo (ver SPAWN_CLEARING_RADIUS_M/BLEND_M). A altura do
-    // platô é derivada do relevo real na borda do blend (média ao redor do perímetro).
-    let terrain_with_clearing =
-        FlattenNearOrigin::new(biased_terrain, SPAWN_CLEARING_RADIUS_M, SPAWN_CLEARING_BLEND_M);
-
-    let linea_color = LineaColorField {
-        specs: linea_specs,
-        ridge_color: profile.terrain_base_color,
-        valley_color: profile.terrain_valley_color,
-    };
-
-    // cor da clareira acompanha o mesmo raio/blend da altura: gelo claro e uniforme, não a cor
-    // de vale que uma linea próxima da origem poderia produzir.
-    let color_with_clearing = FlattenColorNearOrigin {
-        source: linea_color,
-        flat_color: profile.terrain_base_color,
-        flat_radius_m: SPAWN_CLEARING_RADIUS_M,
-        blend_radius_m: SPAWN_CLEARING_BLEND_M,
-    };
+    // O DTM guarda elevação absoluta (de -514 a -64 m). Subtrair a elevação no centro mantém o
+    // terreno em torno de y=0, onde câmera, céu e clareira esperam, e faz o exagero vertical
+    // crescer a partir desse ponto em vez de a partir do datum.
+    let reference_elevation_m = heightmap.height_at(0.0, 0.0);
 
     let terrain_params = TerrainParams {
         size: TERRAIN_SIZE_M,
@@ -185,6 +116,58 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         freq: base_frequency,
         line_dir: feature_direction,
         seed,
+        vertical_exaggeration: VERTICAL_EXAGGERATION,
+    };
+
+    let slope_source = heightmap.clone();
+
+    let real_relief = Scale {
+        s: Bias {
+            s: heightmap,
+            bias: -reference_elevation_m,
+        },
+        scale: terrain_params.vertical_exaggeration,
+    };
+
+    let fine_detail = PerlinFbm {
+        perlin: Perlin::new(seed),
+        freq: base_frequency * DETAIL_FREQUENCY_FACTOR,
+        octaves: 3,
+        lacunarity: 2.0,
+        gain: 0.5,
+        amplitude: DETAIL_AMPLITUDE_M,
+    };
+
+    let hybrid_terrain = Add2 {
+        a: real_relief,
+        b: fine_detail,
+    };
+
+    // clareira plana na origem: garante um ponto de spawn legível e sem relevo caótico, com
+    // transição suave até o terreno completo (ver SPAWN_CLEARING_RADIUS_M/BLEND_M). A altura do
+    // platô é derivada do relevo real na borda do blend (média ao redor do perímetro).
+    let terrain_with_clearing = FlattenNearOrigin::new(
+        hybrid_terrain,
+        SPAWN_CLEARING_RADIUS_M,
+        SPAWN_CLEARING_BLEND_M,
+    );
+
+    let slope_color = SlopeColorField {
+        source: slope_source,
+        sample_step_m: SLOPE_SAMPLE_STEP_M,
+        flat_color: profile.terrain_base_color,
+        steep_color: profile.terrain_valley_color,
+        slope_start: SLOPE_COLOR_START,
+        slope_end: SLOPE_COLOR_END,
+    };
+
+    // cor da clareira acompanha o mesmo raio/blend da altura: gelo claro e uniforme, não a cor
+    // de vale que uma encosta próxima da origem poderia produzir.
+    let color_with_clearing = FlattenColorNearOrigin {
+        source: slope_color,
+        flat_color: profile.terrain_base_color,
+        flat_radius_m: SPAWN_CLEARING_RADIUS_M,
+        blend_radius_m: SPAWN_CLEARING_BLEND_M,
     };
 
     let terrain_appearance = TerrainAppearance {

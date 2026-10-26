@@ -8,6 +8,9 @@ use crate::height::{ColorSource, HeightSource};
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::{Mesh, Vec2, Vec3, default};
 
+/// Lado, em metros, de uma repetição da textura de superfície (tile real de `snow_02`: 2,0 m).
+const TILE_SIZE_M: f32 = 2.0;
+
 /// Região quadrada do plano XZ coberta por um chunk.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ChunkRegion {
@@ -25,8 +28,9 @@ pub struct ChunkRegion {
 ///   na borda, use valores em que um divide o outro.
 /// - `skirt_depth` é a profundidade (m) do anel de skirt ao redor da malha. Valor `<= 0.0`
 ///   desliga o skirt.
-/// - `terrain_size` é o lado do terreno inteiro e define as UVs, que vão de 0 a 1 sobre o
-///   terreno todo (não sobre o chunk).
+/// - As UVs são a posição de mundo em metros dividida por `TILE_SIZE_M` (ancoradas no mundo,
+///   então iguais para qualquer chunk/LOD que cubra o mesmo ponto). Exigem sampler com
+///   `AddressMode::Repeat` na textura.
 /// - As normais vêm de diferenças centrais sobre uma grade com um anel extra de amostras além
 ///   do chunk, então não há costura de iluminação entre chunks vizinhos do mesmo nível.
 /// - Quando `color` é `Some`, escreve também `Mesh::ATTRIBUTE_COLOR` por vértice.
@@ -34,7 +38,6 @@ pub fn build_chunk_mesh(
     region: ChunkRegion,
     quads: u32,
     skirt_depth: f32,
-    terrain_size: f32,
     height: &dyn HeightSource,
     color: Option<&dyn ColorSource>,
 ) -> Mesh {
@@ -43,7 +46,6 @@ pub fn build_chunk_mesh(
     let padded_side = vertices_per_side + 2;
     let step = region.size / quads as f32;
     let half = region.size * 0.5;
-    let terrain_half = terrain_size * 0.5;
 
     // A grade amostrada começa um passo antes da borda, para as normais das bordas usarem
     // diferença central.
@@ -72,10 +74,7 @@ pub fn build_chunk_mesh(
             let world_z = region.center.y + local_z;
 
             positions.push([local_x, padded_height(column + 1, row + 1), local_z]);
-            uvs.push([
-                (world_x + terrain_half) / terrain_size,
-                (world_z + terrain_half) / terrain_size,
-            ]);
+            uvs.push([world_x / TILE_SIZE_M, world_z / TILE_SIZE_M]);
 
             let dh_dx =
                 (padded_height(column + 2, row + 1) - padded_height(column, row + 1)) / (2.0 * step);

@@ -83,12 +83,18 @@ enum LockMode {
     Jupiter,
 }
 
+/// Posição de spawn da câmera: no centro da clareira plana de Europa, a ~1,75 m do chão.
+const SPAWN_POSITION: Vec3 = Vec3::new(0.0, 0.3, 0.0);
+
+/// Ponto para onde a câmera olha ao nascer: horizonte à frente, com leve inclinação para baixo
+/// (~6 graus).
+const SPAWN_LOOK_TARGET: Vec3 = Vec3::new(0.0, -6.0, -60.0);
+
 /// Spawna a câmera de voo livre com projeção perspectiva e captura o cursor imediatamente.
 /// Roda em `OnEnter(Running)`, para que o cursor fique livre enquanto o menu está aberto.
 fn spawn_free_fly_camera(mut commands: Commands, mut cursor_options: Single<&mut CursorOptions>) {
-    let translation = Vec3::new(0.0, 600.0, 1200.0);
-    let mut transform = Transform::from_translation(translation);
-    transform.look_at(Vec3::new(0.0, 20.0, 0.0), Vec3::Y);
+    let mut transform = Transform::from_translation(SPAWN_POSITION);
+    transform.look_at(SPAWN_LOOK_TARGET, Vec3::Y);
     let (yaw, pitch, _roll) = transform.rotation.to_euler(EulerRot::YXZ);
 
     commands.spawn((

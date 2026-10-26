@@ -37,7 +37,8 @@ fn flat_height_produces_flat_mesh_with_upward_normals() {
         amp: 1.0,
         freq: 1.0,
         line_dir: Vec2::new(1.0, 0.0),
-        seed: 0
+        seed: 0,
+        vertical_exaggeration: 1.0,
     };
 
     let mesh = build_terrain_mesh(params, &FlatHeight);
@@ -73,6 +74,7 @@ fn mesh_without_color_source_has_no_color_attribute() {
         freq: 1.0,
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
+        vertical_exaggeration: 1.0,
     };
 
     let mesh = build_terrain_mesh(params, &FlatHeight);
@@ -91,6 +93,7 @@ fn mesh_with_color_source_includes_non_uniform_vertex_color_attribute() {
         freq: 1.0,
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
+        vertical_exaggeration: 1.0,
     };
 
     let mesh = build_terrain_mesh_with_color(params, &FlatHeight, Some(&SplitColor));

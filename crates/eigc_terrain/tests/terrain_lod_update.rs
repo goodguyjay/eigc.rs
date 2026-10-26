@@ -72,6 +72,7 @@ fn test_params() -> TerrainParams {
         freq: 1.0,
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
+        vertical_exaggeration: 1.0,
     }
 }
 

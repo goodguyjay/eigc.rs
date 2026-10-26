@@ -2,8 +2,9 @@
 
 use crate::height::{ColorSource, HeightSource};
 use crate::pipeline::{ColorResource, HeightResource, TerrainAppearance};
+use crate::surface_textures::TerrainSurfaceTextures;
 use crate::{mesh::build_terrain_mesh_with_color, params::TerrainParams};
-use bevy::prelude::{Assets, Commands, Mesh, Mesh3d, MeshMaterial3d, Name, Res, ResMut, Resource, StandardMaterial, Transform};
+use bevy::prelude::{Assets, Color, Commands, Mesh, Mesh3d, MeshMaterial3d, Name, Res, ResMut, Resource, StandardMaterial, Transform};
 
 /// Propriedades físicas do material de terreno derivadas de TerrainCalibration
 #[derive(Resource, Copy, Clone)]
@@ -13,13 +14,33 @@ pub struct TerrainMaterialProperties {
 }
 
 /// Monta o material do terreno a partir da aparência e das propriedades físicas.
+///
+/// Com `surface` presente, o material usa as texturas PBR e os escalares ficam no valor neutro
+/// `StandardMaterial` multiplica cada textura pelo escalar irmão (`base_color`,
+/// `perceptual_roughness` e `metallic`).
 pub fn build_terrain_material(
     appearance: &TerrainAppearance,
     material_properties: TerrainMaterialProperties,
+    surface: Option<&TerrainSurfaceTextures>,
 ) -> StandardMaterial {
+    let Some(surface) = surface else {
+        return StandardMaterial {
+            base_color: appearance.base_color,
+            perceptual_roughness: material_properties.perceptual_roughness,
+            reflectance: material_properties.reflectance,
+            metallic: 0.0,
+            ..Default::default()
+        };
+    };
+
     StandardMaterial {
-        base_color: appearance.base_color,
-        perceptual_roughness: material_properties.perceptual_roughness,
+        base_color: Color::WHITE,
+        base_color_texture: Some(surface.diffuse.clone()),
+        normal_map_texture: Some(surface.normal.clone()),
+        // O Bevy lê roughness (G) e metallic (B) daqui e o AO (R) da `occlusion_texture`.
+        metallic_roughness_texture: Some(surface.arm.clone()),
+        occlusion_texture: Some(surface.arm.clone()),
+        perceptual_roughness: 1.0,
         reflectance: material_properties.reflectance,
         metallic: 0.0,
         ..Default::default()
@@ -27,7 +48,8 @@ pub fn build_terrain_material(
 }
 
 /// Spawna uma entidade de terreno no Bevy usando os parâmetros e a função de altura fornecidos,
-/// sem cor por vértice.
+/// sem cor por vértice. A malha monolítica não usa texturas de superfície (só o pipeline de
+/// chunks usa).
 pub fn build_and_spawn_terrain(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -64,7 +86,11 @@ pub fn build_and_spawn_terrain_with_color(
     let mesh = build_terrain_mesh_with_color(params, height, color);
     let mesh_handle = meshes.add(mesh);
 
-    let material = materials.add(build_terrain_material(appearance, material_properties));
+    let material = materials.add(build_terrain_material(
+        appearance,
+        material_properties,
+        None,
+    ));
 
     commands.spawn((
         Mesh3d(mesh_handle),

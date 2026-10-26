@@ -30,7 +30,6 @@ impl ColorSource for GradientColor {
     }
 }
 
-const TERRAIN_SIZE: f32 = 400.0;
 const CHUNK_SIZE: f32 = 200.0;
 
 fn region(center_x: f32, center_z: f32) -> ChunkRegion {
@@ -74,7 +73,7 @@ fn world_position(vertex: [f32; 3], center: Vec2) -> Vec3 {
 /// Sem skirt, a malha tem exatamente a grade `(q+1)^2` e `q^2 * 6` índices.
 #[test]
 fn chunk_without_skirt_has_only_grid_vertices_and_indices() {
-    let mesh = build_chunk_mesh(region(0.0, 0.0), 8, 0.0, TERRAIN_SIZE, &FlatHeight, None);
+    let mesh = build_chunk_mesh(region(0.0, 0.0), 8, 0.0, &FlatHeight, None);
 
     assert_eq!(positions(&mesh).len(), 9 * 9);
     assert_eq!(indices(&mesh).len(), 8 * 8 * 6);
@@ -83,7 +82,7 @@ fn chunk_without_skirt_has_only_grid_vertices_and_indices() {
 /// Com skirt, entram 4 bordas de `q+1` vértices duplicados e `4 * q * 6` índices.
 #[test]
 fn chunk_with_skirt_adds_four_edges_of_duplicated_vertices() {
-    let mesh = build_chunk_mesh(region(0.0, 0.0), 8, 5.0, TERRAIN_SIZE, &FlatHeight, None);
+    let mesh = build_chunk_mesh(region(0.0, 0.0), 8, 5.0, &FlatHeight, None);
 
     assert_eq!(positions(&mesh).len(), 9 * 9 + 4 * 9);
     assert_eq!(indices(&mesh).len(), 8 * 8 * 6 + 4 * 8 * 6);
@@ -95,8 +94,8 @@ fn adjacent_chunks_at_same_level_share_edge_positions_and_normals() {
     let left_center = Vec2::new(-100.0, 0.0);
     let right_center = Vec2::new(100.0, 0.0);
     let quads = 8;
-    let left = build_chunk_mesh(region(left_center.x, left_center.y), quads, 0.0, TERRAIN_SIZE, &WavyHeight, None);
-    let right = build_chunk_mesh(region(right_center.x, right_center.y), quads, 0.0, TERRAIN_SIZE, &WavyHeight, None);
+    let left = build_chunk_mesh(region(left_center.x, left_center.y), quads, 0.0, &WavyHeight, None);
+    let right = build_chunk_mesh(region(right_center.x, right_center.y), quads, 0.0, &WavyHeight, None);
 
     for row in 0..=quads {
         let left_vertex = grid_index(quads, quads, row);
@@ -125,8 +124,8 @@ fn coarse_edge_vertices_coincide_with_a_subset_of_fine_edge_vertices() {
     let center = Vec2::new(-100.0, 0.0);
     let coarse_quads = 4;
     let fine_quads = 8;
-    let coarse = build_chunk_mesh(region(center.x, center.y), coarse_quads, 0.0, TERRAIN_SIZE, &WavyHeight, None);
-    let fine = build_chunk_mesh(region(center.x, center.y), fine_quads, 0.0, TERRAIN_SIZE, &WavyHeight, None);
+    let coarse = build_chunk_mesh(region(center.x, center.y), coarse_quads, 0.0, &WavyHeight, None);
+    let fine = build_chunk_mesh(region(center.x, center.y), fine_quads, 0.0, &WavyHeight, None);
 
     let ratio = fine_quads / coarse_quads;
     for row in 0..=coarse_quads {
@@ -144,7 +143,7 @@ fn coarse_edge_vertices_coincide_with_a_subset_of_fine_edge_vertices() {
 fn skirt_vertices_sit_directly_below_the_edge_vertices() {
     let quads = 4;
     let depth = 7.0;
-    let mesh = build_chunk_mesh(region(0.0, 0.0), quads, depth, TERRAIN_SIZE, &WavyHeight, None);
+    let mesh = build_chunk_mesh(region(0.0, 0.0), quads, depth, &WavyHeight, None);
     let positions = positions(&mesh);
 
     // A primeira borda do skirt percorre a linha 0 com a coluna crescendo.
@@ -162,7 +161,7 @@ fn skirt_vertices_sit_directly_below_the_edge_vertices() {
 #[test]
 fn grid_triangles_face_up_and_skirt_triangles_face_outward() {
     let quads = 4;
-    let mesh = build_chunk_mesh(region(0.0, 0.0), quads, 5.0, TERRAIN_SIZE, &FlatHeight, None);
+    let mesh = build_chunk_mesh(region(0.0, 0.0), quads, 5.0, &FlatHeight, None);
     let positions = positions(&mesh);
     let indices = indices(&mesh);
     let grid_index_count = (quads * quads * 6) as usize;
@@ -190,25 +189,55 @@ fn grid_triangles_face_up_and_skirt_triangles_face_outward() {
 /// Em terreno plano todas as normais, inclusive as do skirt, apontam para cima.
 #[test]
 fn flat_chunk_has_upward_normals_including_skirt() {
-    let mesh = build_chunk_mesh(region(0.0, 0.0), 4, 5.0, TERRAIN_SIZE, &FlatHeight, None);
+    let mesh = build_chunk_mesh(region(0.0, 0.0), 4, 5.0, &FlatHeight, None);
 
     for normal in normals(&mesh) {
         assert!((normal[1] - 1.0).abs() < 1e-5, "normal não é vertical: {normal:?}");
     }
 }
 
-/// As UVs são globais: um chunk no canto do terreno cobre só um quarto do intervalo 0..1.
+/// As UVs são a posição de mundo em metros dividida pelo tile físico de 2 m.
 #[test]
-fn uvs_span_the_whole_terrain_not_just_the_chunk() {
-    let mesh = build_chunk_mesh(region(-100.0, -100.0), 4, 0.0, TERRAIN_SIZE, &FlatHeight, None);
+fn uvs_are_world_position_in_meters_divided_by_the_two_meter_tile() {
+    let mesh = build_chunk_mesh(region(-100.0, -100.0), 4, 0.0, &FlatHeight, None);
     let uvs = match mesh.attribute(Mesh::ATTRIBUTE_UV_0).expect("malha sem UVs") {
         VertexAttributeValues::Float32x2(uvs) => uvs,
         other => panic!("formato inesperado para UV: {other:?}"),
     };
 
-    assert!((uvs[0][0] - 0.0).abs() < 1e-5 && (uvs[0][1] - 0.0).abs() < 1e-5);
+    // chunk de 200 m centrado em (-100, -100): vai de -200 a 0 m nos dois eixos
+    assert!((uvs[0][0] + 100.0).abs() < 1e-4 && (uvs[0][1] + 100.0).abs() < 1e-4);
     let last = uvs[uvs.len() - 1];
-    assert!((last[0] - 0.5).abs() < 1e-5 && (last[1] - 0.5).abs() < 1e-5);
+    assert!(last[0].abs() < 1e-4 && last[1].abs() < 1e-4);
+}
+
+/// Dois vértices a 2 m um do outro (um tile) têm UVs que diferem em exatamente 1.0.
+#[test]
+fn uv_advances_by_one_per_two_meters_of_terrain() {
+    // 100 quads em 200 m = 2 m por quad
+    let mesh = build_chunk_mesh(region(0.0, 0.0), 100, 0.0, &FlatHeight, None);
+    let uvs = match mesh.attribute(Mesh::ATTRIBUTE_UV_0).expect("malha sem UVs") {
+        VertexAttributeValues::Float32x2(uvs) => uvs,
+        other => panic!("formato inesperado para UV: {other:?}"),
+    };
+
+    let first = uvs[grid_index(100, 0, 0)];
+    let next_column = uvs[grid_index(100, 1, 0)];
+    let next_row = uvs[grid_index(100, 0, 1)];
+    assert!((next_column[0] - first[0] - 1.0).abs() < 1e-4);
+    assert!((next_row[1] - first[1] - 1.0).abs() < 1e-4);
+}
+
+/// O normal map só funciona com tangentes: a malha precisa sair com `ATTRIBUTE_TANGENT`, um valor
+/// por vértice (inclusive os de skirt).
+#[test]
+fn chunk_mesh_has_one_tangent_per_vertex() {
+    let mesh = build_chunk_mesh(region(0.0, 0.0), 8, 5.0, &WavyHeight, None);
+
+    let tangents = mesh
+        .attribute(Mesh::ATTRIBUTE_TANGENT)
+        .expect("malha sem tangentes");
+    assert_eq!(tangents.len(), positions(&mesh).len());
 }
 
 /// A cor por vértice tem um valor por vértice, inclusive nos de skirt, e o skirt copia a cor
@@ -216,7 +245,7 @@ fn uvs_span_the_whole_terrain_not_just_the_chunk() {
 #[test]
 fn skirt_vertices_copy_the_color_of_their_edge_vertex() {
     let quads = 4;
-    let mesh = build_chunk_mesh(region(0.0, 0.0), quads, 5.0, TERRAIN_SIZE, &FlatHeight, Some(&GradientColor));
+    let mesh = build_chunk_mesh(region(0.0, 0.0), quads, 5.0, &FlatHeight, Some(&GradientColor));
     let colors = match mesh.attribute(Mesh::ATTRIBUTE_COLOR).expect("malha sem cor") {
         VertexAttributeValues::Float32x4(colors) => colors,
         other => panic!("formato inesperado para cor: {other:?}"),

@@ -13,9 +13,15 @@ mod lod_error;
 pub mod mesh;
 /// Parâmetros de geração do terreno (dimensões, resolução, etc.).
 pub mod params;
-/// Sistemas Bevy que spawnam e atualizam o terreno.
-pub mod systems;
 /// Plugin e recursos do pipeline de terreno.
 pub mod pipeline;
 /// Receitas de composição de fontes de altura por lua.
 pub mod recipe;
+/// Material do terreno com mistura de duas escalas de textura.
+pub mod surface_material;
+/// Mips das texturas PBR tileáveis da superfície do terreno, por lua.
+pub mod surface_mips;
+/// Texturas PBR tileáveis da superfície do terreno, por lua.
+pub mod surface_textures;
+/// Sistemas Bevy que spawnam e atualizam o terreno.
+pub mod systems;

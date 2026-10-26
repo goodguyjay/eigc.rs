@@ -37,6 +37,10 @@ cargo build -p eigc_app --features dev
 
 Use os aliases já configurados em `.cargo/config.toml` quando existirem, em vez de escrever o comando cru.
 
+## Pular o menu para debug (só debug)
+
+`cargo run-eigc-europa` (alias de `run --package eigc_app --features dev -- --europa`) sobe o app e entra direto em Europa, sem clicar no menu. **É um recurso exclusivamente de debug**, atrás da feature `dev`, e nunca deve ser usado como fluxo de usuário nem estar presente em build de release. Prefira essa opção quando o menu não está sendo modificado nem testado; ao mexer no menu, use `cargo run-eigc-app`. Funciona só para Europa, e o app ainda passa por `MainMenu` por um instante: o `Startup` de `main.rs` emite `ExploreRequested(MoonId::Europa)` e o `MenuPlugin` o consome. Não generalize para outras luas sem decisão do desenvolvedor.
+
 ## Convenções de código (resumo — ver `CONTRIBUTING.md` para o texto completo)
 
 - Sem `use bevy::prelude::*` nem outro wildcard import em código que não é teste: todo import explícito.
@@ -57,6 +61,18 @@ Use os aliases já configurados em `.cargo/config.toml` quando existirem, em vez
 - **Guard de `State` é obrigatório antes de qualquer `spawn` em `Update`.** Um sistema de transição sem checar o estado atual já spawnou `DirectionalLight` sem limite e causou OOM.
 - **Extraia lógica de sistema para função pura sempre que possível** (ex.: `clamp_pitch`, `resolve_lock_direction`). Função pura testa sem infraestrutura de ECS; sistema que só chama a função pura fica fino e mais fácil de revisar.
 - **Caminho de asset é relativo ao manifest dir do crate binário, não à raiz do workspace.** Configuração correta: `AssetPlugin { file_path: "../../assets".to_string(), ..default() }`.
+
+## bevy: escalares multiplicam textura, sempre confira o neutro
+
+StandardMaterial multiplica cada textura pelo escalar correspondente:
+base_color × base_color_texture, perceptual_roughness × metallic_roughness_texture
+(canal g), metallic × metallic_roughness_texture (canal b). toda vez que uma
+textura for adicionada a um campo, confira se o escalar irmão está no valor
+neutro (branco / 1.0), não só o base_color. foi exatamente isso que causou
+o bug do terreno branco antes desta task.
+
+Normal map e ARM guardam dados, não cor: carregue com `is_srgb = false`
+(`ImageLoaderSettings`), senão o loader de JPEG assume sRGB e curva os valores.
 
 ## Convenção de branch
 

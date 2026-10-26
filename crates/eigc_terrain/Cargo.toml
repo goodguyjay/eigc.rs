@@ -7,6 +7,10 @@ eigc_common.workspace = true
 eigc_moons.workspace = true
 bevy.workspace = true
 noise.workspace = true
+image.workspace = true
+ron.workspace = true
+serde.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

@@ -10,11 +10,17 @@ use crate::height::{ColorFn, HeightFn};
 use crate::lod::TerrainLodConfig;
 use crate::params::TerrainParams;
 use crate::recipe::build_recipe;
+use crate::surface_material::{TerrainMaterial, build_terrain_extension};
+use crate::surface_mips::generate_surface_mipmaps;
+use crate::surface_textures::{TerrainSurfaceTextures, surface_textures_for};
 use crate::systems::{TerrainMaterialProperties, build_terrain_material};
+use bevy::asset::AssetApp;
+use bevy::pbr::MaterialPlugin;
 use bevy::prelude::{
-    App, Assets, Color, Commands, IntoScheduleConfigs, Mesh, OnEnter, Plugin, Res, ResMut,
-    Resource, StandardMaterial, Update, in_state, resource_exists,
+    App, AssetServer, Assets, Color, Commands, IntoScheduleConfigs, Mesh, OnEnter, Plugin, Res,
+    ResMut, Resource, Update, in_state, resource_exists,
 };
+use bevy::render::RenderApp;
 use eigc_common::lod_focus::LodFocus;
 use eigc_moons::profile::MoonProfile;
 use eigc_moons::{ActiveMoonProfileHandle, AppState};
@@ -44,12 +50,22 @@ pub struct TerrainPlugin;
 /// Implementação do Plugin do bevy para o TerrainPlugin
 impl Plugin for TerrainPlugin {
     fn build(&self, app: &mut App) {
+        if app.get_sub_app(RenderApp).is_some() {
+            app.add_plugins(MaterialPlugin::<TerrainMaterial>::default());
+        } else {
+            app.init_asset::<TerrainMaterial>();
+        }
+
         app.init_resource::<LodFocus>()
             .init_resource::<TerrainLodStats>()
             .init_resource::<ChunkErrorTable>()
             .add_systems(
                 OnEnter(AppState::Running),
                 build_terrain_from_loaded_profile,
+            )
+            .add_systems(
+                Update,
+                generate_surface_mipmaps.run_if(resource_exists::<TerrainSurfaceTextures>),
             )
             .add_systems(
                 Update,
@@ -70,7 +86,8 @@ fn build_terrain_from_loaded_profile(
     active_handle: Res<ActiveMoonProfileHandle>,
     moon_profiles: Res<Assets<MoonProfile>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<TerrainMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     let Some(profile) = moon_profiles.get(&active_handle.0) else {
         return;
@@ -78,9 +95,9 @@ fn build_terrain_from_loaded_profile(
 
     let recipe = build_recipe(profile);
 
-    // TESTE: cor de vértice é multiplicada pela cor base do material (ver bevy example
-    // vertex_colors.rs) — com recipe.color.is_some(), o material precisa ficar branco pra
-    // não filtrar a cor de vértice das lineae.
+    // cor de vértice é multiplicada pela cor base do material (ver bevy example
+    // vertex_colors.rs), com recipe.color.is_some(), o material precisa ficar branco pra
+    // não filtrar a cor de vértice.
     let base_color = if recipe.color.is_some() {
         Color::WHITE
     } else {
@@ -96,7 +113,11 @@ fn build_terrain_from_loaded_profile(
         reflectance: profile.terrain.reflectance,
     };
 
-    let material = materials.add(build_terrain_material(&appearance, material_properties));
+    let surface = surface_textures_for(profile.moon_id, &asset_server);
+    let material = materials.add(TerrainMaterial {
+        base: build_terrain_material(&appearance, material_properties, surface.as_ref()),
+        extension: build_terrain_extension(surface.as_ref()),
+    });
     spawn_terrain_chunks(
         &mut commands,
         &mut meshes,
@@ -107,6 +128,9 @@ fn build_terrain_from_loaded_profile(
         recipe.color.as_deref(),
     );
 
+    if let Some(surface) = surface {
+        commands.insert_resource(surface);
+    }
     commands.insert_resource(recipe.params);
     commands.insert_resource(recipe.lod);
     if let Some(color) = recipe.color {
