@@ -243,6 +243,20 @@ fn camera_transform(distance: f32) -> Transform {
     Transform::from_xyz(0.0, distance * sin, distance * cos).looking_at(Vec3::ZERO, Vec3::Y)
 }
 
+/// `Sphere::mesh().uv()` do Bevy 0.18 gera os polos no eixo Z local, não Y (ver
+/// `bevy_mesh::primitives::dim3::sphere::SphereMeshBuilder::uv`: a latitude anda com o eixo Z,
+/// a longitude gira em torno dele). Como a textura de Júpiter assume polo no topo/base da
+/// imagem e equador no meio, essa rotação fixa realinha o polo da malha com o eixo Y do mundo,
+/// que é o eixo real de rotação de Júpiter e o eixo perpendicular ao plano das órbitas das luas.
+fn jupiter_pole_alignment() -> Quat {
+    Quat::from_rotation_x(-FRAC_PI_2)
+}
+
+/// Orientação de Júpiter: gira em torno do eixo Y do mundo, já com o polo da malha realinhado.
+fn jupiter_rotation(spin_angle: f32) -> Quat {
+    Quat::from_rotation_y(spin_angle) * jupiter_pole_alignment()
+}
+
 fn configure_gizmos(mut store: ResMut<GizmoConfigStore>) {
     let (config, _) = store.config_mut::<IntroGizmos>();
     config.render_layers = RenderLayers::layer(INTRO_LAYER);
@@ -385,10 +399,10 @@ fn animate_world(
     if let Ok(mut transform) = jupiter.single_mut() {
         transform.scale = Vec3::new(
             jupiter_scale,
-            jupiter_scale * JUPITER_OBLATENESS,
             jupiter_scale,
+            jupiter_scale * JUPITER_OBLATENESS,
         );
-        transform.rotation = Quat::from_rotation_y(t * JUPITER_SPIN);
+        transform.rotation = jupiter_rotation(t * JUPITER_SPIN);
     }
 
     for (moon, mut transform, material) in &mut moons {
@@ -499,5 +513,48 @@ mod tests {
         const { assert!(TRANSITION > ZOOM_START && TRANSITION < ZOOM_END) };
         const { assert!(DURATION > TRANSITION) };
         const { assert!(SKIP_TARGET < ZOOM_START) };
+    }
+
+    #[test]
+    fn jupiter_rotation_keeps_the_mesh_pole_aligned_with_world_y() {
+        for spin in [0.0, 0.7, 2.1, 5.0] {
+            let world_pole = jupiter_rotation(spin) * Vec3::Z;
+            assert!(
+                (world_pole - Vec3::Y).length() < 1e-5,
+                "polo da malha não ficou no eixo Y para spin={spin}: {world_pole:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn jupiter_rotation_sweeps_the_equator_around_world_y() {
+        let start = jupiter_rotation(0.0) * Vec3::X;
+        let quarter_turn = jupiter_rotation(FRAC_PI_2) * Vec3::X;
+        assert!(start.y.abs() < 1e-5, "ponto do equador saiu do plano XZ");
+        assert!(
+            quarter_turn.y.abs() < 1e-5,
+            "ponto do equador saiu do plano XZ"
+        );
+        assert!((start - quarter_turn).length() > 1.0);
+    }
+
+    #[test]
+    fn flattening_the_mesh_pole_axis_squishes_world_y() {
+        let scaled_pole = jupiter_rotation(1.3) * (Vec3::Z * JUPITER_OBLATENESS);
+        assert!((scaled_pole - Vec3::Y * JUPITER_OBLATENESS).length() < 1e-5);
+    }
+
+    #[test]
+    fn great_red_spot_longitude_faces_the_camera_by_the_end_of_the_intro() {
+        // A Grande Mancha Vermelha fica na coluna central da textura (longitude π), que
+        // corresponde ao sector central da malha UV e, no equador, ao ponto local (-1, 0, 0)
+        // antes de aplicar a rotação de Júpiter.
+        let great_red_spot_local_point = Vec3::NEG_X;
+        let world_point = jupiter_rotation(DURATION * JUPITER_SPIN) * great_red_spot_local_point;
+        // A câmera fica sempre do lado +Z, olhando para a origem (ver `camera_transform`).
+        assert!(
+            world_point.z > 0.0,
+            "Grande Mancha Vermelha não virou para o lado da câmera até o fim da abertura: {world_point:?}"
+        );
     }
 }
