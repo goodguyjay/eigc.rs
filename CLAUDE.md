@@ -37,6 +37,10 @@ cargo build -p eigc_app --features dev
 
 Use os aliases já configurados em `.cargo/config.toml` quando existirem, em vez de escrever o comando cru.
 
+## Pular o menu para debug (só debug)
+
+`cargo run-eigc-europa` (alias de `run --package eigc_app --features dev -- --europa`) sobe o app e entra direto em Europa, sem clicar no menu. **É um recurso exclusivamente de debug**, atrás da feature `dev`, e nunca deve ser usado como fluxo de usuário nem estar presente em build de release. Prefira essa opção quando o menu não está sendo modificado nem testado; ao mexer no menu, use `cargo run-eigc-app`. Funciona só para Europa, e o app ainda passa por `MainMenu` por um instante: o `Startup` de `main.rs` emite `ExploreRequested(MoonId::Europa)` e o `MenuPlugin` o consome. Não generalize para outras luas sem decisão do desenvolvedor.
+
 ## Convenções de código (resumo — ver `CONTRIBUTING.md` para o texto completo)
 
 - Sem `use bevy::prelude::*` nem outro wildcard import em código que não é teste: todo import explícito.
