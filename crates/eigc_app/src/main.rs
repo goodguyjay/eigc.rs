@@ -4,12 +4,13 @@
 use crate::moon_loading::transition_when_moon_profile_loaded;
 use bevy::DefaultPlugins;
 use bevy::prelude::{
-    App, AppExtStates, AssetPlugin, IntoScheduleConfigs, PluginGroup, SystemCondition, Update,
-    default, in_state, resource_exists,
+    App, AppExtStates, AssetPlugin, IntoScheduleConfigs, MessageWriter, OnExit, PluginGroup, Res,
+    Startup, State, SystemCondition, Update, default, in_state, resource_exists,
 };
-use eigc_menu::MenuPlugin;
+use eigc_menu::{MenuPlugin, ShowMenu};
 use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonPlugin};
 use eigc_scene::camera::free_fly_camera::FreeFlyCameraPlugin;
+use eigc_scene::intro::{IntroPlugin, IntroState};
 use eigc_scene::sky::SkyPlugin;
 use eigc_sim::{SimSet, TimeFlowPlugin};
 use eigc_terrain::pipeline::TerrainPlugin;
@@ -21,6 +22,23 @@ pub mod moon_loading;
 /// arbitrária depois do tempo gasto no menu e no carregamento.
 fn gate_simulation_clock(app: &mut App) -> &mut App {
     app.configure_sets(Update, SimSet::Advance.run_if(in_state(AppState::Running)))
+}
+
+/// Libera o menu quando a abertura sai de `Playing`, seja por ter tocado até o fim ou por ter
+/// sido pulada no meio.
+fn show_menu_when_intro_leaves_playing(mut show_menu: MessageWriter<ShowMenu>) {
+    show_menu.write(ShowMenu);
+}
+
+/// Cobre o caso de a abertura já nascer em `Done` (flag `skip_intro`), quando `OnExit(Playing)`
+/// nunca dispara porque o estado nunca chega a entrar em `Playing`.
+fn show_menu_if_intro_already_skipped(
+    intro_state: Res<State<IntroState>>,
+    show_menu: MessageWriter<ShowMenu>,
+) {
+    if *intro_state.get() != IntroState::Playing {
+        show_menu_when_intro_leaves_playing(show_menu);
+    }
 }
 
 fn main() {
@@ -36,7 +54,13 @@ fn main() {
     .add_plugins(TimeFlowPlugin)
     .add_plugins(FreeFlyCameraPlugin)
     .add_plugins(SkyPlugin)
-    .add_plugins(MenuPlugin);
+    .add_plugins(IntroPlugin)
+    .add_plugins(MenuPlugin)
+    .add_systems(Startup, show_menu_if_intro_already_skipped)
+    .add_systems(
+        OnExit(IntroState::Playing),
+        show_menu_when_intro_leaves_playing,
+    );
 
     gate_simulation_clock(&mut app).add_systems(
         Update,
