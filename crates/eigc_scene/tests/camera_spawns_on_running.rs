@@ -1,4 +1,4 @@
-//! Regressão do menu inicial: a câmera de voo livre só pode existir, e o cursor só pode ser
+//! Regressão do menu inicial: a câmera só pode existir, e o cursor só pode ser
 //! capturado, a partir de `AppState::Running`. Antes disso o menu precisa do cursor livre.
 
 use bevy::MinimalPlugins;
@@ -7,7 +7,8 @@ use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use eigc_moons::AppState;
-use eigc_scene::camera::free_fly_camera::*;
+use eigc_scene::camera::first_person::FirstPersonCamera;
+use eigc_scene::camera::plugin::CameraPlugin;
 
 /// App headless com o plugin de câmera e uma entidade que faz o papel da janela.
 fn app_with_camera_plugin() -> App {
@@ -16,14 +17,14 @@ fn app_with_camera_plugin() -> App {
         .add_plugins(InputPlugin)
         .add_plugins(StatesPlugin)
         .init_state::<AppState>()
-        .add_plugins(FreeFlyCameraPlugin);
+        .add_plugins(CameraPlugin);
     app.world_mut().spawn(CursorOptions::default());
     app
 }
 
 fn camera_count(app: &mut App) -> usize {
     app.world_mut()
-        .query::<&FreeFlyCamera>()
+        .query::<&FirstPersonCamera>()
         .iter(app.world())
         .count()
 }
@@ -37,8 +38,8 @@ fn cursor(app: &mut App) -> (bool, CursorGrabMode) {
     (options.visible, options.grab_mode)
 }
 
-/// Testa que, em `MainMenu` e em `LoadingMoonProfile`, não existe câmera de voo
-/// livre e o cursor continua visível e solto.
+/// Testa que, em `MainMenu` e em `LoadingMoonProfile`, não existe câmera
+/// e o cursor continua visível e solto.
 #[test]
 fn camera_is_absent_and_cursor_stays_free_before_running() {
     let mut app = app_with_camera_plugin();
@@ -59,7 +60,7 @@ fn camera_is_absent_and_cursor_stays_free_before_running() {
     }
 }
 
-/// Testa que, ao entrar em `Running`, nasce exatamente uma câmera de voo livre
+/// Testa que, ao entrar em `Running`, nasce exatamente uma câmera
 /// e o cursor fica oculto e travado.
 #[test]
 fn camera_spawns_and_captures_the_cursor_on_entering_running() {
