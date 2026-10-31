@@ -9,6 +9,7 @@ eigc_moons.workspace = true
 eigc_sim.workspace = true
 eigc_common.workspace = true
 eigc_terrain.workspace = true
+noise.workspace = true
 
 [features]
 dev = ["bevy/dynamic_linking"]

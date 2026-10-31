@@ -37,6 +37,16 @@ cargo build -p eigc_app --features dev
 
 Use os aliases já configurados em `.cargo/config.toml` quando existirem, em vez de escrever o comando cru.
 
+## Pular a abertura (config/environment.ron)
+
+A animação de abertura pode ser pulada definindo `skip_intro: true` em `config/environment.ron`. Esse arquivo não existe por padrão: crie copiando `config/environment.example.ron`, que fica versionado como modelo. `config/environment.ron` está no `.gitignore`, é configuração local, não arquivo do repositório.
+
+O caminho é lido relativo ao diretório de onde o binário é executado, não ao manifest dir do crate. Com `cargo run`, isso é a raiz do repositório.
+
+## Pular o menu para debug (só debug)
+
+`cargo run-eigc-europa` (alias de `run --package eigc_app --features dev -- --europa`) sobe o app e entra direto em Europa, sem clicar no menu. **É um recurso exclusivamente de debug**, atrás da feature `dev`, e nunca deve ser usado como fluxo de usuário nem estar presente em build de release. Prefira essa opção quando o menu não está sendo modificado nem testado; ao mexer no menu, use `cargo run-eigc-app`. Funciona só para Europa: o pedido `ExploreRequested(MoonId::Europa)` só é enviado quando a abertura chega em `IntroState::Done` (ou já no `Startup`, se `skip_intro` estiver `true`), e o `MenuPlugin` o consome. Com `cargo run-eigc-europa` a abertura toca normalmente antes de pular pro menu, a não ser que `skip_intro: true` esteja configurado. Não generalize para outras luas sem decisão do desenvolvedor.
+
 ## Convenções de código (resumo — ver `CONTRIBUTING.md` para o texto completo)
 
 - Sem `use bevy::prelude::*` nem outro wildcard import em código que não é teste: todo import explícito.
