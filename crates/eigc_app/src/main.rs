@@ -3,9 +3,11 @@
 
 use crate::moon_loading::transition_when_moon_profile_loaded;
 use bevy::DefaultPlugins;
+#[cfg(feature = "dev")]
+use bevy::prelude::Vec3;
 use bevy::prelude::{
-    App, AppExtStates, AssetPlugin, IntoScheduleConfigs, MessageWriter, NextState, OnEnter,
-    OnExit, PluginGroup, Res, ResMut, Startup, State, SystemCondition, Update, default, in_state,
+    App, AppExtStates, AssetPlugin, IntoScheduleConfigs, MessageWriter, NextState, OnEnter, OnExit,
+    PluginGroup, Res, ResMut, Startup, State, SystemCondition, Update, default, in_state,
     resource_exists,
 };
 #[cfg(feature = "dev")]
@@ -15,6 +17,8 @@ use eigc_menu::{MenuPlugin, ShowMenu};
 use eigc_moons::MoonId;
 use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonPlugin};
 use eigc_scene::camera::plugin::CameraPlugin;
+#[cfg(feature = "dev")]
+use eigc_scene::camera::plugin::DebugSpawnPosition;
 use eigc_scene::intro::{IntroPlugin, IntroState};
 use eigc_scene::sky::SkyPlugin;
 use eigc_sim::{SimSet, TimeFlowPlugin};
@@ -73,6 +77,28 @@ fn send_europa_request_if_intro_already_done(
     }
 }
 
+/// Lê `--spawn x y z` dos argumentos de linha de comando. `Ok(None)` quando a flag não aparece;
+/// `Err` com a mensagem de uso quando faltam coordenadas ou alguma não é número finito.
+#[cfg(feature = "dev")]
+fn parse_spawn_position(args: &[String]) -> Result<Option<Vec3>, String> {
+    const USAGE: &str = "uso: --spawn <x> <y> <z> (números finitos, em metros)";
+
+    let Some(flag_index) = args.iter().position(|arg| arg == "--spawn") else {
+        return Ok(None);
+    };
+
+    let coordinates: Vec<f32> = args[flag_index + 1..]
+        .iter()
+        .take(3)
+        .map_while(|arg| arg.parse::<f32>().ok().filter(|value| value.is_finite()))
+        .collect();
+
+    match coordinates[..] {
+        [x, y, z] => Ok(Some(Vec3::new(x, y, z))),
+        _ => Err(USAGE.to_string()),
+    }
+}
+
 fn main() {
     let mut app = App::new();
 
@@ -116,6 +142,22 @@ fn main() {
             .add_systems(OnEnter(IntroState::Done), send_europa_request);
     }
 
+    // Só debug: `--spawn x y z` (usado junto de `--europa`) faz a câmera nascer na posição pedida.
+    #[cfg(feature = "dev")]
+    {
+        let args: Vec<String> = std::env::args().collect();
+        match parse_spawn_position(&args) {
+            Ok(Some(position)) => {
+                app.insert_resource(DebugSpawnPosition(position));
+            }
+            Ok(None) => {}
+            Err(message) => {
+                eprintln!("{message}");
+                std::process::exit(2);
+            }
+        }
+    }
+
     app.run();
 }
 
@@ -147,6 +189,51 @@ mod tests {
     fn run_frames(app: &mut App, frames: usize) {
         for _ in 0..frames {
             app.update();
+        }
+    }
+
+    #[cfg(feature = "dev")]
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    /// Testa que `--spawn` lê três coordenadas, inclusive negativas e fracionárias.
+    #[cfg(feature = "dev")]
+    #[test]
+    fn spawn_flag_reads_three_coordinates() {
+        let parsed = parse_spawn_position(&args(&[
+            "eigc_app", "--europa", "--spawn", "1200", "-35.5", "-3400",
+        ]));
+
+        assert_eq!(parsed, Ok(Some(Vec3::new(1200.0, -35.5, -3400.0))));
+    }
+
+    /// Testa que sem `--spawn` não há posição forçada.
+    #[cfg(feature = "dev")]
+    #[test]
+    fn missing_spawn_flag_means_no_forced_position() {
+        assert_eq!(
+            parse_spawn_position(&args(&["eigc_app", "--europa"])),
+            Ok(None)
+        );
+    }
+
+    /// Testa que coordenadas faltando, não numéricas ou não finitas são recusadas, em vez de
+    /// virar um spawn em lugar nenhum.
+    #[cfg(feature = "dev")]
+    #[test]
+    fn spawn_flag_rejects_missing_or_invalid_coordinates() {
+        for invalid in [
+            args(&["--spawn"]),
+            args(&["--spawn", "1", "2"]),
+            args(&["--spawn", "1", "dois", "3"]),
+            args(&["--spawn", "1", "NaN", "3"]),
+            args(&["--spawn", "1", "inf", "3"]),
+        ] {
+            assert!(
+                parse_spawn_position(&invalid).is_err(),
+                "aceitou {invalid:?}"
+            );
         }
     }
 
