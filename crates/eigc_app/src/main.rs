@@ -14,7 +14,7 @@ use eigc_menu::{MenuPlugin, ShowMenu};
 #[cfg(feature = "dev")]
 use eigc_moons::MoonId;
 use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonPlugin};
-use eigc_scene::camera::free_fly_camera::FreeFlyCameraPlugin;
+use eigc_scene::camera::plugin::CameraPlugin;
 use eigc_scene::intro::{IntroPlugin, IntroState};
 use eigc_scene::sky::SkyPlugin;
 use eigc_sim::{SimSet, TimeFlowPlugin};
@@ -84,7 +84,7 @@ fn main() {
     .add_plugins(MoonPlugin)
     .add_plugins(TerrainPlugin)
     .add_plugins(TimeFlowPlugin)
-    .add_plugins(FreeFlyCameraPlugin)
+    .add_plugins(CameraPlugin)
     .add_plugins(SkyPlugin)
     .add_plugins(IntroPlugin)
     .add_plugins(MenuPlugin)

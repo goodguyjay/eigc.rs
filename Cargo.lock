@@ -2310,6 +2310,7 @@ dependencies = [
  "eigc_common",
  "eigc_moons",
  "eigc_sim",
+ "eigc_terrain",
  "noise",
 ]
 
