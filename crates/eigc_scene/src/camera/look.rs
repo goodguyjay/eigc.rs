@@ -1,0 +1,337 @@
+//! Orientação da câmera (mouse look), captura do cursor e travamento da mira em sol/Júpiter.
+//!
+//! Independe do modo de movimento: tanto o voo livre quanto uma futura câmera em primeira pessoa
+//! reaproveitam estes sistemas.
+
+use crate::sky::SkyState;
+use bevy::input::mouse::MouseMotion;
+use bevy::prelude::{
+    ButtonInput, Component, EulerRot, KeyCode, MessageReader, MouseButton, Quat, Query, Res,
+    ResMut, Resource, Single, Transform, Vec3,
+};
+use bevy::window::{CursorGrabMode, CursorOptions};
+
+/// Orientação da câmera: yaw e pitch acumulados e sensibilidade do mouse.
+#[derive(Component)]
+pub struct CameraLook {
+    /// Rotação horizontal acumulada, em radianos.
+    pub yaw: f32,
+    /// Rotação vertical acumulada, em radianos.
+    pub pitch: f32,
+    /// Sensibilidade do mouse, aplicada ao delta de movimento do mouse
+    pub sensitivity: f32,
+}
+
+impl Default for CameraLook {
+    fn default() -> Self {
+        Self {
+            yaw: 0.0,
+            pitch: 0.0,
+            sensitivity: 0.02,
+        }
+    }
+}
+
+/// Limite de pitch, em radianos, para não permitir que a câmera vire de cabeça para baixo.
+const PITCH_LIMIT: f32 = 1.54;
+
+/// Guarda o estado de bloqueio da câmera, se está livre ou travada em algum corpo celeste.
+#[derive(Resource, Default)]
+pub(super) struct CamLock {
+    mode: LockMode,
+}
+
+/// Modos de bloqueio da câmera.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+enum LockMode {
+    #[default]
+    Free,
+    Sun,
+    Jupiter,
+}
+
+/// Aplica o movimento do mouse à orientação da câmera, com pitch limitado para evitar inversão.
+pub(super) fn mouse_look(
+    mut mouse_motion: MessageReader<MouseMotion>,
+    mut cameras: Query<(&mut Transform, &mut CameraLook)>,
+    cursor_options: Single<&CursorOptions>,
+) {
+    if cursor_options.grab_mode != CursorGrabMode::Locked {
+        mouse_motion.clear();
+        return;
+    }
+    let Ok((mut transform, mut camera)) = cameras.single_mut() else {
+        return;
+    };
+
+    let mut delta = Vec3::ZERO;
+    for motion in mouse_motion.read() {
+        delta.x += motion.delta.x;
+        delta.y += motion.delta.y;
+    }
+
+    if delta.x == 0.0 && delta.y == 0.0 {
+        return;
+    }
+
+    camera.yaw -= delta.x * camera.sensitivity;
+    camera.pitch = clamp_pitch(camera.pitch - delta.y * camera.sensitivity);
+
+    transform.rotation = Quat::from_euler(EulerRot::YXZ, camera.yaw, camera.pitch, 0.0);
+}
+
+/// Restringe o pitch ao intervalo `[-PITCH_LIMIT, PITCH_LIMIT]`.
+///
+/// Tá como teste unitário para permitir teste unitário sem depender do ECS.
+fn clamp_pitch(pitch: f32) -> f32 {
+    pitch.clamp(-PITCH_LIMIT, PITCH_LIMIT)
+}
+
+/// Libera o cursor ao pressionar ESC.
+pub(super) fn cursor_release(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut cursor_options: Single<&mut CursorOptions>,
+) {
+    if keys.just_pressed(KeyCode::Escape) {
+        cursor_options.visible = true;
+        cursor_options.grab_mode = CursorGrabMode::None;
+    }
+}
+
+/// Recaptura o cursor ao clicar com o botão esquerdo, permitindo retomar o controle da câmera
+/// depois que o ESC libera o cursor, sem precisar fechar e reabrir a aplicação.
+pub(super) fn recapture_cursor_on_click(
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    mut cursor_options: Single<&mut CursorOptions>,
+) {
+    if !mouse_buttons.just_pressed(MouseButton::Left) {
+        return;
+    }
+
+    if cursor_options.grab_mode == CursorGrabMode::Locked {
+        return;
+    }
+
+    cursor_options.visible = false;
+    cursor_options.grab_mode = CursorGrabMode::Locked;
+}
+
+/// Atualiza a orientação da câmera para mirar no Sol ou em Júpiter, dependendo do modo de bloqueio.
+pub(super) fn lock_aim_update(
+    lock: Res<CamLock>,
+    state: Res<SkyState>,
+    mut cameras: Query<(&mut Transform, &mut CameraLook)>,
+) {
+    let Some(forward) = resolve_lock_direction(lock.mode, &state) else {
+        return;
+    };
+
+    let Ok((mut transform, mut camera)) = cameras.single_mut() else {
+        return;
+    };
+
+    transform.look_to(forward, Vec3::Y);
+
+    let (yaw, pitch, _roll) = transform.rotation.to_euler(EulerRot::YXZ);
+    camera.yaw = yaw;
+    camera.pitch = pitch;
+}
+
+/// Alterna o modo de bloqueio da câmera entre livre, travada no Sol ou travada em Júpiter.
+pub(super) fn toggle_lock(keys: Res<ButtonInput<KeyCode>>, mut lock: ResMut<CamLock>) {
+    if keys.just_pressed(KeyCode::KeyF) {
+        lock.mode = match lock.mode {
+            LockMode::Sun => LockMode::Free,
+            _ => LockMode::Sun,
+        };
+    }
+
+    if keys.just_pressed(KeyCode::KeyJ) {
+        lock.mode = match lock.mode {
+            LockMode::Jupiter => LockMode::Free,
+            _ => LockMode::Jupiter,
+        };
+    }
+}
+
+/// Resolve a direção alvo do lock atual a partir das configurações do céu.
+///
+/// Retorna `None` quando o modo é `Free`, já que não há direção associada.
+fn resolve_lock_direction(mode: LockMode, state: &SkyState) -> Option<Vec3> {
+    match mode {
+        LockMode::Free => None,
+        LockMode::Sun => Some(state.sun_dir.normalize()),
+        LockMode::Jupiter => Some(state.jupiter_dir.normalize()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::prelude::{App, Update, default};
+
+    /// Testa que o pitch é corretamente limitado dentro dos limites definidos.
+    #[test]
+    fn clamp_pitch_restricts_pitch_within_limits() {
+        let pitch = 2.0;
+        let clamped_pitch = clamp_pitch(pitch);
+        assert_eq!(clamped_pitch, PITCH_LIMIT);
+
+        let pitch = -2.0;
+        let clamped_pitch = clamp_pitch(pitch);
+        assert_eq!(clamped_pitch, -PITCH_LIMIT);
+
+        let pitch = 1.0;
+        let clamped_pitch = clamp_pitch(pitch);
+        assert_eq!(clamped_pitch, pitch);
+    }
+
+    /// Testa que, depois do cursor ser liberado (ESC), um clique esquerdo o recaptura
+    /// sem isso, a única forma de recuperar o controle da câmera era reiniciar o app.
+    #[test]
+    fn left_click_recaptures_cursor_after_it_was_released() {
+        let mut app = App::new();
+
+        app.init_resource::<ButtonInput<MouseButton>>()
+            .add_systems(Update, recapture_cursor_on_click);
+
+        let entity = app
+            .world_mut()
+            .spawn(CursorOptions {
+                visible: true,
+                grab_mode: CursorGrabMode::None,
+                ..default()
+            })
+            .id();
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+
+        app.update();
+
+        let cursor_options = app.world().get::<CursorOptions>(entity).unwrap();
+        assert_eq!(cursor_options.grab_mode, CursorGrabMode::Locked);
+        assert!(!cursor_options.visible);
+    }
+
+    /// Testa que `resolve_lock_direction` retorna a direção correta pra cada
+    /// modo de lock, e `None` quando livre.
+    #[test]
+    fn resolve_lock_direction_returns_body_direction() {
+        let state = SkyState {
+            sun_dir: Vec3::new(1.0, 0.0, 0.0),
+            jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
+            ..default()
+        };
+
+        assert_eq!(resolve_lock_direction(LockMode::Free, &state), None);
+
+        assert_eq!(
+            resolve_lock_direction(LockMode::Sun, &state),
+            Some(Vec3::new(1.0, 0.0, 0.0))
+        );
+
+        assert_eq!(
+            resolve_lock_direction(LockMode::Jupiter, &state),
+            Some(Vec3::new(0.0, 0.0, 1.0))
+        );
+    }
+
+    /// Testa que, com o lock travado no Sol, a câmera acaba orientada na direção
+    /// de `base_sun_dir` após um update, e que yaw/pitch ficam sincronizados
+    /// com essa orientação.
+    #[test]
+    fn lock_aim_update_orients_camera_toward_sun_when_locked() {
+        let mut app = App::new();
+
+        let sun_dir = Vec3::new(1.0, 0.0, 0.0).normalize();
+        let jupiter_dir = Vec3::new(0.0, 0.0, 1.0).normalize();
+
+        app.insert_resource(CamLock {
+            mode: LockMode::Sun,
+        })
+        .insert_resource(SkyState {
+            sun_dir,
+            jupiter_dir,
+            ..default()
+        })
+        .add_systems(Update, lock_aim_update);
+
+        // câmera arbitrária, olhando pra uma direção que não é nem sol nem
+        // júpiter, com yaw/pitch velhos que não deviam sobreviver ao lock.
+        let transform = Transform::from_translation(Vec3::ZERO);
+        let camera = CameraLook {
+            yaw: 2.5,
+            pitch: 0.5,
+            ..default()
+        };
+        let entity = app.world_mut().spawn((transform, camera)).id();
+
+        app.update();
+
+        let updated_transform = app.world().get::<Transform>(entity).unwrap();
+        let updated_camera = app.world().get::<CameraLook>(entity).unwrap();
+
+        let mut expected_transform = Transform::from_translation(Vec3::ZERO);
+        expected_transform.look_to(sun_dir, Vec3::Y);
+        let (expected_yaw, expected_pitch, _roll) =
+            expected_transform.rotation.to_euler(EulerRot::YXZ);
+
+        assert!(
+            updated_transform
+                .rotation
+                .abs_diff_eq(expected_transform.rotation, 1e-5),
+            "câmera deveria olhar na direção do sol, mas rotação foi {:?}, esperado {:?}",
+            updated_transform.rotation,
+            expected_transform.rotation
+        );
+
+        assert!(
+            (updated_camera.yaw - expected_yaw).abs() < 1e-5,
+            "yaw deveria estar sincronizado com a direção travada, foi {}, esperado {}",
+            updated_camera.yaw,
+            expected_yaw
+        );
+        assert!(
+            (updated_camera.pitch - expected_pitch).abs() < 1e-5,
+            "pitch deveria estar sincronizado com a direção travada, foi {}, esperado {}",
+            updated_camera.pitch,
+            expected_pitch
+        );
+    }
+
+    /// Testa que, com o lock livre, `lock_aim_update` não altera a orientação
+    /// da câmera nem os campos yaw/pitch.
+    #[test]
+    fn lock_aim_update_does_nothing_when_free() {
+        let mut app = App::new();
+
+        app.insert_resource(CamLock {
+            mode: LockMode::Free,
+        })
+        .insert_resource(SkyState {
+            sun_dir: Vec3::new(1.0, 0.0, 0.0),
+            jupiter_dir: Vec3::new(0.0, 0.0, 1.0),
+            ..default()
+        })
+        .add_systems(Update, lock_aim_update);
+
+        let transform = Transform::from_translation(Vec3::ZERO);
+        let camera = CameraLook {
+            yaw: 1.2,
+            pitch: 0.3,
+            ..default()
+        };
+        let entity = app.world_mut().spawn((transform, camera)).id();
+
+        app.update();
+
+        let updated_transform = app.world().get::<Transform>(entity).unwrap();
+        let updated_camera = app.world().get::<CameraLook>(entity).unwrap();
+
+        assert_eq!(updated_transform.rotation, Quat::IDENTITY);
+        assert_eq!(updated_camera.yaw, 1.2);
+        assert_eq!(updated_camera.pitch, 0.3);
+    }
+}

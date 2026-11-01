@@ -15,24 +15,33 @@ use crate::ui::{
     update_overview_visibility, update_toast,
 };
 use bevy::picking::mesh_picking::MeshPickingPlugin;
-use bevy::prelude::{App, IntoScheduleConfigs, OnEnter, Plugin, Update, in_state};
+use bevy::prelude::{
+    App, IntoScheduleConfigs, Message, OnEnter, Plugin, Update, in_state, on_message,
+};
 use eigc_moons::AppState;
 
-/// Registra o menu de seleção de lua, ativo enquanto a aplicação está em `AppState::MainMenu`.
-/// Em `LoadingMoonProfile`, mantém a cena do menu e exibe a tela de carregamento por cima.
+/// Sinal para o menu spawnar sua cena e UI. Emitido pelo binário da aplicação, depois que a
+/// abertura termina ou é pulada.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct ShowMenu;
+
+/// Registra o menu de seleção de lua. A cena e a UI nascem quando `ShowMenu` é recebido, e os
+/// sistemas de interação ficam ativos enquanto a aplicação está em `AppState::MainMenu`. Em
+/// `LoadingMoonProfile`, mantém a cena do menu e exibe a tela de carregamento por cima.
 pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MeshPickingPlugin)
+            .add_message::<ShowMenu>()
             .add_message::<ExploreRequested>()
             .add_message::<NotImplementedNotice>()
             .init_resource::<MenuSelection>()
             .init_resource::<ToastState>()
             .init_resource::<SettingsState>()
             .add_systems(
-                OnEnter(AppState::MainMenu),
-                (spawn_menu_scene, spawn_menu_ui),
+                Update,
+                (spawn_menu_scene, spawn_menu_ui).run_if(on_message::<ShowMenu>),
             )
             .add_systems(OnEnter(AppState::LoadingMoonProfile), spawn_loading_overlay)
             .add_systems(

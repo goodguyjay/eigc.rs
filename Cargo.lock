@@ -2272,6 +2272,9 @@ name = "eigc_common"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "ron",
+ "rstest",
+ "serde",
 ]
 
 [[package]]
@@ -2307,6 +2310,8 @@ dependencies = [
  "eigc_common",
  "eigc_moons",
  "eigc_sim",
+ "eigc_terrain",
+ "noise",
 ]
 
 [[package]]

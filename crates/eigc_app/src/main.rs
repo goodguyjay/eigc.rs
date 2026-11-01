@@ -4,18 +4,18 @@
 use crate::moon_loading::transition_when_moon_profile_loaded;
 use bevy::DefaultPlugins;
 use bevy::prelude::{
-    App, AppExtStates, AssetPlugin, IntoScheduleConfigs, PluginGroup, SystemCondition, Update,
-    default, in_state, resource_exists,
+    App, AppExtStates, AssetPlugin, IntoScheduleConfigs, MessageWriter, NextState, OnEnter,
+    OnExit, PluginGroup, Res, ResMut, Startup, State, SystemCondition, Update, default, in_state,
+    resource_exists,
 };
 #[cfg(feature = "dev")]
-use bevy::prelude::{MessageWriter, Startup};
-#[cfg(feature = "dev")]
 use eigc_menu::ExploreRequested;
-use eigc_menu::MenuPlugin;
+use eigc_menu::{MenuPlugin, ShowMenu};
 #[cfg(feature = "dev")]
 use eigc_moons::MoonId;
 use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonPlugin};
-use eigc_scene::camera::free_fly_camera::FreeFlyCameraPlugin;
+use eigc_scene::camera::plugin::CameraPlugin;
+use eigc_scene::intro::{IntroPlugin, IntroState};
 use eigc_scene::sky::SkyPlugin;
 use eigc_sim::{SimSet, TimeFlowPlugin};
 use eigc_terrain::pipeline::TerrainPlugin;
@@ -29,6 +29,50 @@ fn gate_simulation_clock(app: &mut App) -> &mut App {
     app.configure_sets(Update, SimSet::Advance.run_if(in_state(AppState::Running)))
 }
 
+/// Libera o menu quando a abertura sai de `Playing`, seja por ter tocado até o fim ou por ter
+/// sido pulada no meio.
+fn show_menu_when_intro_leaves_playing(mut show_menu: MessageWriter<ShowMenu>) {
+    show_menu.write(ShowMenu);
+}
+
+/// Cobre o caso de a abertura já nascer em `Done` (flag `skip_intro`), quando `OnExit(Playing)`
+/// nunca dispara porque o estado nunca chega a entrar em `Playing`.
+fn show_menu_if_intro_already_skipped(
+    intro_state: Res<State<IntroState>>,
+    show_menu: MessageWriter<ShowMenu>,
+) {
+    if *intro_state.get() != IntroState::Playing {
+        show_menu_when_intro_leaves_playing(show_menu);
+    }
+}
+
+/// Força o fim da abertura assim que o jogador escolhe uma lua, mesmo que o clarão final ainda
+/// esteja se desfazendo. Sem isso, a câmera da abertura podia continuar viva ao mesmo tempo que a
+/// câmera do jogo nasce em `Running`, e sistemas do céu que buscam "a" câmera via
+/// `Query<_, With<Camera3d>>::single()` ficavam confusos entre as duas (ou, pior, usavam a da
+/// abertura sozinha enquanto a do jogo ainda não existia).
+fn finish_intro_when_leaving_menu(mut next_intro_state: ResMut<NextState<IntroState>>) {
+    next_intro_state.set(IntroState::Done);
+}
+
+/// Atalho de debug (`--europa`): pede a exploração de Europa.
+#[cfg(feature = "dev")]
+fn send_europa_request(mut requests: MessageWriter<ExploreRequested>) {
+    requests.write(ExploreRequested(MoonId::Europa));
+}
+
+/// Cobre o caso de a abertura já nascer em `Done` (flag `skip_intro`), quando `OnEnter(Done)`
+/// nunca dispara porque o estado nunca chega a *entrar* em `Done` (ele já começa lá).
+#[cfg(feature = "dev")]
+fn send_europa_request_if_intro_already_done(
+    intro_state: Res<State<IntroState>>,
+    requests: MessageWriter<ExploreRequested>,
+) {
+    if *intro_state.get() == IntroState::Done {
+        send_europa_request(requests);
+    }
+}
+
 fn main() {
     let mut app = App::new();
 
@@ -40,9 +84,19 @@ fn main() {
     .add_plugins(MoonPlugin)
     .add_plugins(TerrainPlugin)
     .add_plugins(TimeFlowPlugin)
-    .add_plugins(FreeFlyCameraPlugin)
+    .add_plugins(CameraPlugin)
     .add_plugins(SkyPlugin)
-    .add_plugins(MenuPlugin);
+    .add_plugins(IntroPlugin)
+    .add_plugins(MenuPlugin)
+    .add_systems(Startup, show_menu_if_intro_already_skipped)
+    .add_systems(
+        OnExit(IntroState::Playing),
+        show_menu_when_intro_leaves_playing,
+    )
+    .add_systems(
+        OnEnter(AppState::LoadingMoonProfile),
+        finish_intro_when_leaving_menu,
+    );
 
     gate_simulation_clock(&mut app).add_systems(
         Update,
@@ -54,12 +108,12 @@ fn main() {
     #[cfg(feature = "dev")]
     app.add_plugins(eigc_perf::debug_tools::DebugToolsPlugin);
 
-    // Só debug: o MenuPlugin consome o pedido na primeira Update, ainda em MainMenu.
+    // Só debug: espera a abertura terminar de vez (clarão desfeito) antes de pedir a exploração
+    // de Europa, para a transição do menu pro jogo não ficar brusca.
     #[cfg(feature = "dev")]
     if std::env::args().any(|arg| arg == "--europa") {
-        app.add_systems(Startup, |mut requests: MessageWriter<ExploreRequested>| {
-            requests.write(ExploreRequested(MoonId::Europa));
-        });
+        app.add_systems(Startup, send_europa_request_if_intro_already_done)
+            .add_systems(OnEnter(IntroState::Done), send_europa_request);
     }
 
     app.run();
@@ -70,7 +124,6 @@ mod tests {
     use super::*;
     use bevy::MinimalPlugins;
     use bevy::input::InputPlugin;
-    use bevy::prelude::*;
     use bevy::state::app::StatesPlugin;
     use bevy::time::TimeUpdateStrategy;
     use eigc_sim::SimTime;
