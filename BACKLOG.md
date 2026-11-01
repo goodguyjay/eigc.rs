@@ -231,6 +231,15 @@ não por teste unitário de função pura.
 - [ ] A tela de carregamento é estática. O terreno é construído em `OnEnter(Running)`, então a
   tela provavelmente congela por um instante na transição. Não medido; confirmar em teste
   visual antes de investir num indicador animado.
+- [ ] **O seletor "Não"/"Sim" de "tela cheia" no painel de configurações (`settings.rs`,
+  `ui/spawn.rs`) é só visual.** Muda `SettingsState::fullscreen_enabled`, mas não troca o
+  `WindowMode` da janela de verdade. Aplicar de fato fica para depois.
+- [ ] **A escolha de tela cheia não é salva.** `SettingsState` é um resource comum, reiniciado a
+  cada execução do app. Persistir provavelmente faz sentido junto de `Environment`
+  (`eigc_common::environment`, já usado pela flag `skip_intro`), mas isso não foi decidido nem
+  feito aqui.
+- [ ] **"Configurar controles" (painel de configurações) é só um botão placeholder.** Não abre
+  nada ao clicar; o menu de configurar controles em si ainda não existe.
 
 ## Plataformas
 - Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS

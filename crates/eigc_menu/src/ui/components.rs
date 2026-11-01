@@ -41,6 +41,32 @@ pub(crate) enum ButtonKind {
     Ghost,
 }
 
+/// Contêiner do painel de configurações, mostrado e escondido pela engrenagem.
+#[derive(Component, Debug)]
+pub(crate) struct SettingsPanel;
+
+/// Botão de engrenagem que abre e fecha o painel de configurações.
+#[derive(Component, Debug)]
+pub(crate) struct SettingsGearButton;
+
+/// Ícone da engrenagem, que gira quando o painel abre.
+#[derive(Component, Debug)]
+pub(crate) struct SettingsGearIcon;
+
+/// Linha "Configurar controles" do painel de configurações: clicável, sem ação por enquanto, com
+/// fundo que destaca em hover.
+#[derive(Component, Debug)]
+pub(crate) struct ConfigureControlsRow;
+
+/// Qual opção do seletor "Tela cheia" uma entidade representa (botão ou o texto dentro dele).
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FullscreenOption {
+    /// Tela cheia desligada, valor inicial.
+    No,
+    /// Tela cheia ligada.
+    Yes,
+}
+
 /// Raiz do aviso de "não implementada".
 #[derive(Component, Debug)]
 pub(crate) struct ToastRoot;

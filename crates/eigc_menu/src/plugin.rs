@@ -7,9 +7,12 @@ use crate::interaction::{
     restrict_mesh_picking_to_marked_cameras,
 };
 use crate::scene::{spawn_menu_scene, spin_menu_moons};
+use crate::settings::{SettingsState, close_settings_panel_on_escape};
 use crate::ui::{
     ToastState, highlight_labels, position_moon_labels, refresh_panel_content, slide_detail_panel,
-    spawn_loading_overlay, spawn_menu_ui, style_buttons, update_overview_visibility, update_toast,
+    spawn_loading_overlay, spawn_menu_ui, style_buttons, style_configure_controls_row,
+    style_settings_gear, sync_fullscreen_selector, toggle_settings_panel_visibility,
+    update_overview_visibility, update_toast,
 };
 use bevy::picking::mesh_picking::MeshPickingPlugin;
 use bevy::prelude::{
@@ -35,6 +38,7 @@ impl Plugin for MenuPlugin {
             .add_message::<NotImplementedNotice>()
             .init_resource::<MenuSelection>()
             .init_resource::<ToastState>()
+            .init_resource::<SettingsState>()
             .add_systems(
                 Update,
                 (spawn_menu_scene, spawn_menu_ui).run_if(on_message::<ShowMenu>),
@@ -49,6 +53,7 @@ impl Plugin for MenuPlugin {
                 (
                     handle_explore_requests,
                     exit_focus_on_escape,
+                    close_settings_panel_on_escape,
                     animate_menu_camera,
                     animate_moon_scale,
                     spin_menu_moons,
@@ -59,6 +64,10 @@ impl Plugin for MenuPlugin {
                     highlight_labels,
                     style_buttons,
                     update_toast,
+                    toggle_settings_panel_visibility,
+                    sync_fullscreen_selector,
+                    style_configure_controls_row,
+                    style_settings_gear,
                 )
                     .chain()
                     .run_if(in_state(AppState::MainMenu)),
