@@ -54,6 +54,49 @@ pub(crate) const PANEL_MARGIN: f32 = 56.0;
 /// Largura da área de texto de cada rótulo de lua na visão geral.
 pub(crate) const LABEL_WIDTH: f32 = 220.0;
 
+/// Lado do botão de engrenagem (ele é quadrado, com cantos arredondados em círculo).
+pub(crate) const SETTINGS_BUTTON_SIZE: f32 = 42.0;
+/// Distância do botão de engrenagem às bordas superior e direita da janela.
+pub(crate) const SETTINGS_BUTTON_MARGIN: f32 = 32.0;
+/// Largura do painel de configurações.
+pub(crate) const SETTINGS_PANEL_WIDTH: f32 = 290.0;
+/// Raio dos cantos do painel de configurações.
+pub(crate) const SETTINGS_PANEL_RADIUS: f32 = 10.0;
+/// Raio dos cantos do container do seletor "Não"/"Sim".
+pub(crate) const SETTINGS_SELECTOR_RADIUS: f32 = 7.0;
+/// Raio dos cantos de cada opção do seletor "Não"/"Sim", menor que o do container para o destaque
+/// não encostar na borda externa.
+pub(crate) const SETTINGS_SELECTOR_OPTION_RADIUS: f32 = 5.0;
+/// Espaçamento horizontal interno de cada linha do painel de configurações.
+pub(crate) const SETTINGS_ROW_PADDING_X: f32 = 16.0;
+/// Espaçamento vertical interno de cada linha do painel de configurações.
+pub(crate) const SETTINGS_ROW_PADDING_Y: f32 = 14.0;
+
+/// Fundo do botão de engrenagem. Nunca muda, só a borda reage a hover/painel aberto.
+pub(crate) const SETTINGS_GEAR_BACKGROUND: Color = Color::srgb_u8(0x10, 0x14, 0x1d);
+/// Borda do botão de engrenagem em repouso.
+pub(crate) const SETTINGS_GEAR_BORDER: Color = Color::srgb_u8(0x2a, 0x30, 0x3c);
+/// Borda do botão de engrenagem com o painel aberto ou o cursor sobre ele.
+pub(crate) const SETTINGS_GEAR_BORDER_ACTIVE: Color = Color::srgb_u8(0x6b, 0x73, 0x83);
+
+/// Fundo sólido do painel de configurações (sem transparência, diferente do painel de detalhes).
+pub(crate) const SETTINGS_PANEL_BACKGROUND: Color = Color::srgb_u8(0x0d, 0x11, 0x19);
+/// Borda do painel de configurações.
+pub(crate) const SETTINGS_PANEL_BORDER: Color = Color::srgb_u8(0x26, 0x2c, 0x37);
+/// Borda do seletor "Não"/"Sim" e dos cards do painel de configurações.
+pub(crate) const SETTINGS_SELECTOR_BORDER: Color = Color::srgb_u8(0x2f, 0x36, 0x43);
+/// Fundo dos cards do painel de configurações, um pouco mais claro que o fundo do painel.
+pub(crate) const SETTINGS_CARD_BACKGROUND: Color = Color::srgb_u8(0x14, 0x1a, 0x25);
+/// Fundo do card "Configurar controles" com o cursor sobre ele.
+pub(crate) const SETTINGS_CARD_HOVER_BACKGROUND: Color = Color::srgb_u8(0x1a, 0x21, 0x2d);
+
+/// Texto principal do painel de configurações (título do cabeçalho e dos cards).
+pub(crate) const SETTINGS_TEXT_PRIMARY: Color = Color::srgb_u8(0xec, 0xe8, 0xe1);
+/// Texto secundário do painel de configurações (descrições, fechar, chevron).
+pub(crate) const SETTINGS_TEXT_SECONDARY: Color = Color::srgb_u8(0x8a, 0x90, 0x9c);
+/// Cor de destaque dourada/bege: fundo da opção selecionada do seletor "Não"/"Sim".
+pub(crate) const SETTINGS_ACCENT: Color = Color::srgb_u8(0xe3, 0xc0, 0x7a);
+
 /// Handles das fontes do menu (Space Grotesk).
 #[derive(Resource, Clone)]
 pub(crate) struct MenuFonts {

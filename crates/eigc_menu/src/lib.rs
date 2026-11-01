@@ -7,6 +7,7 @@ mod layout;
 mod moon_stats;
 mod plugin;
 mod scene;
+mod settings;
 mod theme;
 mod ui;
 

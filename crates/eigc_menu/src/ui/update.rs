@@ -2,7 +2,8 @@
 //! rótulos ancorados às luas, estilo dos botões e aviso de "não implementada".
 
 use super::components::{
-    ButtonKind, DetailPanel, MoonLabel, MoonLabelName, OverviewUi, PanelField, ToastRoot,
+    ButtonKind, ConfigureControlsRow, DetailPanel, FullscreenOption, MoonLabel, MoonLabelName,
+    OverviewUi, PanelField, SettingsGearButton, SettingsGearIcon, SettingsPanel, ToastRoot,
     ToastState, ToastText,
 };
 use crate::explore::NotImplementedNotice;
@@ -10,11 +11,12 @@ use crate::interaction::MenuSelection;
 use crate::layout::{damp_f32, label_anchor_world};
 use crate::moon_stats::stat_values;
 use crate::scene::MenuCamera;
+use crate::settings::SettingsState;
 use crate::theme;
 use bevy::prelude::{
-    BackgroundColor, BorderColor, Camera, Changed, Color, DetectChanges, GlobalTransform,
-    Interaction, MessageReader, Node, Or, Query, Res, ResMut, Single, Text, TextColor, Time, Val,
-    Visibility, With,
+    BackgroundColor, BorderColor, Button, Camera, Changed, Color, DetectChanges, GlobalTransform,
+    Interaction, MessageReader, Node, Or, Query, Res, ResMut, Rot2, Single, Text, TextColor, Time,
+    UiTransform, Val, Visibility, With,
 };
 use eigc_moons::{MoonId, MoonInfo, moon_info};
 
@@ -170,7 +172,9 @@ pub(crate) fn highlight_labels(
     }
 }
 
-/// Atualiza as cores dos botões quando a interação com eles muda.
+/// Atualiza as cores dos botões quando a interação com eles muda, ou quando o próprio
+/// `ButtonKind` muda (ex.: o alternador de tela cheia, que troca de tipo ao ser ligado/desligado).
+#[allow(clippy::type_complexity)]
 pub(crate) fn style_buttons(
     mut buttons: Query<
         (
@@ -179,13 +183,144 @@ pub(crate) fn style_buttons(
             &mut BackgroundColor,
             &mut BorderColor,
         ),
-        Changed<Interaction>,
+        Or<(Changed<Interaction>, Changed<ButtonKind>)>,
     >,
 ) {
     for (interaction, kind, mut background, mut border) in &mut buttons {
         let (background_color, border_color) = button_colors(*kind, *interaction);
         background.0 = background_color;
         *border = BorderColor::all(border_color);
+    }
+}
+
+/// Se o painel de configurações deve estar visível: aberto e sem nenhuma lua em foco. O painel de
+/// detalhes de uma lua ocupa a mesma região da tela (lado direito), então os dois nunca aparecem
+/// ao mesmo tempo.
+pub(crate) fn settings_panel_is_visible(panel_open: bool, moon_focused: bool) -> bool {
+    panel_open && !moon_focused
+}
+
+/// Se a opção do seletor de tela cheia está selecionada, dado o valor atual de
+/// `fullscreen_enabled`. "Não" é a opção inicial.
+pub(crate) fn fullscreen_option_is_selected(
+    option: FullscreenOption,
+    fullscreen_enabled: bool,
+) -> bool {
+    (option == FullscreenOption::Yes) == fullscreen_enabled
+}
+
+/// Fundo de uma opção do seletor: destacado se selecionada, transparente caso contrário.
+pub(crate) fn fullscreen_option_background(
+    option: FullscreenOption,
+    fullscreen_enabled: bool,
+) -> Color {
+    if fullscreen_option_is_selected(option, fullscreen_enabled) {
+        theme::SETTINGS_ACCENT
+    } else {
+        Color::NONE
+    }
+}
+
+/// Cor do texto de uma opção do seletor: escura sobre o fundo destacado, apagada caso contrário.
+pub(crate) fn fullscreen_option_text_color(
+    option: FullscreenOption,
+    fullscreen_enabled: bool,
+) -> Color {
+    if fullscreen_option_is_selected(option, fullscreen_enabled) {
+        theme::SETTINGS_PANEL_BACKGROUND
+    } else {
+        theme::SETTINGS_TEXT_SECONDARY
+    }
+}
+
+/// Fundo da linha "Configurar controles": destacado em hover e pressionado, transparente em
+/// repouso.
+pub(crate) fn configure_controls_row_background(interaction: Interaction) -> Color {
+    match interaction {
+        Interaction::Hovered | Interaction::Pressed => theme::SETTINGS_CARD_HOVER_BACKGROUND,
+        Interaction::None => theme::SETTINGS_CARD_BACKGROUND,
+    }
+}
+
+/// Cor da borda da engrenagem: destacada com o painel aberto ou o cursor sobre ela.
+pub(crate) fn settings_gear_border(interaction: Interaction, panel_open: bool) -> Color {
+    if panel_open || interaction != Interaction::None {
+        theme::SETTINGS_GEAR_BORDER_ACTIVE
+    } else {
+        theme::SETTINGS_GEAR_BORDER
+    }
+}
+
+/// Ângulo do ícone da engrenagem: gira ao abrir o painel.
+pub(crate) fn settings_gear_rotation_degrees(panel_open: bool) -> f32 {
+    if panel_open { 60.0 } else { 0.0 }
+}
+
+/// Mostra ou esconde o painel de configurações conforme `SettingsState` e a lua em foco.
+pub(crate) fn toggle_settings_panel_visibility(
+    settings: Res<SettingsState>,
+    selection: Res<MenuSelection>,
+    mut panel: Query<&mut Visibility, With<SettingsPanel>>,
+) {
+    if !settings.is_changed() && !selection.is_changed() {
+        return;
+    }
+    let Ok(mut visibility) = panel.single_mut() else {
+        return;
+    };
+    *visibility = if settings_panel_is_visible(settings.panel_open, selection.focused.is_some()) {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+}
+
+/// Atualiza o fundo e a cor do texto de cada opção do seletor de tela cheia conforme
+/// `SettingsState`. As opções (botão) e seus textos são entidades separadas, ambas marcadas com o
+/// mesmo `FullscreenOption`, então duas queries bastam, sem precisar navegar a hierarquia.
+pub(crate) fn sync_fullscreen_selector(
+    settings: Res<SettingsState>,
+    mut options: Query<(&FullscreenOption, &mut BackgroundColor), With<Button>>,
+    mut labels: Query<(&FullscreenOption, &mut TextColor)>,
+) {
+    if !settings.is_changed() {
+        return;
+    }
+    for (option, mut background) in &mut options {
+        background.0 = fullscreen_option_background(*option, settings.fullscreen_enabled);
+    }
+    for (option, mut color) in &mut labels {
+        color.0 = fullscreen_option_text_color(*option, settings.fullscreen_enabled);
+    }
+}
+
+/// Destaca o fundo da linha "Configurar controles" em hover e ao pressionar.
+#[allow(clippy::type_complexity)]
+pub(crate) fn style_configure_controls_row(
+    mut rows: Query<
+        (&Interaction, &mut BackgroundColor),
+        (With<ConfigureControlsRow>, Changed<Interaction>),
+    >,
+) {
+    for (interaction, mut background) in &mut rows {
+        background.0 = configure_controls_row_background(*interaction);
+    }
+}
+
+/// Atualiza a borda e a rotação da engrenagem conforme a interação e `SettingsState::panel_open`.
+/// Roda a cada quadro (é uma única entidade pequena): fechar o painel pelo X, por exemplo, muda
+/// `panel_open` sem mudar a interação da própria engrenagem, então não dá para depender só de
+/// `Changed<Interaction>`.
+pub(crate) fn style_settings_gear(
+    settings: Res<SettingsState>,
+    mut gear: Query<(&Interaction, &mut BorderColor), With<SettingsGearButton>>,
+    mut icon: Query<&mut UiTransform, With<SettingsGearIcon>>,
+) {
+    if let Ok((interaction, mut border)) = gear.single_mut() {
+        *border = BorderColor::all(settings_gear_border(*interaction, settings.panel_open));
+    }
+    if let Ok(mut transform) = icon.single_mut() {
+        transform.rotation = Rot2::degrees(settings_gear_rotation_degrees(settings.panel_open));
     }
 }
 
@@ -269,5 +404,87 @@ mod tests {
             toast_message(MoonId::Ganymede),
             "Exploração de Ganimedes ainda não implementada"
         );
+    }
+
+    /// Testa que o painel de configurações abre e fecha pela engrenagem (`panel_open`), e que
+    /// nunca fica visível com uma lua em foco, mesmo que esteja aberto.
+    #[test]
+    fn settings_panel_opens_and_closes_with_the_gear_and_never_over_the_detail_panel() {
+        assert!(!settings_panel_is_visible(false, false));
+        assert!(settings_panel_is_visible(true, false));
+        assert!(!settings_panel_is_visible(true, true));
+    }
+
+    /// Testa que o seletor de tela cheia começa em "Não" e troca de opção selecionada conforme
+    /// `fullscreen_enabled`.
+    #[test]
+    fn fullscreen_selector_starts_on_no_and_flips_with_the_value() {
+        assert!(fullscreen_option_is_selected(FullscreenOption::No, false));
+        assert!(!fullscreen_option_is_selected(FullscreenOption::Yes, false));
+        assert!(fullscreen_option_is_selected(FullscreenOption::Yes, true));
+        assert!(!fullscreen_option_is_selected(FullscreenOption::No, true));
+    }
+
+    /// Testa que só a opção selecionada do seletor fica com o fundo e o texto destacados.
+    #[test]
+    fn fullscreen_selected_option_uses_the_highlighted_colors() {
+        assert_eq!(
+            fullscreen_option_background(FullscreenOption::No, false),
+            theme::SETTINGS_ACCENT
+        );
+        assert_eq!(
+            fullscreen_option_background(FullscreenOption::Yes, false),
+            Color::NONE
+        );
+        assert_eq!(
+            fullscreen_option_text_color(FullscreenOption::No, false),
+            theme::SETTINGS_PANEL_BACKGROUND
+        );
+        assert_eq!(
+            fullscreen_option_text_color(FullscreenOption::Yes, false),
+            theme::SETTINGS_TEXT_SECONDARY
+        );
+    }
+
+    /// Testa que a linha "Configurar controles" só destaca o fundo em hover e ao pressionar.
+    #[test]
+    fn configure_controls_row_highlights_on_hover_and_press() {
+        assert_eq!(
+            configure_controls_row_background(Interaction::None),
+            theme::SETTINGS_CARD_BACKGROUND
+        );
+        assert_eq!(
+            configure_controls_row_background(Interaction::Hovered),
+            theme::SETTINGS_CARD_HOVER_BACKGROUND
+        );
+        assert_eq!(
+            configure_controls_row_background(Interaction::Pressed),
+            theme::SETTINGS_CARD_HOVER_BACKGROUND
+        );
+    }
+
+    /// Testa que a borda da engrenagem destaca com hover ou com o painel aberto, mesmo sem hover.
+    #[test]
+    fn settings_gear_border_activates_on_hover_or_open_panel() {
+        assert_eq!(
+            settings_gear_border(Interaction::None, false),
+            theme::SETTINGS_GEAR_BORDER
+        );
+        assert_eq!(
+            settings_gear_border(Interaction::Hovered, false),
+            theme::SETTINGS_GEAR_BORDER_ACTIVE
+        );
+        assert_eq!(
+            settings_gear_border(Interaction::None, true),
+            theme::SETTINGS_GEAR_BORDER_ACTIVE
+        );
+    }
+
+    /// Testa que o ícone da engrenagem gira 60 graus quando o painel abre, e volta a 0 quando
+    /// fecha.
+    #[test]
+    fn settings_gear_icon_rotates_sixty_degrees_when_the_panel_opens() {
+        assert_eq!(settings_gear_rotation_degrees(false), 0.0);
+        assert_eq!(settings_gear_rotation_degrees(true), 60.0);
     }
 }

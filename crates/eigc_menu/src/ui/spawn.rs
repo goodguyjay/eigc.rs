@@ -2,17 +2,23 @@
 //! de carregamento.
 
 use super::components::{
-    ButtonKind, DetailPanel, MoonLabel, MoonLabelName, OverviewUi, PanelField, ToastRoot, ToastText,
+    ButtonKind, ConfigureControlsRow, DetailPanel, FullscreenOption, MoonLabel, MoonLabelName,
+    OverviewUi, PanelField, SettingsGearButton, SettingsGearIcon, SettingsPanel, ToastRoot,
+    ToastText,
 };
 use super::update::panel_right_target;
 use crate::interaction::{MenuSelection, on_back_clicked, on_explore_clicked};
 use crate::moon_stats::{STAT_LABELS, stat_values};
+use crate::settings::{
+    on_close_settings_panel_clicked, on_fullscreen_option_clicked, on_settings_button_clicked,
+};
 use crate::theme::{self, MenuFonts};
 use bevy::asset::Handle;
 use bevy::prelude::{
     AlignItems, AssetServer, BackgroundColor, BorderColor, BorderRadius, BoxShadow, Bundle, Button,
-    ChildSpawnerCommands, Color, Commands, FlexDirection, GlobalZIndex, JustifyContent, Name, Node,
-    Pickable, PositionType, Res, Text, TextColor, UiRect, Val, Visibility, default,
+    ChildSpawnerCommands, Color, Commands, FlexDirection, GlobalZIndex, ImageNode, JustifyContent,
+    Name, Node, Overflow, Pickable, PositionType, Res, Text, TextColor, UiRect, UiTransform, Val,
+    Visibility, default,
 };
 use bevy::state::state_scoped::DespawnOnEnter;
 use bevy::text::{Font, Justify, TextFont, TextLayout};
@@ -66,6 +72,7 @@ pub(crate) fn spawn_menu_ui(mut commands: Commands, asset_server: Res<AssetServe
             }
             spawn_detail_panel(root, &fonts);
             spawn_toast(root, &fonts);
+            spawn_settings_button(root, &fonts, &asset_server);
         });
 }
 
@@ -220,7 +227,7 @@ fn spawn_detail_panel(root: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
                 PanelField::Tagline,
                 text_bundle(placeholder.tagline, &fonts.medium, 18.0, theme::ACCENT),
             ));
-            spawn_divider(panel);
+            spawn_divider(panel, theme::BORDER_SUBTLE);
             panel.spawn((
                 PanelField::Summary,
                 text_bundle(
@@ -230,7 +237,7 @@ fn spawn_detail_panel(root: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
                     theme::TEXT_SECONDARY,
                 ),
             ));
-            spawn_divider(panel);
+            spawn_divider(panel, theme::BORDER_SUBTLE);
             for (index, label) in STAT_LABELS.iter().enumerate() {
                 spawn_stat_row(panel, fonts, index, label, &placeholder_stats[index]);
             }
@@ -239,15 +246,15 @@ fn spawn_detail_panel(root: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
     });
 }
 
-/// Linha horizontal fina que separa seções do painel.
-fn spawn_divider(panel: &mut ChildSpawnerCommands) {
+/// Linha horizontal fina que separa seções de um painel.
+fn spawn_divider(panel: &mut ChildSpawnerCommands, color: Color) {
     panel.spawn((
         Node {
             height: Val::Px(1.0),
             width: Val::Percent(100.0),
             ..default()
         },
-        BackgroundColor(theme::BORDER_SUBTLE),
+        BackgroundColor(color),
         Pickable::IGNORE,
     ));
 }
@@ -384,6 +391,351 @@ fn spawn_toast(root: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
                 ));
             });
     });
+}
+
+/// Botão de engrenagem (canto superior direito) e o painel que ele abre e fecha. Leva
+/// `OverviewUi`, então some junto com o título e os rótulos quando uma lua entra em foco, o que
+/// evita o painel de configurações aparecer por cima do painel de detalhes.
+fn spawn_settings_button(
+    root: &mut ChildSpawnerCommands,
+    fonts: &MenuFonts,
+    asset_server: &AssetServer,
+) {
+    root.spawn((
+        Name::new("SettingsButton"),
+        OverviewUi,
+        SettingsGearButton,
+        Button,
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(theme::SETTINGS_BUTTON_MARGIN),
+            right: Val::Px(theme::SETTINGS_BUTTON_MARGIN),
+            width: Val::Px(theme::SETTINGS_BUTTON_SIZE),
+            height: Val::Px(theme::SETTINGS_BUTTON_SIZE),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(1.0)),
+            border_radius: BorderRadius::MAX,
+            ..default()
+        },
+        BackgroundColor(theme::SETTINGS_GEAR_BACKGROUND),
+        BorderColor::all(theme::SETTINGS_GEAR_BORDER),
+    ))
+    .observe(on_settings_button_clicked)
+    .with_children(|button| {
+        button.spawn((
+            SettingsGearIcon,
+            ImageNode {
+                image: asset_server.load("icons/settings-gear.png"),
+                color: theme::SETTINGS_TEXT_PRIMARY,
+                ..default()
+            },
+            Node {
+                width: Val::Px(20.0),
+                height: Val::Px(20.0),
+                ..default()
+            },
+            UiTransform::default(),
+            Pickable::IGNORE,
+        ));
+    });
+
+    spawn_settings_panel(root, fonts, asset_server);
+}
+
+/// Painel de configurações: cabeçalho com título e X, os cards de "Tela cheia" (seletor "Não"/"Sim",
+/// só visual) e "Configurar controles" (ainda sem ação), e o rodapé. Nasce oculto; aparece e some
+/// conforme `SettingsState`. Leva `OverviewUi` pelo mesmo motivo do botão de engrenagem.
+fn spawn_settings_panel(
+    root: &mut ChildSpawnerCommands,
+    fonts: &MenuFonts,
+    asset_server: &AssetServer,
+) {
+    root.spawn((
+        Name::new("SettingsPanel"),
+        SettingsPanel,
+        OverviewUi,
+        Visibility::Hidden,
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(theme::SETTINGS_BUTTON_MARGIN + theme::SETTINGS_BUTTON_SIZE + 12.0),
+            right: Val::Px(theme::SETTINGS_BUTTON_MARGIN),
+            width: Val::Px(theme::SETTINGS_PANEL_WIDTH),
+            flex_direction: FlexDirection::Column,
+            border: UiRect::all(Val::Px(1.0)),
+            border_radius: BorderRadius::all(Val::Px(theme::SETTINGS_PANEL_RADIUS)),
+            overflow: Overflow::clip(),
+            ..default()
+        },
+        BackgroundColor(theme::SETTINGS_PANEL_BACKGROUND),
+        BorderColor::all(theme::SETTINGS_PANEL_BORDER),
+    ))
+    .with_children(|panel| {
+        spawn_settings_header(panel, fonts, asset_server);
+        spawn_settings_cards(panel, fonts);
+    });
+}
+
+/// Largura em pixels da ilustração `jupiter_orbita.png` (fonte: `assets/icons/README.txt`).
+const JUPITER_ORBIT_IMAGE_WIDTH: f32 = 372.0;
+/// Altura em pixels da ilustração `jupiter_orbita.png`.
+const JUPITER_ORBIT_IMAGE_HEIGHT: f32 = 160.0;
+/// Largura exibida da ilustração: 64% da largura do painel, como pedido.
+const JUPITER_ORBIT_DISPLAY_WIDTH: f32 = theme::SETTINGS_PANEL_WIDTH * 0.64;
+/// Altura exibida, mantendo a proporção original da imagem. Também a altura do cabeçalho inteiro,
+/// para não sobrar espaço vazio abaixo da ilustração.
+const JUPITER_ORBIT_DISPLAY_HEIGHT: f32 =
+    JUPITER_ORBIT_DISPLAY_WIDTH * JUPITER_ORBIT_IMAGE_HEIGHT / JUPITER_ORBIT_IMAGE_WIDTH;
+
+/// Cabeçalho do painel de configurações: a ilustração de Júpiter colada no canto superior direito,
+/// sem participar do layout flexível (por isso `position_type: Absolute`, em vez de encolher ou
+/// esticar para caber), título e subtítulo por cima dela no canto superior esquerdo, e o X por cima
+/// de tudo no canto superior direito. A altura do cabeçalho é a própria altura da ilustração.
+fn spawn_settings_header(
+    panel: &mut ChildSpawnerCommands,
+    fonts: &MenuFonts,
+    asset_server: &AssetServer,
+) {
+    panel
+        .spawn((
+            Node {
+                height: Val::Px(JUPITER_ORBIT_DISPLAY_HEIGHT),
+                padding: UiRect::axes(Val::Px(theme::SETTINGS_ROW_PADDING_X), Val::Px(10.0)),
+                ..default()
+            },
+            Pickable::IGNORE,
+        ))
+        .with_children(|header| {
+            header.spawn((
+                ImageNode {
+                    image: asset_server.load("icons/jupiter_orbita.png"),
+                    ..default()
+                },
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(0.0),
+                    right: Val::Px(0.0),
+                    width: Val::Px(JUPITER_ORBIT_DISPLAY_WIDTH),
+                    height: Val::Px(JUPITER_ORBIT_DISPLAY_HEIGHT),
+                    ..default()
+                },
+                Pickable::IGNORE,
+            ));
+            header
+                .spawn((
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(2.0),
+                        ..default()
+                    },
+                    Pickable::IGNORE,
+                ))
+                .with_children(|column| {
+                    column.spawn(text_bundle(
+                        "Configurações",
+                        &fonts.bold,
+                        18.0,
+                        theme::SETTINGS_TEXT_PRIMARY,
+                    ));
+                    column.spawn(text_bundle(
+                        "Ajustes do app",
+                        &fonts.regular,
+                        12.0,
+                        theme::SETTINGS_TEXT_SECONDARY,
+                    ));
+                });
+            header
+                .spawn((
+                    Name::new("CloseSettingsButton"),
+                    Button,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        top: Val::Px(0.0),
+                        right: Val::Px(0.0),
+                        width: Val::Px(32.0),
+                        height: Val::Px(32.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::NONE),
+                ))
+                .observe(on_close_settings_panel_clicked)
+                .with_children(|close| {
+                    close.spawn(text_bundle(
+                        "×",
+                        &fonts.medium,
+                        22.0,
+                        theme::SETTINGS_TEXT_SECONDARY,
+                    ));
+                });
+        });
+}
+
+/// Espaçamento interno padrão de uma linha do painel de configurações.
+fn settings_row_padding() -> UiRect {
+    UiRect::axes(
+        Val::Px(theme::SETTINGS_ROW_PADDING_X),
+        Val::Px(theme::SETTINGS_ROW_PADDING_Y),
+    )
+}
+
+/// Título (14px) e descrição (12px, apagada) de duas linhas, usado nas linhas "Tela cheia" e
+/// "Configurar controles".
+fn spawn_row_text(
+    row: &mut ChildSpawnerCommands,
+    fonts: &MenuFonts,
+    title: &str,
+    description: &str,
+) {
+    row.spawn((
+        Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(4.0),
+            ..default()
+        },
+        Pickable::IGNORE,
+    ))
+    .with_children(|column| {
+        column.spawn(text_bundle(
+            title,
+            &fonts.medium,
+            14.0,
+            theme::SETTINGS_TEXT_PRIMARY,
+        ));
+        column.spawn(text_bundle(
+            description,
+            &fonts.regular,
+            12.0,
+            theme::SETTINGS_TEXT_SECONDARY,
+        ));
+    });
+}
+
+/// Contêiner dos dois cards de opção ("Tela cheia" e "Configurar controles"), com espaço entre eles,
+/// uma margem lateral para não colarem nas bordas do painel, e a mesma margem embaixo para o painel
+/// terminar logo depois do último card.
+fn spawn_settings_cards(panel: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
+    panel
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(10.0),
+                margin: UiRect::px(14.0, 14.0, 4.0, 14.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+        ))
+        .with_children(|cards| {
+            spawn_fullscreen_row(cards, fonts);
+            spawn_configure_controls_row(cards, fonts);
+        });
+}
+
+/// Card de fundo próprio para uma linha do painel de configurações: borda fina e cantos
+/// arredondados, iguais para os dois cards.
+fn settings_card_node() -> Node {
+    Node {
+        flex_direction: FlexDirection::Row,
+        justify_content: JustifyContent::SpaceBetween,
+        align_items: AlignItems::Center,
+        column_gap: Val::Px(12.0),
+        padding: settings_row_padding(),
+        border: UiRect::all(Val::Px(1.0)),
+        border_radius: BorderRadius::all(Val::Px(theme::SETTINGS_PANEL_RADIUS)),
+        ..default()
+    }
+}
+
+/// Card "Tela cheia": título e descrição à esquerda, seletor "Não"/"Sim" à direita.
+fn spawn_fullscreen_row(cards: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
+    cards
+        .spawn((
+            settings_card_node(),
+            BackgroundColor(theme::SETTINGS_CARD_BACKGROUND),
+            BorderColor::all(theme::SETTINGS_SELECTOR_BORDER),
+            Pickable::IGNORE,
+        ))
+        .with_children(|row| {
+            spawn_row_text(row, fonts, "Tela cheia", "Ocupar a tela inteira");
+            spawn_fullscreen_selector(row, fonts);
+        });
+}
+
+/// Seletor "Não"/"Sim" da linha "Tela cheia". Começa em "Não".
+fn spawn_fullscreen_selector(row: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
+    row.spawn((
+        Node {
+            flex_direction: FlexDirection::Row,
+            padding: UiRect::all(Val::Px(4.0)),
+            border: UiRect::all(Val::Px(1.0)),
+            border_radius: BorderRadius::all(Val::Px(theme::SETTINGS_SELECTOR_RADIUS)),
+            overflow: Overflow::clip(),
+            ..default()
+        },
+        BorderColor::all(theme::SETTINGS_SELECTOR_BORDER),
+    ))
+    .with_children(|selector| {
+        spawn_fullscreen_option(selector, fonts, FullscreenOption::No, "Não");
+        spawn_fullscreen_option(selector, fonts, FullscreenOption::Yes, "Sim");
+    });
+}
+
+/// Uma opção do seletor "Não"/"Sim". A cor inicial corresponde a `fullscreen_enabled == false`
+/// (começa em "Não"); `sync_fullscreen_selector` mantém isso atualizado depois.
+fn spawn_fullscreen_option(
+    selector: &mut ChildSpawnerCommands,
+    fonts: &MenuFonts,
+    option: FullscreenOption,
+    label: &str,
+) {
+    let selected = option == FullscreenOption::No;
+    let (background, text_color) = if selected {
+        (theme::SETTINGS_ACCENT, theme::SETTINGS_PANEL_BACKGROUND)
+    } else {
+        (Color::NONE, theme::SETTINGS_TEXT_SECONDARY)
+    };
+
+    selector
+        .spawn((
+            option,
+            Button,
+            Node {
+                padding: UiRect::axes(Val::Px(14.0), Val::Px(6.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border_radius: BorderRadius::all(Val::Px(theme::SETTINGS_SELECTOR_OPTION_RADIUS)),
+                ..default()
+            },
+            BackgroundColor(background),
+        ))
+        .observe(on_fullscreen_option_clicked(option))
+        .with_children(|button| {
+            button.spawn((option, text_bundle(label, &fonts.medium, 13.0, text_color)));
+        });
+}
+
+/// Card "Configurar controles": título e descrição à esquerda, chevron à direita. O card inteiro é
+/// clicável (sem ação por enquanto) e destaca o fundo em hover.
+fn spawn_configure_controls_row(cards: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
+    cards
+        .spawn((
+            Name::new("ConfigureControlsRow"),
+            ConfigureControlsRow,
+            Button,
+            settings_card_node(),
+            BackgroundColor(theme::SETTINGS_CARD_BACKGROUND),
+            BorderColor::all(theme::SETTINGS_SELECTOR_BORDER),
+        ))
+        .with_children(|row| {
+            spawn_row_text(row, fonts, "Configurar controles", "Teclado e mouse");
+            row.spawn(text_bundle(
+                ">",
+                &fonts.medium,
+                16.0,
+                theme::SETTINGS_TEXT_SECONDARY,
+            ));
+        });
 }
 
 /// Tela de carregamento exibida entre o clique em "Explorar" e o início da simulação.

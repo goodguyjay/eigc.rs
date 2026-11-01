@@ -4,9 +4,10 @@ mod components;
 mod spawn;
 mod update;
 
-pub(crate) use components::ToastState;
+pub(crate) use components::{FullscreenOption, ToastState};
 pub(crate) use spawn::{spawn_loading_overlay, spawn_menu_ui};
 pub(crate) use update::{
     highlight_labels, position_moon_labels, refresh_panel_content, slide_detail_panel,
-    style_buttons, update_overview_visibility, update_toast,
+    style_buttons, style_configure_controls_row, style_settings_gear, sync_fullscreen_selector,
+    toggle_settings_panel_visibility, update_overview_visibility, update_toast,
 };
