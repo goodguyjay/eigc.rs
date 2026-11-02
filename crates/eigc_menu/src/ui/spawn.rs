@@ -3,8 +3,9 @@
 
 use super::components::{
     ButtonKind, ConfigureControlsRow, DetailPanel, FullscreenOption, MoonLabel, MoonLabelName,
-    OverviewUi, PanelField, SettingsGearButton, SettingsGearIcon, SettingsPanel, ToastRoot,
-    ToastText,
+    OverviewUi, PanelField, SettingsFadeBackground, SettingsFadeBorder, SettingsFadeImage,
+    SettingsFadeText, SettingsGearButton, SettingsGearIcon, SettingsPanel, SettingsPanelFade,
+    ToastRoot, ToastText,
 };
 use super::update::panel_right_target;
 use crate::interaction::{MenuSelection, on_back_clicked, on_explore_clicked};
@@ -454,11 +455,14 @@ fn spawn_settings_panel(
     root.spawn((
         Name::new("SettingsPanel"),
         SettingsPanel,
+        SettingsPanelFade::default(),
+        SettingsFadeBackground(theme::SETTINGS_PANEL_BACKGROUND),
+        SettingsFadeBorder(theme::SETTINGS_PANEL_BORDER),
         OverviewUi,
         Visibility::Hidden,
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Px(theme::SETTINGS_BUTTON_MARGIN + theme::SETTINGS_BUTTON_SIZE + 12.0),
+            top: Val::Px(theme::SETTINGS_PANEL_TOP),
             right: Val::Px(theme::SETTINGS_BUTTON_MARGIN),
             width: Val::Px(theme::SETTINGS_PANEL_WIDTH),
             flex_direction: FlexDirection::Column,
@@ -511,6 +515,7 @@ fn spawn_settings_header(
                     image: asset_server.load("icons/jupiter_orbita.png"),
                     ..default()
                 },
+                SettingsFadeImage(Color::WHITE),
                 Node {
                     position_type: PositionType::Absolute,
                     top: Val::Px(0.0),
@@ -531,17 +536,23 @@ fn spawn_settings_header(
                     Pickable::IGNORE,
                 ))
                 .with_children(|column| {
-                    column.spawn(text_bundle(
-                        "Configurações",
-                        &fonts.bold,
-                        18.0,
-                        theme::SETTINGS_TEXT_PRIMARY,
+                    column.spawn((
+                        text_bundle(
+                            "Configurações",
+                            &fonts.bold,
+                            18.0,
+                            theme::SETTINGS_TEXT_PRIMARY,
+                        ),
+                        SettingsFadeText(theme::SETTINGS_TEXT_PRIMARY),
                     ));
-                    column.spawn(text_bundle(
-                        "Ajustes do app",
-                        &fonts.regular,
-                        12.0,
-                        theme::SETTINGS_TEXT_SECONDARY,
+                    column.spawn((
+                        text_bundle(
+                            "Ajustes do app",
+                            &fonts.regular,
+                            12.0,
+                            theme::SETTINGS_TEXT_SECONDARY,
+                        ),
+                        SettingsFadeText(theme::SETTINGS_TEXT_SECONDARY),
                     ));
                 });
             header
@@ -562,11 +573,9 @@ fn spawn_settings_header(
                 ))
                 .observe(on_close_settings_panel_clicked)
                 .with_children(|close| {
-                    close.spawn(text_bundle(
-                        "×",
-                        &fonts.medium,
-                        22.0,
-                        theme::SETTINGS_TEXT_SECONDARY,
+                    close.spawn((
+                        text_bundle("×", &fonts.medium, 22.0, theme::SETTINGS_TEXT_SECONDARY),
+                        SettingsFadeText(theme::SETTINGS_TEXT_SECONDARY),
                     ));
                 });
         });
@@ -597,17 +606,18 @@ fn spawn_row_text(
         Pickable::IGNORE,
     ))
     .with_children(|column| {
-        column.spawn(text_bundle(
-            title,
-            &fonts.medium,
-            14.0,
-            theme::SETTINGS_TEXT_PRIMARY,
+        column.spawn((
+            text_bundle(title, &fonts.medium, 14.0, theme::SETTINGS_TEXT_PRIMARY),
+            SettingsFadeText(theme::SETTINGS_TEXT_PRIMARY),
         ));
-        column.spawn(text_bundle(
-            description,
-            &fonts.regular,
-            12.0,
-            theme::SETTINGS_TEXT_SECONDARY,
+        column.spawn((
+            text_bundle(
+                description,
+                &fonts.regular,
+                12.0,
+                theme::SETTINGS_TEXT_SECONDARY,
+            ),
+            SettingsFadeText(theme::SETTINGS_TEXT_SECONDARY),
         ));
     });
 }
@@ -654,6 +664,8 @@ fn spawn_fullscreen_row(cards: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
             settings_card_node(),
             BackgroundColor(theme::SETTINGS_CARD_BACKGROUND),
             BorderColor::all(theme::SETTINGS_SELECTOR_BORDER),
+            SettingsFadeBackground(theme::SETTINGS_CARD_BACKGROUND),
+            SettingsFadeBorder(theme::SETTINGS_SELECTOR_BORDER),
             Pickable::IGNORE,
         ))
         .with_children(|row| {
@@ -674,6 +686,7 @@ fn spawn_fullscreen_selector(row: &mut ChildSpawnerCommands, fonts: &MenuFonts) 
             ..default()
         },
         BorderColor::all(theme::SETTINGS_SELECTOR_BORDER),
+        SettingsFadeBorder(theme::SETTINGS_SELECTOR_BORDER),
     ))
     .with_children(|selector| {
         spawn_fullscreen_option(selector, fonts, FullscreenOption::No, "Não");
@@ -711,6 +724,9 @@ fn spawn_fullscreen_option(
         ))
         .observe(on_fullscreen_option_clicked(option))
         .with_children(|button| {
+            // Sem `SettingsFadeText`: a cor desse texto já é recalculada toda vez que a seleção
+            // muda (`sync_fullscreen_selector`), então a animação de abertura também recalcula a
+            // cor-alvo a cada frame em vez de depender de uma base fixa guardada no spawn.
             button.spawn((option, text_bundle(label, &fonts.medium, 13.0, text_color)));
         });
 }
@@ -726,14 +742,16 @@ fn spawn_configure_controls_row(cards: &mut ChildSpawnerCommands, fonts: &MenuFo
             settings_card_node(),
             BackgroundColor(theme::SETTINGS_CARD_BACKGROUND),
             BorderColor::all(theme::SETTINGS_SELECTOR_BORDER),
+            // Sem `SettingsFadeBackground`: o fundo deste card muda com o hover
+            // (`style_configure_controls_row`), então a animação recalcula a cor-alvo a cada
+            // frame em vez de depender de uma base fixa guardada no spawn.
+            SettingsFadeBorder(theme::SETTINGS_SELECTOR_BORDER),
         ))
         .with_children(|row| {
             spawn_row_text(row, fonts, "Configurar controles", "Teclado e mouse");
-            row.spawn(text_bundle(
-                ">",
-                &fonts.medium,
-                16.0,
-                theme::SETTINGS_TEXT_SECONDARY,
+            row.spawn((
+                text_bundle(">", &fonts.medium, 16.0, theme::SETTINGS_TEXT_SECONDARY),
+                SettingsFadeText(theme::SETTINGS_TEXT_SECONDARY),
             ));
         });
 }

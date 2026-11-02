@@ -1,6 +1,6 @@
 //! Componentes marcadores e estado dos nós de UI do menu.
 
-use bevy::prelude::{Component, Resource};
+use bevy::prelude::{Color, Component, Resource};
 use eigc_moons::MoonId;
 
 /// Marca os nós visíveis só na visão geral (título e subtítulo).
@@ -44,6 +44,38 @@ pub(crate) enum ButtonKind {
 /// Contêiner do painel de configurações, mostrado e escondido pela engrenagem.
 #[derive(Component, Debug)]
 pub(crate) struct SettingsPanel;
+
+/// Progresso da animação de abertura do painel de configurações (fade-in-down). Vive na própria
+/// entidade do painel; `was_visible` é o que permite detectar o instante em que ele volta a ficar
+/// visível, para reiniciar a animação do zero a cada abertura.
+#[derive(Component, Debug, Default)]
+pub(crate) struct SettingsPanelFade {
+    /// Segundos decorridos desde que o painel começou a abrir.
+    pub elapsed_secs: f32,
+    /// Se o painel estava visível no frame anterior.
+    pub was_visible: bool,
+}
+
+/// Cor de fundo final (antes da animação de abertura) de um elemento do painel de configurações.
+/// Guardada à parte para a animação nunca precisar ler `BackgroundColor` de volta, já que esse
+/// valor é o que ela mesma altera a cada frame.
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct SettingsFadeBackground(pub Color);
+
+/// Cor de borda final (antes da animação de abertura) de um elemento do painel de configurações,
+/// pelo mesmo motivo de `SettingsFadeBackground`.
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct SettingsFadeBorder(pub Color);
+
+/// Cor de texto final (antes da animação de abertura) de um elemento do painel de configurações,
+/// pelo mesmo motivo de `SettingsFadeBackground`.
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct SettingsFadeText(pub Color);
+
+/// Cor de tingimento final (antes da animação de abertura) da imagem do painel de configurações,
+/// pelo mesmo motivo de `SettingsFadeBackground`.
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct SettingsFadeImage(pub Color);
 
 /// Botão de engrenagem que abre e fecha o painel de configurações.
 #[derive(Component, Debug)]

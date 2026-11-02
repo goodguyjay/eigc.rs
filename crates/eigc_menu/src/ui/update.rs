@@ -3,8 +3,9 @@
 
 use super::components::{
     ButtonKind, ConfigureControlsRow, DetailPanel, FullscreenOption, MoonLabel, MoonLabelName,
-    OverviewUi, PanelField, SettingsGearButton, SettingsGearIcon, SettingsPanel, ToastRoot,
-    ToastState, ToastText,
+    OverviewUi, PanelField, SettingsFadeBackground, SettingsFadeBorder, SettingsFadeImage,
+    SettingsFadeText, SettingsGearButton, SettingsGearIcon, SettingsPanel, SettingsPanelFade,
+    ToastRoot, ToastState, ToastText,
 };
 use crate::explore::NotImplementedNotice;
 use crate::interaction::MenuSelection;
@@ -14,9 +15,9 @@ use crate::scene::MenuCamera;
 use crate::settings::SettingsState;
 use crate::theme;
 use bevy::prelude::{
-    BackgroundColor, BorderColor, Button, Camera, Changed, Color, DetectChanges, GlobalTransform,
-    Interaction, MessageReader, Node, Or, Query, Res, ResMut, Rot2, Single, Text, TextColor, Time,
-    UiTransform, Val, Visibility, With,
+    Alpha, BackgroundColor, BorderColor, Button, Camera, Changed, Color, DetectChanges,
+    GlobalTransform, ImageNode, Interaction, MessageReader, Node, Or, Query, Res, ResMut, Rot2,
+    Single, Text, TextColor, Time, UiTransform, Val, Visibility, With, Without,
 };
 use eigc_moons::{MoonId, MoonInfo, moon_info};
 
@@ -200,6 +201,43 @@ pub(crate) fn settings_panel_is_visible(panel_open: bool, moon_focused: bool) ->
     panel_open && !moon_focused
 }
 
+/// Curva de desaceleração (ease-out cúbica) da animação de abertura do painel de configurações:
+/// começa rápido e termina devagar.
+pub(crate) fn ease_out_cubic(t: f32) -> f32 {
+    1.0 - (1.0 - t).powi(3)
+}
+
+/// Progresso bruto (0 a 1, sem suavização) da animação de abertura, dado quanto tempo já passou
+/// desde que o painel começou a abrir.
+pub(crate) fn settings_panel_fade_progress(elapsed_secs: f32) -> f32 {
+    (elapsed_secs / theme::SETTINGS_PANEL_FADE_DURATION_SECS).clamp(0.0, 1.0)
+}
+
+/// Topo do painel de configurações durante a animação de abertura: começa
+/// `SETTINGS_PANEL_FADE_DISTANCE` pixels acima da posição final (`SETTINGS_PANEL_TOP`) e desce até
+/// ela conforme `eased_progress` (já suavizado pela curva de desaceleração) vai de 0 a 1.
+pub(crate) fn settings_panel_fade_top(eased_progress: f32) -> f32 {
+    theme::SETTINGS_PANEL_TOP - (1.0 - eased_progress) * theme::SETTINGS_PANEL_FADE_DISTANCE
+}
+
+/// Cor de um elemento do painel de configurações num ponto da animação de abertura: o alfa de
+/// `base` (a cor final, não a que já foi alterada em frames anteriores) multiplicado pelo
+/// progresso. Se `base` já é totalmente transparente (ex.: `Color::NONE`), o resultado continua
+/// transparente em qualquer ponto da animação, porque zero multiplicado por qualquer coisa é zero.
+pub(crate) fn settings_panel_fade_color(base: Color, progress: f32) -> Color {
+    base.with_alpha(base.alpha() * progress)
+}
+
+/// Progresso usado para o alfa da imagem do cabeçalho. Ela fica sobre o próprio fundo do painel,
+/// que também está em fade com a mesma curva; duas camadas translúcidas independentes com alfa `p`
+/// cada uma compõem visualmente para `1 - (1 - p)²`, não para `p`, então a região da imagem pareceria
+/// mais opaca, mais cedo, que o resto do painel (que tem só uma camada ali). Usar o progresso ao
+/// quadrado faz a imagem começar mais devagar, aproximando o resultado composto do restante do
+/// painel, e ainda chega a 1 junto com tudo o mais.
+pub(crate) fn settings_panel_fade_image_progress(progress: f32) -> f32 {
+    progress * progress
+}
+
 /// Se a opção do seletor de tela cheia está selecionada, dado o valor atual de
 /// `fullscreen_enabled`. "Não" é a opção inicial.
 pub(crate) fn fullscreen_option_is_selected(
@@ -273,6 +311,96 @@ pub(crate) fn toggle_settings_panel_visibility(
     } else {
         Visibility::Hidden
     };
+}
+
+/// Toca a animação de abertura do painel de configurações (fade-in-down): ele nasce transparente e
+/// deslocado para cima, e desliza até a posição final enquanto aparece. O painel é uma entidade
+/// única que só alterna de visibilidade (nunca é recriada), então reabrir sempre reinicia a
+/// animação do zero, e fechar continua instantâneo porque esta função não roda quando o painel não
+/// está visível.
+///
+/// A maioria dos elementos tem uma cor final fixa, guardada em `SettingsFadeBackground`/
+/// `SettingsFadeBorder`/`SettingsFadeText`/`SettingsFadeImage` no momento do spawn. Dois elementos
+/// têm cor dinâmica (muda por hover ou seleção, não só pela animação) e por isso são recalculados
+/// aqui a partir das mesmas funções puras que os sistemas de estilo usam, em vez de uma base fixa:
+/// o fundo da linha "Configurar controles" (`configure_controls_row_background`) e o fundo e o
+/// texto das opções do seletor "Não"/"Sim" (`fullscreen_option_background`/`_text_color`). A opção
+/// não selecionada do seletor fica de fora: seu fundo tem alfa zero de propósito, e
+/// `settings_panel_fade_color` já preserva isso (zero vezes qualquer progresso continua zero).
+///
+/// A imagem usa `settings_panel_fade_image_progress` em vez do progresso bruto: ver o comentário
+/// dessa função para o motivo (ela soma com o fundo do painel, que também está em fade).
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+pub(crate) fn animate_settings_panel_open(
+    time: Res<Time>,
+    settings: Res<SettingsState>,
+    selection: Res<MenuSelection>,
+    mut panel: Query<(&mut SettingsPanelFade, &mut Node), With<SettingsPanel>>,
+    mut fade_backgrounds: Query<(&SettingsFadeBackground, &mut BackgroundColor)>,
+    mut fade_borders: Query<(&SettingsFadeBorder, &mut BorderColor)>,
+    mut fade_texts: Query<(&SettingsFadeText, &mut TextColor)>,
+    mut fade_images: Query<(&SettingsFadeImage, &mut ImageNode)>,
+    mut configure_controls_background: Query<
+        (&Interaction, &mut BackgroundColor),
+        (
+            With<ConfigureControlsRow>,
+            Without<SettingsFadeBackground>,
+            Without<FullscreenOption>,
+        ),
+    >,
+    mut toggle_backgrounds: Query<
+        (&FullscreenOption, &mut BackgroundColor),
+        (
+            With<Button>,
+            Without<SettingsFadeBackground>,
+            Without<ConfigureControlsRow>,
+        ),
+    >,
+    mut toggle_texts: Query<(&FullscreenOption, &mut TextColor), Without<SettingsFadeText>>,
+) {
+    let Ok((mut fade, mut node)) = panel.single_mut() else {
+        return;
+    };
+
+    let visible = settings_panel_is_visible(settings.panel_open, selection.focused.is_some());
+    if !visible {
+        fade.was_visible = false;
+        return;
+    }
+    if !fade.was_visible {
+        fade.elapsed_secs = 0.0;
+        fade.was_visible = true;
+    }
+    fade.elapsed_secs += time.delta_secs();
+
+    let progress = ease_out_cubic(settings_panel_fade_progress(fade.elapsed_secs));
+    node.top = Val::Px(settings_panel_fade_top(progress));
+
+    for (base, mut background) in &mut fade_backgrounds {
+        background.0 = settings_panel_fade_color(base.0, progress);
+    }
+    for (base, mut border) in &mut fade_borders {
+        border.set_all(settings_panel_fade_color(base.0, progress));
+    }
+    for (base, mut color) in &mut fade_texts {
+        color.0 = settings_panel_fade_color(base.0, progress);
+    }
+    let image_progress = settings_panel_fade_image_progress(progress);
+    for (base, mut image) in &mut fade_images {
+        image.color = settings_panel_fade_color(base.0, image_progress);
+    }
+    for (interaction, mut background) in &mut configure_controls_background {
+        let target = configure_controls_row_background(*interaction);
+        background.0 = settings_panel_fade_color(target, progress);
+    }
+    for (option, mut background) in &mut toggle_backgrounds {
+        let target = fullscreen_option_background(*option, settings.fullscreen_enabled);
+        background.0 = settings_panel_fade_color(target, progress);
+    }
+    for (option, mut color) in &mut toggle_texts {
+        let target = fullscreen_option_text_color(*option, settings.fullscreen_enabled);
+        color.0 = settings_panel_fade_color(target, progress);
+    }
 }
 
 /// Atualiza o fundo e a cor do texto de cada opção do seletor de tela cheia conforme
@@ -486,5 +614,68 @@ mod tests {
     fn settings_gear_icon_rotates_sixty_degrees_when_the_panel_opens() {
         assert_eq!(settings_gear_rotation_degrees(false), 0.0);
         assert_eq!(settings_gear_rotation_degrees(true), 60.0);
+    }
+
+    /// Testa que a curva de desaceleração vai de 0 a 1 e sobe mais rápido no começo do que no
+    /// final (desacelera).
+    #[test]
+    fn ease_out_cubic_starts_fast_and_ends_slow() {
+        assert_eq!(ease_out_cubic(0.0), 0.0);
+        assert_eq!(ease_out_cubic(1.0), 1.0);
+        let first_half_gain = ease_out_cubic(0.5) - ease_out_cubic(0.0);
+        let second_half_gain = ease_out_cubic(1.0) - ease_out_cubic(0.5);
+        assert!(first_half_gain > second_half_gain);
+    }
+
+    /// Testa que o progresso da animação fica em 0 no início, sobe com o tempo e satura em 1 ao
+    /// atingir a duração configurada, sem ultrapassar.
+    #[test]
+    fn settings_panel_fade_progress_saturates_at_the_configured_duration() {
+        assert_eq!(settings_panel_fade_progress(0.0), 0.0);
+        assert!(settings_panel_fade_progress(theme::SETTINGS_PANEL_FADE_DURATION_SECS / 2.0) > 0.0);
+        assert_eq!(
+            settings_panel_fade_progress(theme::SETTINGS_PANEL_FADE_DURATION_SECS),
+            1.0
+        );
+        assert_eq!(
+            settings_panel_fade_progress(theme::SETTINGS_PANEL_FADE_DURATION_SECS * 10.0),
+            1.0
+        );
+    }
+
+    /// Testa que o painel começa deslocado acima da posição final e termina exatamente nela.
+    #[test]
+    fn settings_panel_fade_top_starts_above_and_ends_at_the_final_position() {
+        assert_eq!(
+            settings_panel_fade_top(0.0),
+            theme::SETTINGS_PANEL_TOP - theme::SETTINGS_PANEL_FADE_DISTANCE
+        );
+        assert_eq!(settings_panel_fade_top(1.0), theme::SETTINGS_PANEL_TOP);
+    }
+
+    /// Testa que uma cor já transparente (alfa 0, como `Color::NONE`) continua transparente em
+    /// qualquer ponto da animação, e que uma cor opaca (alfa 1) chega totalmente opaca ao final,
+    /// sem que a cor base precise ser lida de volta de um valor já alterado.
+    #[test]
+    fn settings_panel_fade_color_keeps_zero_alpha_transparent_and_reaches_full_alpha_at_the_end() {
+        assert_eq!(settings_panel_fade_color(Color::NONE, 0.0).alpha(), 0.0);
+        assert_eq!(settings_panel_fade_color(Color::NONE, 0.5).alpha(), 0.0);
+        assert_eq!(settings_panel_fade_color(Color::NONE, 1.0).alpha(), 0.0);
+
+        let opaque = theme::SETTINGS_TEXT_PRIMARY;
+        assert_eq!(settings_panel_fade_color(opaque, 0.0).alpha(), 0.0);
+        assert_eq!(settings_panel_fade_color(opaque, 0.5).alpha(), 0.5);
+        assert_eq!(settings_panel_fade_color(opaque, 1.0).alpha(), 1.0);
+    }
+
+    /// Testa que o progresso usado pela imagem cresce mais devagar que o progresso bruto (exceto
+    /// nas pontas, onde os dois coincidem), para compensar ela estar sobre o fundo do painel, que
+    /// também está em fade.
+    #[test]
+    fn settings_panel_fade_image_progress_grows_slower_than_raw_progress() {
+        assert_eq!(settings_panel_fade_image_progress(0.0), 0.0);
+        assert_eq!(settings_panel_fade_image_progress(1.0), 1.0);
+        assert!(settings_panel_fade_image_progress(0.5) < 0.5);
+        assert!(settings_panel_fade_image_progress(0.9) < 0.9);
     }
 }

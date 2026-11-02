@@ -71,6 +71,14 @@ pub(crate) const SETTINGS_SELECTOR_OPTION_RADIUS: f32 = 5.0;
 pub(crate) const SETTINGS_ROW_PADDING_X: f32 = 16.0;
 /// Espaçamento vertical interno de cada linha do painel de configurações.
 pub(crate) const SETTINGS_ROW_PADDING_Y: f32 = 14.0;
+/// Distância do topo do painel de configurações à borda superior da janela, na posição final
+/// (depois da animação de abertura).
+pub(crate) const SETTINGS_PANEL_TOP: f32 = SETTINGS_BUTTON_MARGIN + SETTINGS_BUTTON_SIZE + 12.0;
+/// Duração da animação de abertura do painel de configurações (fade-in-down), em segundos.
+pub(crate) const SETTINGS_PANEL_FADE_DURATION_SECS: f32 = 0.7;
+/// Distância, em pixels, que o painel percorre verticalmente ao abrir: começa esse tanto acima da
+/// posição final e desliza até ela.
+pub(crate) const SETTINGS_PANEL_FADE_DISTANCE: f32 = 32.0;
 
 /// Fundo do botão de engrenagem. Nunca muda, só a borda reage a hover/painel aberto.
 pub(crate) const SETTINGS_GEAR_BACKGROUND: Color = Color::srgb_u8(0x10, 0x14, 0x1d);
