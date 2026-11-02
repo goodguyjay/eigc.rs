@@ -231,6 +231,16 @@ não por teste unitário de função pura.
 - [ ] A tela de carregamento é estática. O terreno é construído em `OnEnter(Running)`, então a
   tela provavelmente congela por um instante na transição. Não medido; confirmar em teste
   visual antes de investir num indicador animado.
+- [ ] **Anti-tiling do terreno (`terrain_detail.wgsl`) só desloca, não gira, e não tem teste.**
+  As duas escalas passaram a ser amostradas no shader por hex tiling (3 amostras por textura,
+  offset aleatório por vértice de grade triangular). Limitações conscientes: (1) sem rotação por
+  célula, então o mesmo glifo aparece em lugares diferentes, sempre com a mesma orientação (girar o
+  normal map exigiria girar o xy da normal em espaço tangente); (2) nas zonas de transição há
+  mistura fantasma (duas cópias sobrepostas), controlada por `HEX_BLEND_SHARPNESS`; (3) o custo
+  é de até 6 amostras por textura onde as duas escalas se misturam (entre 4 m e 30 m); (4) a
+  lógica de grade/hash vive só no WGSL e foi validada só a olho, com o app rodando. `HEX_CELL_SCALE`
+  e `HEX_BLEND_SHARPNESS` são chutes calibráveis. O near passou a usar as imagens da extensão
+  (`macro_*`) e não as do `StandardMaterial`, então depende dos escalares neutros do material.
 
 ## Plataformas
 - Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS
