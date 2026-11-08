@@ -28,14 +28,24 @@ const EUROPA_HEIGHTMAP_RON: &str =
 /// `1.0` mantém a elevação medida no DTM.
 const VERTICAL_EXAGGERATION: f32 = 1.0;
 
-/// Amplitude da rugosidade fina procedural somada por cima do DTM, em metros. É a única parte
-/// sintética do relevo: nenhuma fonte real cobre a escala de passo humano. A calibrar.
-const DETAIL_AMPLITUDE_M: f32 = 1.5;
+/// Comprimento de onda da primeira oitava do detalhe sintético, em metros: 1 pixel do DTM. A
+/// rugosidade do DTM já segue a lei de potência abaixo até ~190 m de distância; começar o detalhe
+/// em escalas maiores somaria rugosidade que o DTM já tem.
+const DETAIL_BASE_WAVELENGTH_M: f32 = 227.65;
 
-/// Quantas vezes a frequência base do perfil é multiplicada para a rugosidade fina (comprimento
-/// de onda de ~60 m com `base_frequency` de 1/600 m), de modo que o ruído fique acima do
-/// espaçamento de ~10,7 m do nível 0 de LOD.
-const DETAIL_FREQUENCY_FACTOR: f32 = 10.0;
+/// Oitavas do detalhe sintético: de ~228 m a ~28 m de comprimento de onda. Abaixo disso o nível 0
+/// da malha (~10,7 m entre vértices) não amostra o suficiente para representar a feição.
+const DETAIL_OCTAVES: u32 = 4;
+
+/// Expoente de Hurst da rugosidade do DTM: a diferença rms de altura entre dois pontos cresce com
+/// a distância elevada a `H`. Medido no recorte de Rhadamanthys (ajuste entre 1 e 12 pixels de
+/// distância, `H` entre 0,85 e 0,89), ver `tools/dtm_roughness.py`.
+const DTM_HURST_EXPONENT: f32 = 0.85;
+
+/// Amplitude do detalhe sintético (soma normalizada das oitavas), em metros. Calibrada para que
+/// a rugosidade total (DTM + detalhe) siga a lei de potência medida do DTM (ver o teste
+/// `fine_detail_continues_the_dtm_roughness_power_law`).
+const DETAIL_AMPLITUDE_M: f32 = 10.0;
 
 /// Distância, em metros, entre as amostras usadas para estimar a inclinação do DTM na cor.
 /// Da ordem de meio pixel do DTM (227,65 m).
@@ -129,14 +139,7 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         scale: terrain_params.vertical_exaggeration,
     };
 
-    let fine_detail = PerlinFbm {
-        perlin: Perlin::new(seed),
-        freq: base_frequency * DETAIL_FREQUENCY_FACTOR,
-        octaves: 3,
-        lacunarity: 2.0,
-        gain: 0.5,
-        amplitude: DETAIL_AMPLITUDE_M,
-    };
+    let fine_detail = europa_fine_detail(seed);
 
     let hybrid_terrain = Add2 {
         a: real_relief,
@@ -207,7 +210,87 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
     }
 }
 
+/// Detalhe sintético que estende o espectro de rugosidade do DTM para as escalas menores que 2
+/// pixels. Cada oitava tem metade do comprimento de onda e `2^-H` da amplitude da anterior, a
+/// mesma lei de potência medida no DTM.
+fn europa_fine_detail(seed: u32) -> PerlinFbm {
+    PerlinFbm {
+        perlin: Perlin::new(seed),
+        freq: 1.0 / DETAIL_BASE_WAVELENGTH_M,
+        octaves: DETAIL_OCTAVES,
+        lacunarity: 2.0,
+        gain: 2.0_f32.powf(-DTM_HURST_EXPONENT),
+        amplitude: DETAIL_AMPLITUDE_M,
+    }
+}
+
 /// Converte um array [r, g, b, a] em componentes lineares (formato salvo no .ron) para o tipo Color do bevy
 fn color_from_linear_rgba(components: [f32; 4]) -> Color {
     Color::srgba(components[0], components[1], components[2], components[3])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Diferença rms de altura do DTM entre pontos a 1 pixel (227,65 m) de distância, em metros
+    /// (13,0 medido direto, 13,6 pelo ajuste da lei de potência; fica no meio).
+    const DTM_ROUGHNESS_AT_PIXEL_M: f32 = 13.2;
+
+    /// Distância correspondente a 1 pixel do DTM, em metros.
+    const DTM_PIXEL_M: f32 = 227.65;
+
+    fn dtm() -> HeightmapHeight {
+        HeightmapHeight::from_png_and_ron(EUROPA_HEIGHTMAP_PNG, EUROPA_HEIGHTMAP_RON)
+            .expect("o heightmap de Europa embutido deveria ser valido")
+    }
+
+    /// Diferença rms de altura entre pontos separados por `lag_m`, nos eixos x e z, numa grade
+    /// que evita a borda do recorte.
+    fn rms_difference(source: &dyn HeightSource, lag_m: f32) -> f32 {
+        let (mut sum, mut count) = (0.0_f64, 0_u32);
+        for i in 0..120 {
+            for j in 0..120 {
+                let x = -8000.0 + i as f32 * 131.7;
+                let z = -8000.0 + j as f32 * 129.3;
+                let h = source.height_at(x, z);
+                for other in [
+                    source.height_at(x + lag_m, z),
+                    source.height_at(x, z + lag_m),
+                ] {
+                    sum += f64::from(other - h).powi(2);
+                    count += 1;
+                }
+            }
+        }
+        (sum / f64::from(count)).sqrt() as f32
+    }
+
+    struct Hybrid(HeightmapHeight, PerlinFbm);
+    impl HeightSource for Hybrid {
+        fn height_at(&self, x: f32, z: f32) -> f32 {
+            self.0.height_at(x, z) + self.1.height_at(x, z)
+        }
+    }
+
+    /// Testa que o detalhe sintético continua a lei de potência de rugosidade do DTM: entre 24 m e
+    /// 192 m a diferença rms de altura total fica a até 15% da extrapolada de `H` e da rugosidade
+    /// a 1 pixel, e o DTM sozinho fica claramente abaixo dela nas distâncias curtas (é o detalhe
+    /// que preenche a lacuna).
+    #[test]
+    fn fine_detail_continues_the_dtm_roughness_power_law() {
+        let dtm_only = dtm();
+        let hybrid = Hybrid(dtm(), europa_fine_detail(204));
+
+        for lag_m in [24.0_f32, 48.0, 96.0, 192.0] {
+            let target = DTM_ROUGHNESS_AT_PIXEL_M * (lag_m / DTM_PIXEL_M).powf(DTM_HURST_EXPONENT);
+            let total = rms_difference(&hybrid, lag_m);
+            assert!(
+                (total / target - 1.0).abs() < 0.15,
+                "a {lag_m} m: rms {total}, alvo {target}"
+            );
+        }
+
+        assert!(rms_difference(&dtm_only, 24.0) < 0.85 * rms_difference(&hybrid, 24.0));
+    }
 }

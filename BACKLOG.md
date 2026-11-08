@@ -231,16 +231,21 @@ não por teste unitário de função pura.
 - [ ] A tela de carregamento é estática. O terreno é construído em `OnEnter(Running)`, então a
   tela provavelmente congela por um instante na transição. Não medido; confirmar em teste
   visual antes de investir num indicador animado.
-- [ ] **Anti-tiling do terreno (`terrain_detail.wgsl`) só desloca, não gira, e não tem teste.**
-  As duas escalas passaram a ser amostradas no shader por hex tiling (3 amostras por textura,
-  offset aleatório por vértice de grade triangular). Limitações conscientes: (1) sem rotação por
-  célula, então o mesmo glifo aparece em lugares diferentes, sempre com a mesma orientação (girar o
-  normal map exigiria girar o xy da normal em espaço tangente); (2) nas zonas de transição há
-  mistura fantasma (duas cópias sobrepostas), controlada por `HEX_BLEND_SHARPNESS`; (3) o custo
-  é de até 6 amostras por textura onde as duas escalas se misturam (entre 4 m e 30 m); (4) a
-  lógica de grade/hash vive só no WGSL e foi validada só a olho, com o app rodando. `HEX_CELL_SCALE`
-  e `HEX_BLEND_SHARPNESS` são chutes calibráveis. O near passou a usar as imagens da extensão
-  (`macro_*`) e não as do `StandardMaterial`, então depende dos escalares neutros do material.
+- [ ] **Anti-tiling do terreno (`terrain_detail.wgsl`) não tem teste e depende da textura.**
+  As duas escalas são amostradas no shader por hex tiling (3 amostras por textura, offset e rotação
+  aleatórios por vértice de grade triangular). Só deslocar não bastava: o `snow_02` tem fileiras de
+  marcas dentro do tile, que apareciam alinhadas entre as cópias; a rotação por vértice resolveu. Pontos
+  conscientes: (1) o normal map do `snow_02` tem inclinação média de ~9 graus (xy médio 0,152 /
+  0,154), que girada por célula virava manchas grandes e chiado no horizonte; o shader subtrai essa
+  média (`NORMAL_MAP_MEAN_XY`, medida offline) antes de girar, e a inclinação do terreno passa a vir
+  só da malha. Trocar a textura exige remedir a constante; (2) nas zonas de transição há mistura
+  fantasma, controlada por `HEX_BLEND_SHARPNESS` (3 e 6 ficaram indistinguíveis nos testes); (3) o
+  custo é de até 6 amostras por textura onde as duas escalas se misturam (entre 4 m e 30 m); (4) a
+  lógica de grade/hash/rotação vive só no WGSL e foi validada só a olho, com o app rodando; (5) o
+  sentido da rotação do xy da normal foi escolhido por derivação e conferido visualmente, sem
+  teste. `HEX_CELL_SCALE` e `HEX_BLEND_SHARPNESS` são chutes calibráveis. As duas escalas usam as
+  imagens da extensão (`macro_*`) e não as do `StandardMaterial`, então dependem dos escalares
+  neutros do material.
 
 ## Plataformas
 - Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS
