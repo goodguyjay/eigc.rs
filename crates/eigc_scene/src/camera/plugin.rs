@@ -17,6 +17,8 @@ use bevy::prelude::{
     Plugin, Projection, ResMut, Single, Transform, Update, Vec3, With, default, in_state,
     resource_exists,
 };
+#[cfg(feature = "dev")]
+use bevy::prelude::{Res, Resource};
 use bevy::window::{CursorGrabMode, CursorOptions};
 use eigc_common::lod_focus::{LodFocus, screen_scale_from_fov};
 use eigc_moons::AppState;
@@ -69,13 +71,35 @@ const SPAWN_POSITION: Vec3 = Vec3::new(0.0, 0.3, 0.0);
 /// (~6 graus).
 const SPAWN_LOOK_TARGET: Vec3 = Vec3::new(0.0, -6.0, -60.0);
 
+/// Posição de spawn da câmera forçada por quem monta o app (flag de debug `--spawn`). Só existe
+/// com a feature `dev`. Quando presente, a câmera nasce em voo livre: em primeira pessoa o `y`
+/// seria sobrescrito no primeiro quadro por `follow_ground`.
+#[cfg(feature = "dev")]
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct DebugSpawnPosition(pub Vec3);
+
 /// Spawna a câmera com projeção perspectiva e captura o cursor imediatamente. Roda em
 /// `OnEnter(Running)`, para que o cursor fique livre enquanto o menu está aberto.
 ///
 /// A entidade carrega os parâmetros dos dois modos de movimento; quem decide qual vale é
 /// [`MovementMode`].
-fn spawn_camera(mut commands: Commands, mut cursor_options: Single<&mut CursorOptions>) {
-    let mut transform = Transform::from_translation(SPAWN_POSITION);
+fn spawn_camera(
+    mut commands: Commands,
+    mut cursor_options: Single<&mut CursorOptions>,
+    #[cfg(feature = "dev")] debug_spawn: Option<Res<DebugSpawnPosition>>,
+    #[cfg(feature = "dev")] mut movement_mode: ResMut<MovementMode>,
+) {
+    let position = SPAWN_POSITION;
+    #[cfg(feature = "dev")]
+    let position = match debug_spawn {
+        Some(debug_spawn) => {
+            *movement_mode = MovementMode::FreeFly;
+            debug_spawn.0
+        }
+        None => position,
+    };
+
+    let mut transform = Transform::from_translation(position);
     transform.look_at(SPAWN_LOOK_TARGET, Vec3::Y);
     let (yaw, pitch, _roll) = transform.rotation.to_euler(EulerRot::YXZ);
 
