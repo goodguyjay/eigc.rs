@@ -7,7 +7,9 @@
 //
 // As duas escalas são amostradas aqui, e não pelo StandardMaterial, para poderem quebrar a
 // repetição: cada amostra é a mistura de três cópias da textura deslocadas por um offset
-// aleatório por vértice de uma grade triangular (Mikkelsen, "Practical Real-Time Hex-Tiling").
+// aleatório e uma rotação aleatória por vértice de uma grade triangular (Mikkelsen, "Practical
+// Real-Time Hex-Tiling"). A rotação é o que quebra o alinhamento de feições regulares dentro do
+// tile (fileiras de marcas), que o deslocamento sozinho preserva.
 // Isso depende de os escalares do StandardMaterial estarem neutros (branco, roughness 1.0), o que
 // `terrain_material_neutral_scalars` garante.
 
@@ -42,13 +44,16 @@ const HEX_CELL_SCALE: f32 = 1.0;
 // curtas (menos ghosting, emenda mais visível); 1.0 seria a mistura linear.
 const HEX_BLEND_SHARPNESS: f32 = 6.0;
 
-// Três offsets de UV aleatórios (um por vértice do triângulo que contém o ponto) e os pesos
-// de mistura correspondentes.
+// Offsets e rotações de UV aleatórios (um de cada por vértice do triângulo que contém o ponto) e
+// os pesos de mistura correspondentes. A rotação é guardada como (cos, sin).
 struct HexTile {
     weights: vec3<f32>,
     offset_a: vec2<f32>,
     offset_b: vec2<f32>,
     offset_c: vec2<f32>,
+    rotation_a: vec2<f32>,
+    rotation_b: vec2<f32>,
+    rotation_c: vec2<f32>,
 }
 
 // Hash PCG de 2 componentes sobre coordenadas inteiras, devolve dois valores em [0, 1].
@@ -62,6 +67,20 @@ fn hash_cell(cell: vec2<i32>) -> vec2<f32> {
     v.y += v.x * 1664525u;
     v = v ^ (v >> vec2<u32>(16u));
     return vec2<f32>(v) * (1.0 / 4294967295.0);
+}
+
+// Rotação aleatória do vértice, como (cos, sin). Usa uma célula deslocada para não correlacionar
+// o ângulo com o offset.
+fn hash_rotation(cell: vec2<i32>) -> vec2<f32> {
+    let angle = hash_cell(cell + vec2<i32>(7919, 104729)).x * 6.2831853;
+    return vec2<f32>(cos(angle), sin(angle));
+}
+
+fn rotate(v: vec2<f32>, cos_sin: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(
+        cos_sin.x * v.x - cos_sin.y * v.y,
+        cos_sin.y * v.x + cos_sin.x * v.y,
+    );
 }
 
 fn hex_tile(uv: vec2<f32>) -> HexTile {
@@ -81,16 +100,60 @@ fn hex_tile(uv: vec2<f32>) -> HexTile {
     weights = pow(max(weights, vec3<f32>(0.0)), vec3<f32>(HEX_BLEND_SHARPNESS));
     weights = weights / (weights.x + weights.y + weights.z);
 
+    let vertex_a = base_id + vec2<i32>(si, si);
+    let vertex_b = base_id + vec2<i32>(si, 1 - si);
+    let vertex_c = base_id + vec2<i32>(1 - si, si);
     return HexTile(
         weights,
-        hash_cell(base_id + vec2<i32>(si, si)),
-        hash_cell(base_id + vec2<i32>(si, 1 - si)),
-        hash_cell(base_id + vec2<i32>(1 - si, si)),
+        hash_cell(vertex_a),
+        hash_cell(vertex_b),
+        hash_cell(vertex_c),
+        hash_rotation(vertex_a),
+        hash_rotation(vertex_b),
+        hash_rotation(vertex_c),
     );
 }
 
-// Amostra a textura nos três offsets do `tile` e mistura. Usa gradiente explícito (o da UV sem
-// offset) para o mip não saltar nas emendas entre triângulos.
+// Amostra a textura no vértice de offset/rotação dados. O gradiente (mip) gira junto com a UV,
+// para o filtro anisotrópico continuar alinhado com a imagem.
+fn sample_corner(
+    tex: texture_2d<f32>,
+    samp: sampler,
+    uv: vec2<f32>,
+    dx: vec2<f32>,
+    dy: vec2<f32>,
+    offset: vec2<f32>,
+    rotation: vec2<f32>,
+) -> vec4<f32> {
+    return textureSampleGrad(
+        tex, samp, rotate(uv, rotation) + offset, rotate(dx, rotation), rotate(dy, rotation));
+}
+
+// Média do xy (decodificado, em [-1, 1]) do normal map do `snow_02`: o mapa tem ~9 graus de
+// inclinação média, que girada por célula viraria manchas grandes e chiado à distância. É
+// subtraída antes de girar e não volta, então a inclinação do terreno vem só da malha. Medida com
+// o PIL sobre `snow_02_nor_gl_2k.jpg`; refazer se a textura mudar.
+const NORMAL_MAP_MEAN_XY: vec2<f32> = vec2<f32>(0.152, 0.154);
+
+// Igual a `sample_corner` para um normal map: o xy da normal (espaço tangente) gira com a UV,
+// senão o relevo de cada cópia seria iluminado como se não tivesse sido girado. Devolve a normal
+// codificada em [0, 1], como o mapa original.
+fn sample_corner_normal(
+    tex: texture_2d<f32>,
+    samp: sampler,
+    uv: vec2<f32>,
+    dx: vec2<f32>,
+    dy: vec2<f32>,
+    offset: vec2<f32>,
+    rotation: vec2<f32>,
+) -> vec4<f32> {
+    let texel = sample_corner(tex, samp, uv, dx, dy, offset, rotation);
+    let rotated_xy = rotate(texel.xy * 2.0 - 1.0 - NORMAL_MAP_MEAN_XY, rotation) * 0.5 + 0.5;
+    return vec4<f32>(rotated_xy, texel.z, texel.w);
+}
+
+// Mistura as amostras dos três vértices do `tile`. Usa gradiente explícito (o da UV sem offset)
+// para o mip não saltar nas emendas entre triângulos.
 fn sample_hex(
     tex: texture_2d<f32>,
     samp: sampler,
@@ -99,9 +162,25 @@ fn sample_hex(
     dx: vec2<f32>,
     dy: vec2<f32>,
 ) -> vec4<f32> {
-    return tile.weights.x * textureSampleGrad(tex, samp, uv + tile.offset_a, dx, dy)
-        + tile.weights.y * textureSampleGrad(tex, samp, uv + tile.offset_b, dx, dy)
-        + tile.weights.z * textureSampleGrad(tex, samp, uv + tile.offset_c, dx, dy);
+    return tile.weights.x * sample_corner(tex, samp, uv, dx, dy, tile.offset_a, tile.rotation_a)
+        + tile.weights.y * sample_corner(tex, samp, uv, dx, dy, tile.offset_b, tile.rotation_b)
+        + tile.weights.z * sample_corner(tex, samp, uv, dx, dy, tile.offset_c, tile.rotation_c);
+}
+
+fn sample_hex_normal(
+    tex: texture_2d<f32>,
+    samp: sampler,
+    tile: HexTile,
+    uv: vec2<f32>,
+    dx: vec2<f32>,
+    dy: vec2<f32>,
+) -> vec4<f32> {
+    return tile.weights.x
+            * sample_corner_normal(tex, samp, uv, dx, dy, tile.offset_a, tile.rotation_a)
+        + tile.weights.y
+            * sample_corner_normal(tex, samp, uv, dx, dy, tile.offset_b, tile.rotation_b)
+        + tile.weights.z
+            * sample_corner_normal(tex, samp, uv, dx, dy, tile.offset_c, tile.rotation_c);
 }
 
 @fragment
@@ -132,7 +211,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let near_weight = 1.0 - far_weight;
             diffuse += near_weight * sample_hex(
                 macro_diffuse_texture, macro_diffuse_sampler, tile, in.uv, near_dx, near_dy);
-            normal += near_weight * sample_hex(
+            normal += near_weight * sample_hex_normal(
                 macro_normal_texture, macro_normal_sampler, tile, in.uv, near_dx, near_dy);
             arm += near_weight * sample_hex(
                 macro_arm_texture, macro_arm_sampler, tile, in.uv, near_dx, near_dy);
@@ -141,7 +220,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let tile = hex_tile(macro_uv);
             diffuse += far_weight * sample_hex(
                 macro_diffuse_texture, macro_diffuse_sampler, tile, macro_uv, macro_dx, macro_dy);
-            normal += far_weight * sample_hex(
+            normal += far_weight * sample_hex_normal(
                 macro_normal_texture, macro_normal_sampler, tile, macro_uv, macro_dx, macro_dy);
             arm += far_weight * sample_hex(
                 macro_arm_texture, macro_arm_sampler, tile, macro_uv, macro_dx, macro_dy);
