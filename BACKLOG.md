@@ -145,6 +145,20 @@
   `terrain_base_color` branco e `terrain_valley_color` acastanhado em `europa.ron`. O nome
   `terrain_valley_color` ficou impreciso: hoje é a cor das encostas íngremes. Renomear mexe no
   `.ron` e nos testes de `eigc_moons`.
+- [ ] **As medidas das lineae de Europa são provisórias.** `LINEA_COUNT` (60) e
+  `EUROPA_LINEA_SCALE` em `recipe.rs` (crista de 100 a 400 m, altura pela rugosidade rms do DTM,
+  de ~5 a ~21 m, vale de 0,5 a 1 vez a crista, traçado de 1,5 a 6 km) saíram de medição no DTM,
+  não de decisão do jay nem de inspeção visual. O teste
+  `fine_detail_continues_the_dtm_roughness_power_law` vai até 900 m com pouca folga nas
+  distâncias longas (+11% contra 15% de tolerância), e quase toda essa diferença é do próprio DTM
+  (+10,9% sem lineae).
+- [ ] **As lineae de Europa não têm índice espacial.** `LineaField::height_at` percorre as 60
+  lineae a cada ponto. Medido com a seed 204: o relevo com lineae custa ~3,8 vezes o anterior
+  (713 ns contra 187 ns por chamada; as lineae sozinhas, ~530 ns), mas o FPS ficou equivalente
+  (117 a 120 contra 118 na mesma sessão). O custo extra fica só em CPU de fundo (medição de erro
+  do LOD e malha dos chunks). Débito consciente: a latência de refinamento dos chunks não foi
+  medida. Se aparecer lentidão para os chunks ficarem nítidos, implementar uma grade uniforme de
+  ~1 km montada em `LineaField::new`, com teste de que dá a mesma altura que a busca bruta.
 
 ## Cena / Visual
 - [X] Câmera e luz em eigc_app::scene_placeholder eram fixas e hardcoded, sem
