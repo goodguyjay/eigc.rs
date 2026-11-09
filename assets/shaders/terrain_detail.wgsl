@@ -129,11 +129,12 @@ fn sample_corner(
         tex, samp, rotate(uv, rotation) + offset, rotate(dx, rotation), rotate(dy, rotation));
 }
 
-// Média do xy (decodificado, em [-1, 1]) do normal map do `snow_02`: o mapa tem ~9 graus de
-// inclinação média, que girada por célula viraria manchas grandes e chiado à distância. É
-// subtraída antes de girar e não volta, então a inclinação do terreno vem só da malha. Medida com
-// o PIL sobre `snow_02_nor_gl_2k.jpg`; refazer se a textura mudar.
-const NORMAL_MAP_MEAN_XY: vec2<f32> = vec2<f32>(0.152, 0.154);
+// Média do xy (decodificado, em [-1, 1]) do normal map do `snow_02`. Uma inclinação média girada
+// por célula vira manchas grandes e chiado à distância, por isso é subtraída antes de girar e não
+// volta: a inclinação do terreno vem só da malha. O mapa atual vem de
+// `tools/attenuate_surface_marks.py --kind normal`, que já descarta a inclinação média, então o
+// valor fica perto de zero (o original tinha 0,152 / 0,154). Refazer se a textura mudar.
+const NORMAL_MAP_MEAN_XY: vec2<f32> = vec2<f32>(0.001, 0.001);
 
 // Igual a `sample_corner` para um normal map: o xy da normal (espaço tangente) gira com a UV,
 // senão o relevo de cada cópia seria iluminado como se não tivesse sido girado. Devolve a normal
