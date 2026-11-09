@@ -1,7 +1,7 @@
 //! Lineae de Europa: pares de cristas de gelo com um vale entre elas, ao longo de um traçado
 //! reto/longo (majoritário) ou em arco (minoritário). O arco é uma aproximação geométrica
-//! estilizada e deliberadamente exagerada do mecanismo real de tensão de maré. Não modela a
-//! física real, serve só para variar o traçado e dar interesse de navegação.
+//! estilizada do mecanismo real de tensão de maré. Não modela a física real, serve só para
+//! variar o traçado e dar interesse de navegação.
 
 use super::{ColorSource, HeightSource};
 use bevy::prelude::Vec2;
@@ -547,7 +547,7 @@ fn draw_linea_spec(
 }
 
 /// Gera o conjunto determinístico de lineae do recorte, a partir do seed e da direção de feature
-/// calibrada. As duas primeiras specs geradas saem marcadas como protagonistas (mais
+/// (a família 0). As duas primeiras specs geradas saem marcadas como protagonistas (mais
 /// longas/largas, servem de ponto focal); as demais têm medidas dentro das faixas de `scale`.
 ///
 /// Nenhuma parte de nenhuma linea alcança o disco de raio `clearing_reach_m` ao redor da origem

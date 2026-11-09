@@ -54,23 +54,25 @@ const DETAIL_OCTAVES: u32 = 4;
 /// distância, `H` entre 0,85 e 0,89), ver `tools/dtm_roughness.py`.
 const DTM_HURST_EXPONENT: f32 = 0.85;
 
-/// Quantidade de lineae do recorte. Provisória (faixa em discussão: 40 a 80), ainda não
-/// confirmada com o jay.
+/// Quantidade de lineae do recorte, dentro da faixa considerada de 40 a 80. Decisão da autora, a
+/// recalibrar após inspeção visual.
 const LINEA_COUNT: usize = 60;
 
 /// Medidas das lineae de Europa como detalhe entre o DTM e a rugosidade fractal: crista de 100 a
 /// 400 m, onde o DTM tem pouca energia (desvio padrão de ~2 m entre 455 m e 1 km de comprimento
-/// de onda) e o fractal ainda não chega (primeira oitava em 228 m). Provisórias, ainda não
-/// confirmadas com o jay.
+/// de onda) e o fractal ainda não chega (primeira oitava em 228 m). Decisão da autora, a
+/// recalibrar após inspeção visual.
 ///
 /// A altura segue a rugosidade rms do DTM numa distância igual à largura da crista (mesma lei de
-/// potência do detalhe fractal): ~6,4 m para 100 m de largura, ~21 m para 400 m. Assim a crista
-/// tem o tamanho do relevo que o DTM já tem nessa escala e não compete com ele. O teto de
+/// potência do detalhe fractal): ~6,4 m para 100 m de largura, ~21 m para 400 m. Cada linea
+/// sorteia de 75% a 100% da altura dessa regra (`height_fraction_min`), de ~5 a ~21 m. Assim a
+/// crista tem o tamanho do relevo que o DTM já tem nessa escala e não compete com ele. O teto de
 /// altura/largura de 0,065 dá inclinação máxima de ~0,20 (π × 0,065), perto do p95 do DTM (0,17).
 ///
 /// As famílias de orientação 1 e 2 seguem herdadas a ±50 graus da direção medida
 /// (`EUROPA_MEASURED_RIDGE_DIRECTION`). O DTM sustenta pouco essas famílias (~5% do peso do
-/// gradiente em cada uma); reduzir o ângulo é decisão do jay.
+/// gradiente em cada uma); o ângulo fica como decisão da autora, a recalibrar após inspeção
+/// visual.
 const EUROPA_LINEA_SCALE: LineaScale = LineaScale {
     ridge_width_min_m: 100.0,
     regular_width_max_m: 300.0,
@@ -96,8 +98,8 @@ const EUROPA_LINEA_SCALE: LineaScale = LineaScale {
 /// plano médio; as cristas correm na perpendicular do gradiente dominante): -24,5 graus a partir
 /// de +x girando para +z com coerência 0,46, e -23,3 graus com coerência 0,27 olhando só as
 /// escalas abaixo de ~700 m. Incerteza alta: amostra de 97x97 pixels com poucas cristas grandes,
-/// e as cristas menores que o DTM não resolve podem ter outra orientação. Experimental, ainda não
-/// aprovada pelo jay; o `europa.ron` não foi alterado.
+/// e as cristas menores que o DTM não resolve podem ter outra orientação. Decisão da autora, a
+/// recalibrar após inspeção visual; o `europa.ron` não foi alterado.
 const EUROPA_MEASURED_RIDGE_DIRECTION: Vec2 = Vec2::new(0.91, -0.41);
 
 /// Amplitude do detalhe sintético (soma normalizada das oitavas), em metros. Calibrada para que
@@ -134,8 +136,8 @@ pub struct TerrainRecipe {
     pub appearance: TerrainAppearance,
     /// Propriedades do material do terreno
     pub material_properties: TerrainMaterialProperties,
-    /// Fonte de cor por vértice, quando a receita pinta feições distintas (ex.: lineae). `None`
-    /// significa que o terreno usa só a cor flat de `appearance.base_color`.
+    /// Fonte de cor por vértice, quando a receita pinta feições distintas (ex.: cor por
+    /// inclinação). `None` significa que o terreno usa só a cor flat de `appearance.base_color`.
     pub color: Option<ColorFn>,
     /// Configuração do LOD por chunks do terreno.
     pub lod: TerrainLodConfig,

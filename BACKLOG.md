@@ -7,12 +7,11 @@
 - [X] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa
   documentada de motivo geológico ou estético
 - [ ] `TerrainParams.amp` não é mais a fonte de verdade da escala vertical do terreno.
-  Ao implementar lineae (issue de terreno reconhecível de Europa), descobrimos que
-  `Scale { scale: 1.0 }` em `europa_recipe` ignorava `vertical_amplitude_meters`, foi
-  corrigido usando `calibration.vertical_amplitude_meters` diretamente dentro da receita,
-  não via `TerrainParams.amp` (que segue sem uso real no pipeline, só testado). Duplicação
-  de estado consciente, não resolvida agora. `amp` deveria ser removido ou passar a ser
-  a única fonte de verdade quando outra lua for calibrada.
+  Ao implementar lineae (tarefa de terreno reconhecível de Europa), descobrimos que
+  `Scale { scale: 1.0 }` em `europa_recipe` ignorava `vertical_amplitude_meters`. Com o DTM,
+  `vertical_amplitude_meters` não é mais usado pela receita e só chega em `TerrainParams.amp`,
+  que nada lê (segue só testado). Duplicação de estado consciente, não resolvida agora. `amp`
+  deveria ser removido ou passar a ser a única fonte de verdade quando outra lua for calibrada.
 - [X] **Lineae alcançando a clareira de spawn.** A exclusão antiga só impedia o *centro* de uma
   linea de nascer dentro do raio; o traçado de uma linea vizinha ainda podia alcançar a zona de
   blend, e `FlattenNearOrigin` atenuava a crista de forma radial em torno da origem (lia como a
@@ -33,24 +32,23 @@
   `x`/`z` de spawn, que seguem fixos. Não resolvido de propósito: o spawn em si não lê o terreno.
 - [ ] **Primeira pessoa segue a função de altura, não a malha visível.** `follow_ground` usa
   `HeightResource::height_at`, que é contínua, enquanto a malha do nível 0 interpola linearmente
-  entre vértices (~5 m de espaçamento, a conferir) e o detalhe tem 1,5 m de amplitude. O olho pode
-  ficar alguns decímetros acima ou abaixo do chão desenhado. Não verificado com o app rodando. Se
-  incomodar, amostrar a mesma grade do nível 0 (função pura em `eigc_terrain`) em vez da função.
+  entre vértices (~5,4 m de espaçamento) e o detalhe soma o fractal de 10 m e as lineae de até
+  ~21 m. O olho pode ficar alguns decímetros acima ou abaixo do chão desenhado. Não verificado
+  com o app rodando. Se incomodar, amostrar a mesma grade do nível 0 (função pura em
+  `eigc_terrain`) em vez da função.
   Também não há colisão nem limite de inclinação: a câmera sobe qualquer ladeira (máx. 21,6 graus
   no DTM de Europa).
 - [ ] **Segunda câmera (viewmodel de mãos/traje) quebra o céu em silêncio.** `track_camera`,
   `dim_stars_near_sun`, `position_sun_disc` e `place_and_scale_jupiter` usam
   `Query<..., With<Camera3d>>.single()` e saem sem erro quando há mais de um `Camera3d`. Antes da
-  issue de primeira pessoa com animação, introduzir um marcador `MainCamera` e usá-lo nessas
+  tarefa de primeira pessoa com animação, introduzir um marcador `MainCamera` e usá-lo nessas
   queries, e definir `RenderLayers` das luzes para a câmera do viewmodel.
 - [X] **Crateras desligadas (feedback visual: terreno "artificial", alturas
   empilhadas, crateras em lugares estranhos).** Não existe um sistema de "cratera" dedicado
   no projeto, o que lia como cratera era o ruído `PerlinRidged`/`Oriented` (`ridged_noise`/
   `oriented_ridges`/`subtle_ridges`) somado ao relevo base em `europa_recipe`, mesmo rebaixado
-  a `scale: 0.15` na iteração anterior. Comentado (não removido) em `recipe.rs`. Para religar,
-  descomentar o bloco, voltar a importar `PerlinRidged` (`height::noise`) e `Oriented`
-  (`height::warp`), e trocar `combined_features` de volta pra
-  `Add2 { a: base_noise, b: subtle_ridges }`.
+  a `scale: 0.15` na iteração anterior. O bloco comentado foi removido na troca para o DTM;
+  `PerlinRidged` e `Oriented` seguem em `height::noise` e `height::warp`.
 - [ ] Traçado em arco de linea (`LineaPath::Arc`, `height/linea.rs`; 20% das lineae de Europa,
   de 1,5 a 6 km, com o mesmo afinamento nas pontas da reta) é uma aproximação geométrica
   estilizada, não um modelo físico da tensão de maré real. Meramente estético/artístico.
@@ -87,7 +85,7 @@
   `TerrainParams` em vários testes de integração.
 - [ ] LOD não considera se o chunk está dentro do frustum (chunks atrás da câmera são
   refinados igual aos da frente, para a câmera poder girar sem ver terreno grosso), não há
-  culling por oclusão, e não existe colisão (qualquer modo de caminhada futuro deve ler
+  culling por oclusão, e não existe colisão (a primeira pessoa, `follow_ground`, já lê
   `HeightResource::height_at` direto, não a malha visível).
 - [ ] **Heightmap de Europa embutido no binário (`include_bytes!` em `recipe.rs`).** Os
   arquivos continuam em `assets/terrain/europa/` (uma única cópia dos dados), mas são lidos
@@ -97,7 +95,7 @@
   do heightmap (ao contrário do `MoonProfile`) e ~40 KB a mais no binário por lua. Se mais
   luas ganharem heightmap ou o tamanho crescer, migrar para carregar via `AssetServer`.
 - [ ] **Constantes visuais do relevo híbrido de Europa não foram calibradas com o app
-  rodando.** `DETAIL_AMPLITUDE_M`, `DETAIL_FREQUENCY_FACTOR` e
+  rodando.** `DETAIL_AMPLITUDE_M`, `DETAIL_BASE_WAVELENGTH_M`, `DETAIL_OCTAVES` e
   os limiares `SLOPE_COLOR_START/END` em `recipe.rs` são valores de partida, não resultado de
   inspeção visual sistemática. A interpolação já é bicúbica (Catmull-Rom) em
   `HeightmapHeight::height_at`: a bilinear inicial deixava o terreno em tabuleiro (gradiente
@@ -112,21 +110,23 @@
   ao relevo como detalhe de centenas de metros (`europa_lineae` em `recipe.rs`, com
   `LineaField` e `generate_linea_specs`), mas `LineaColorField` e `height::warp` continuam sem
   uso. Também ficam sem efeito para Europa `warp_amplitude_meters`, `feature_direction` (as
-  lineae usam a direção medida no DTM, ver o item abaixo) e (já era o caso)
-  `vertical_amplitude_meters`, que só chega em `TerrainParams.amp`. Mantidos porque outra lua
+  lineae usam a direção medida no DTM, ver o item abaixo), `base_frequency`, que só chega em
+  `TerrainParams.freq`, que nada lê, e (já era o caso) `vertical_amplitude_meters`, que só
+  chega em `TerrainParams.amp`. Mantidos porque outra lua
   pode reaproveitá-los e remover campos de `TerrainCalibration` mexe no `.ron` e nos testes de
   `eigc_moons`. O destaque das cristas na cor continua só por inclinação do DTM
   (`SlopeColorField`), sem as lineae.
-- [ ] **Direção das lineae de Europa medida no DTM, ainda não aprovada.**
+- [ ] **Direção das lineae de Europa medida no DTM, com incerteza alta.**
   `EUROPA_MEASURED_RIDGE_DIRECTION` em `recipe.rs` (~(0.91, -0.41), -24 graus a partir de +x
   girando para +z) substitui a `feature_direction` (0.8, 0.2) do perfil, +14 graus, que nunca
   foi conferida contra o DTM. Medida por tensor de estrutura do gradiente, com coerência de 0,27
   a 0,46 numa amostra de 97x97 pixels: incerteza alta. Também vira `TerrainParams.line_dir`, para
-  não haver duas direções. O `europa.ron` não foi alterado. Se o jay aprovar, mover a direção
-  para o `.ron` (fonte única) e apagar a constante; se não, voltar a usar `feature_direction`.
-  As famílias de orientação 1 e 2 seguem a ±50 graus (`family_offset_rad` em
-  `EUROPA_LINEA_SCALE`), embora o DTM tenha só ~5% do peso do gradiente em cada uma dessas
-  direções; reduzir o ângulo é decisão do jay.
+  não haver duas direções. Decisão da autora, a recalibrar após inspeção visual. O `europa.ron`
+  não foi alterado: se a direção se mantiver depois da inspeção, mover para o `.ron` (fonte
+  única) e apagar a constante; se não, voltar a usar `feature_direction`. As famílias de
+  orientação 1 e 2 seguem a ±50 graus (`family_offset_rad` em `EUROPA_LINEA_SCALE`), embora o
+  DTM tenha só ~5% do peso do gradiente em cada uma dessas direções; o ângulo também fica para
+  a recalibração visual.
 
 - [X] **Textura de superfície de Europa (`snow_02`) sem mipmaps.** O loader de JPEG do Bevy
   não gera mipmaps e o tile físico é de 2 m (`TILE_SIZE_M` em `chunk_mesh.rs`), o que deixava o
@@ -151,15 +151,16 @@
   2048 px. Aceito por ora (não observado como artefato). Se aparecer tremor de textura, passar a
   UV relativa à origem do chunk com offset por material.
 - [ ] **A máscara de cor das cristas de Europa é inclinação do DTM, não a máscara de linea.** As
-  lineae entram só na altura, não na cor (ver item acima), então o tingimento por
+  lineae entram só na altura, não na cor (ver o item "Parte do código de lineae e da calibração
+  segue sem uso em Europa"), então o tingimento por
   vértice reaproveita o `SlopeColorField` (mesma fonte de altura do relevo) com
   `terrain_base_color` branco e `terrain_valley_color` acastanhado em `europa.ron`. O nome
   `terrain_valley_color` ficou impreciso: hoje é a cor das encostas íngremes. Renomear mexe no
   `.ron` e nos testes de `eigc_moons`.
-- [ ] **As medidas das lineae de Europa são provisórias.** `LINEA_COUNT` (60) e
+- [ ] **As medidas das lineae de Europa não foram calibradas visualmente.** `LINEA_COUNT` (60) e
   `EUROPA_LINEA_SCALE` em `recipe.rs` (crista de 100 a 400 m, altura pela rugosidade rms do DTM,
   de ~5 a ~21 m, vale de 0,5 a 1 vez a crista, traçado de 1,5 a 6 km) saíram de medição no DTM,
-  não de decisão do jay nem de inspeção visual. O teste
+  sem inspeção visual sistemática. Decisão da autora, a recalibrar após inspeção visual. O teste
   `fine_detail_continues_the_dtm_roughness_power_law` vai até 900 m com pouca folga nas
   distâncias longas (+11% contra 15% de tolerância), e quase toda essa diferença é do próprio DTM
   (+10,9% sem lineae).
@@ -256,7 +257,8 @@ não por teste unitário de função pura.
 - [ ] A tela de carregamento é estática. O terreno é construído em `OnEnter(Running)`, então a
   tela provavelmente congela por um instante na transição. Não medido; confirmar em teste
   visual antes de investir num indicador animado.
-- [ ] **Anti-tiling do terreno (`terrain_detail.wgsl`) não tem teste e depende da textura.**
+- [ ] **Anti-tiling do terreno (`terrain_detail.wgsl`) só tem teste da média do normal map e
+  depende da textura.**
   As duas escalas são amostradas no shader por hex tiling (3 amostras por textura, offset e rotação
   aleatórios por vértice de grade triangular). Só deslocar não bastava: o `snow_02` tem fileiras de
   marcas dentro do tile, que apareciam alinhadas entre as cópias; a rotação por vértice resolveu. Pontos
