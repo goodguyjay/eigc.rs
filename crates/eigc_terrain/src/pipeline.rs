@@ -17,8 +17,8 @@ use crate::systems::{TerrainMaterialProperties, build_terrain_material};
 use bevy::asset::AssetApp;
 use bevy::pbr::MaterialPlugin;
 use bevy::prelude::{
-    App, AssetServer, Assets, Color, Commands, IntoScheduleConfigs, Mesh, OnEnter, Plugin, Res,
-    ResMut, Resource, Update, in_state, resource_exists,
+    App, AssetServer, Assets, Color, Commands, IntoScheduleConfigs, Mesh, OnEnter, OnExit, Plugin,
+    Res, ResMut, Resource, Update, in_state, resource_exists,
 };
 use bevy::render::RenderApp;
 use eigc_common::lod_focus::LodFocus;
@@ -63,6 +63,7 @@ impl Plugin for TerrainPlugin {
                 OnEnter(AppState::Running),
                 build_terrain_from_loaded_profile,
             )
+            .add_systems(OnExit(AppState::Running), clear_terrain_session)
             .add_systems(
                 Update,
                 generate_surface_mipmaps.run_if(resource_exists::<TerrainSurfaceTextures>),
@@ -77,6 +78,22 @@ impl Plugin for TerrainPlugin {
                     .run_if(resource_exists::<TerrainLodConfig>),
             );
     }
+}
+
+/// Remove os resources que `build_terrain_from_loaded_profile` inseriu e zera as tabelas de LOD,
+/// ao sair de `Running`. Os chunks saem por `DespawnOnExit`. Remover `HeightResource` solta a
+/// função de altura (e o DTM que ela segura); trocar `ChunkErrorTable` descarta as medições em
+/// segundo plano ainda em andamento.
+fn clear_terrain_session(mut commands: Commands) {
+    commands.remove_resource::<TerrainSurfaceTextures>();
+    commands.remove_resource::<TerrainParams>();
+    commands.remove_resource::<TerrainLodConfig>();
+    commands.remove_resource::<ColorResource>();
+    commands.remove_resource::<HeightResource>();
+    commands.remove_resource::<TerrainAppearance>();
+    commands.remove_resource::<TerrainMaterialProperties>();
+    commands.insert_resource(ChunkErrorTable::default());
+    commands.insert_resource(TerrainLodStats::default());
 }
 
 /// Lê o perfil de lua ativo, monta a receita de terreno correspondente, spawna os chunks e

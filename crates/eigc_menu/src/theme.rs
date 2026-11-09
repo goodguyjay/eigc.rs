@@ -44,6 +44,8 @@ pub(crate) const BADGE_SOON_BACKGROUND: Color = Color::srgba(1.0, 1.0, 1.0, 0.08
 pub(crate) const TOAST_BACKGROUND: Color = Color::srgba(0.09, 0.07, 0.05, 0.94);
 /// Borda e ícone do aviso, em âmbar.
 pub(crate) const TOAST_ACCENT: Color = Color::srgb(0.96, 0.74, 0.36);
+/// Véu escuro atrás do menu de pausa, mais leve que o de carregamento para a cena seguir visível.
+pub(crate) const PAUSE_VEIL: Color = Color::srgba(0.008, 0.012, 0.025, 0.62);
 /// Véu escuro da tela de carregamento.
 pub(crate) const LOADING_VEIL: Color = Color::srgba(0.008, 0.012, 0.025, 0.86);
 

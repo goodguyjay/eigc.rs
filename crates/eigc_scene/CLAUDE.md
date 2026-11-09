@@ -38,7 +38,7 @@ Além da convenção geral (nome de arquivo por comportamento observável), este
 
 - Damping/smoothing na transição de lock — ainda não implementado, aceito conscientemente por ora.
 - `mouse_look` não é totalmente desabilitado durante o lock.
-- ESC não pausa `mouse_look` depois do cursor ser liberado.
+- ~~ESC não pausa `mouse_look` depois do cursor ser liberado.~~ Resolvido: ESC abre o menu de pausa (`PauseState::Paused`), que para toda a cadeia de `CameraPlugin`.
 - Markers de componente privados (`Jupiter`, `SunDisc`, `StarDome`) ainda sem teste de integração.
 
 ## Limite de DirectionalLight (risco monitorado, não mais implícito)

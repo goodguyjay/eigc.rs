@@ -15,4 +15,4 @@ pub use loader::{MoonProfileLoader, MoonProfileLoaderError};
 pub use moon_info::{MOON_DISPLAY_ORDER, MoonInfo, moon_info};
 pub use plugin::MoonPlugin;
 pub use profile::{MoonId, MoonProfile, TerrainCalibration, SkyCalibration};
-pub use state::{ActiveMoonProfileHandle, AppState};
+pub use state::{ActiveMoonProfileHandle, AppState, PauseState};

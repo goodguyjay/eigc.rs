@@ -1,6 +1,6 @@
 //! Regressão para o risco arquitetural de limite de `DirectionalLight`. Monta o mesmo pipeline de plugins
 //! que `eigc_app::main` usa em produção (menos janela/renderer) e conta quantas `DirectionalLight`s existem depois do
-//! céu terminar de carregar.
+//! céu terminar de carregar, inclusive depois de voltar ao menu e entrar de novo numa lua.
 
 use bevy::MinimalPlugins;
 use bevy::asset::AssetApp;
@@ -88,6 +88,58 @@ fn app_with_sky_running() -> App {
 fn count_directional_lights(app: &mut App) -> usize {
     let mut query = app.world_mut().query::<&DirectionalLight>();
     query.iter(app.world()).count()
+}
+
+/// Roda updates até as texturas do céu terminarem de carregar, mais um para o sol nascer.
+fn run_until_sky_loaded(app: &mut App) {
+    for _ in 0..1000 {
+        app.update();
+
+        if let Some(assets) = app.world().get_resource::<SkyAssets>()
+            && assets.all_loaded
+        {
+            // mais um update para o SunLight ser spawnado a partir da mensagem SkyAssetsLoaded.
+            app.update();
+            return;
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+
+    panic!("texturas do céu não terminaram de carregar dentro do limite de tentativas");
+}
+
+fn set_app_state(app: &mut App, state: AppState) {
+    app.world_mut()
+        .resource_mut::<NextState<AppState>>()
+        .set(state);
+    app.update();
+}
+
+/// Testa que voltar ao menu despawna o sol (sobra só o PlanetShine, que é permanente) e que
+/// entrar de novo numa lua volta a exatamente 2 luzes, sem acumular um sol por exploração.
+#[test]
+fn directional_lights_do_not_accumulate_across_explorations() {
+    let mut app = app_with_sky_running();
+
+    for exploration in 1..=3 {
+        run_until_sky_loaded(&mut app);
+        assert_eq!(
+            count_directional_lights(&mut app),
+            2,
+            "exploração {exploration}: esperava SunLight + PlanetShine"
+        );
+
+        set_app_state(&mut app, AppState::MainMenu);
+        assert_eq!(
+            count_directional_lights(&mut app),
+            1,
+            "exploração {exploration}: o SunLight sobreviveu à volta ao menu"
+        );
+        assert!(app.world().get_resource::<SkyAssets>().is_none());
+
+        set_app_state(&mut app, AppState::Running);
+    }
 }
 
 /// Testa que o número de `DirectionalLight`s spawnadas pelo pipeline de produção (céu +

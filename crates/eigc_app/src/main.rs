@@ -6,31 +6,45 @@ use bevy::DefaultPlugins;
 #[cfg(feature = "dev")]
 use bevy::prelude::Vec3;
 use bevy::prelude::{
-    App, AppExtStates, AssetPlugin, IntoScheduleConfigs, MessageWriter, NextState, OnEnter, OnExit,
-    PluginGroup, Res, ResMut, Startup, State, SystemCondition, Update, default, in_state,
-    resource_exists,
+    App, AppExtStates, AssetPlugin, Commands, IntoScheduleConfigs, MessageWriter, NextState,
+    OnEnter, OnExit, PluginGroup, Res, ResMut, Startup, State, SystemCondition, Update, default,
+    in_state, not, resource_exists,
 };
 #[cfg(feature = "dev")]
 use eigc_menu::ExploreRequested;
 use eigc_menu::{MenuPlugin, ShowMenu};
 #[cfg(feature = "dev")]
 use eigc_moons::MoonId;
-use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonPlugin};
+use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonPlugin, PauseState};
 use eigc_scene::camera::plugin::CameraPlugin;
 #[cfg(feature = "dev")]
 use eigc_scene::camera::plugin::DebugSpawnPosition;
 use eigc_scene::intro::{IntroPlugin, IntroState};
 use eigc_scene::sky::SkyPlugin;
-use eigc_sim::{SimSet, TimeFlowPlugin};
+use eigc_sim::{SimSet, SimTime, TimeFlow, TimeFlowPlugin};
 use eigc_terrain::pipeline::TerrainPlugin;
 
 /// Sistemas de transição de estado ao concluir o carregamento do perfil da lua escolhida.
 pub mod moon_loading;
 
-/// Faz o relógio da simulação avançar só em `Running`, para o céu não começar numa fase
-/// arbitrária depois do tempo gasto no menu e no carregamento.
+/// Faz o relógio da simulação avançar só em `Running` e fora da pausa, para o céu não começar
+/// numa fase arbitrária depois do tempo gasto no menu e no carregamento, nem andar com o menu de
+/// pausa aberto. Ao sair de `Running`, zera o relógio e a velocidade do tempo, para a próxima
+/// exploração começar do zero.
 fn gate_simulation_clock(app: &mut App) -> &mut App {
-    app.configure_sets(Update, SimSet::Advance.run_if(in_state(AppState::Running)))
+    app.configure_sets(
+        Update,
+        SimSet::Advance
+            .run_if(in_state(AppState::Running))
+            .run_if(not(in_state(PauseState::Paused))),
+    )
+    .add_systems(OnExit(AppState::Running), reset_simulation_clock)
+}
+
+/// Devolve `SimTime` e `TimeFlow` aos valores iniciais.
+fn reset_simulation_clock(mut commands: Commands) {
+    commands.insert_resource(SimTime::default());
+    commands.insert_resource(TimeFlow::default());
 }
 
 /// Libera o menu quando a abertura sai de `Playing`, seja por ter tocado até o fim ou por ter
@@ -55,8 +69,17 @@ fn show_menu_if_intro_already_skipped(
 /// câmera do jogo nasce em `Running`, e sistemas do céu que buscam "a" câmera via
 /// `Query<_, With<Camera3d>>::single()` ficavam confusos entre as duas (ou, pior, usavam a da
 /// abertura sozinha enquanto a do jogo ainda não existia).
-fn finish_intro_when_leaving_menu(mut next_intro_state: ResMut<NextState<IntroState>>) {
-    next_intro_state.set(IntroState::Done);
+///
+/// Ao explorar de novo depois de voltar ao menu, a abertura já está em `Done`; pedir `Done` de
+/// novo pode disparar `OnEnter(Done)` outra vez (transição para o mesmo estado), então só pede
+/// se ainda não terminou.
+fn finish_intro_when_leaving_menu(
+    intro_state: Res<State<IntroState>>,
+    mut next_intro_state: ResMut<NextState<IntroState>>,
+) {
+    if *intro_state.get() != IntroState::Done {
+        next_intro_state.set(IntroState::Done);
+    }
 }
 
 /// Atalho de debug (`--europa`): pede a exploração de Europa.
@@ -107,6 +130,7 @@ fn main() {
         ..default()
     }))
     .init_state::<AppState>()
+    .add_sub_state::<PauseState>()
     .add_plugins(MoonPlugin)
     .add_plugins(TerrainPlugin)
     .add_plugins(TimeFlowPlugin)
@@ -178,6 +202,7 @@ mod tests {
             .add_plugins(InputPlugin)
             .add_plugins(StatesPlugin)
             .init_state::<AppState>()
+            .add_sub_state::<PauseState>()
             .add_plugins(TimeFlowPlugin)
             .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
                 100,
@@ -268,6 +293,61 @@ mod tests {
         assert!(
             app.world().resource::<SimTime>().0 > 0.0,
             "não avançou em Running"
+        );
+    }
+
+    /// Testa que o relógio da simulação congela com o menu de pausa aberto e volta a andar ao
+    /// continuar.
+    #[test]
+    fn sim_time_freezes_while_paused() {
+        let mut app = clock_app();
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Running);
+        run_frames(&mut app, 3);
+
+        app.world_mut()
+            .resource_mut::<NextState<PauseState>>()
+            .set(PauseState::Paused);
+        app.update();
+        let frozen = app.world().resource::<SimTime>().0;
+        run_frames(&mut app, 5);
+        assert_eq!(
+            app.world().resource::<SimTime>().0,
+            frozen,
+            "avançou pausado"
+        );
+
+        app.world_mut()
+            .resource_mut::<NextState<PauseState>>()
+            .set(PauseState::Playing);
+        run_frames(&mut app, 3);
+        assert!(
+            app.world().resource::<SimTime>().0 > frozen,
+            "não voltou a andar"
+        );
+    }
+
+    /// Testa que voltar ao menu zera o relógio e a velocidade do tempo, para a próxima
+    /// exploração começar do zero.
+    #[test]
+    fn leaving_running_resets_sim_time_and_time_flow() {
+        let mut app = clock_app();
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Running);
+        run_frames(&mut app, 3);
+        app.world_mut().resource_mut::<TimeFlow>().time_scale = 42.0;
+
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::MainMenu);
+        app.update();
+
+        assert_eq!(app.world().resource::<SimTime>().0, 0.0);
+        assert_eq!(
+            app.world().resource::<TimeFlow>().time_scale,
+            TimeFlow::default().time_scale
         );
     }
 }
