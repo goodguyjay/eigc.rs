@@ -26,7 +26,6 @@ fn spawn_terrain_creates_exactly_one_terrain_entity() {
     let terrain_params = TerrainParams {
         size: 10.0,
         res: 2,
-        amp: 1.0,
         freq: 1.0,
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
@@ -76,7 +75,6 @@ fn spawn_terrain_applies_material_properties_from_resource() {
     let terrain_params = TerrainParams {
         size: 10.0,
         res: 2,
-        amp: 1.0,
         freq: 1.0,
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,

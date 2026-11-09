@@ -117,13 +117,13 @@ mod tests {
         assert!(app.world().resource::<NoticeLog>().0.is_empty());
     }
 
-    /// Testa que pedir a exploração de uma lua não implementada (Io) mantém o
+    /// Testa que pedir a exploração de uma lua não implementada (Ganimedes) mantém o
     /// estado em `MainMenu`, não carrega perfil e emite só o aviso de não
     /// implementada.
     #[test]
     fn exploring_an_unimplemented_moon_only_raises_a_notice() {
         let mut app = menu_app();
-        app.world_mut().write_message(ExploreRequested(MoonId::Io));
+        app.world_mut().write_message(ExploreRequested(MoonId::Ganymede));
         app.update();
         app.update();
 
@@ -132,17 +132,19 @@ mod tests {
             AppState::MainMenu
         );
         assert!(!app.world().contains_resource::<ActiveMoonProfileHandle>());
-        assert_eq!(app.world().resource::<NoticeLog>().0, vec![MoonId::Io]);
+        assert_eq!(app.world().resource::<NoticeLog>().0, vec![MoonId::Ganymede]);
     }
 
-    /// Testa que a decisão para uma lua disponível (Europa) é iniciar a
+    /// Testa que a decisão para as luas disponíveis (Europa e Io) é iniciar a
     /// exploração.
     #[test]
-    fn available_moon_starts_exploration() {
-        assert_eq!(
-            decide_explore(moon_info(MoonId::Europa)),
-            ExploreDecision::Start(MoonId::Europa)
-        );
+    fn available_moons_start_exploration() {
+        for moon_id in [MoonId::Europa, MoonId::Io] {
+            assert_eq!(
+                decide_explore(moon_info(moon_id)),
+                ExploreDecision::Start(moon_id)
+            );
+        }
     }
 
     /// Testa que a decisão para toda lua indisponível é só avisar que ela ainda
@@ -150,7 +152,7 @@ mod tests {
     #[test]
     fn unavailable_moons_are_not_implemented() {
         for moon_id in MOON_DISPLAY_ORDER {
-            if moon_id == MoonId::Europa {
+            if moon_info(moon_id).available {
                 continue;
             }
             assert_eq!(

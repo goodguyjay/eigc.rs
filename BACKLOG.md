@@ -1,18 +1,24 @@
 # Débito técnico e pendências conhecidas
 
 ## Terreno
-- [ ] Calibrar receita de terreno de io (`recipe.rs`, hoje unimplemented!)
+- [ ] **Receita de Io é a mínima (fase 1).** `io_recipe` (`recipe.rs`) é planície procedural
+  (fbm de grande escala + rugosidade fina + clareira de spawn) com cor por inclinação. Não há
+  DTM público de Io utilizável para um recorte de ~22 km: o único DEM baixável é o de Tvashtar
+  Paterae (USGS, 900 m/px, sem controle), ~24 pixels no recorte inteiro; os DEMs de White et al.
+  (2014, ~1 km/px global) e de fotoclinometria de paterae (White & Schenk 2015, até 270 m/px)
+  não estão públicos. Por isso o relevo é todo procedural, por decisão do desenvolvedor.
+  Faltam paterae, cor característica (enxofre, lava escura, halos, geada de SO2) e textura de
+  superfície. `IO_PLAINS_AMPLITUDE_M` e `IO_DETAIL_AMPLITUDE_M` são chutes, não medidos com o
+  app rodando. `IO_SLOPE_COLOR_START/END` seguem a inclinação medida das planícies (teste
+  `io_slope_color_thresholds_follow_the_measured_plains_slope`); se a amplitude mudar, o teste
+  aponta quando os limiares precisam ser refeitos.
 - [ ] Calibrar receita de terreno de ganimedes (`recipe.rs`, hoje unimplemented!)
 - [ ] Calibrar receita de terreno de calisto (`recipe.rs`, hoje unimplemented!)
 - [X] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa
   documentada de motivo geológico ou estético
-- [ ] `TerrainParams.amp` não é mais a fonte de verdade da escala vertical do terreno.
-  Ao implementar lineae (issue de terreno reconhecível de Europa), descobrimos que
-  `Scale { scale: 1.0 }` em `europa_recipe` ignorava `vertical_amplitude_meters`, foi
-  corrigido usando `calibration.vertical_amplitude_meters` diretamente dentro da receita,
-  não via `TerrainParams.amp` (que segue sem uso real no pipeline, só testado). Duplicação
-  de estado consciente, não resolvida agora. `amp` deveria ser removido ou passar a ser
-  a única fonte de verdade quando outra lua for calibrada.
+- [X] `TerrainParams.amp` não era mais a fonte de verdade da escala vertical do terreno.
+  Resolvido ao calibrar Io: `amp` e `TerrainCalibration::vertical_amplitude_meters` foram
+  removidos, e cada receita define a própria amplitude em constantes de `recipe.rs`.
 - [ ] **Ainda não totalmente resolvido**: a exclusão acima impede uma linea de nascer
   *ancorada* dentro do raio, mas não impede que o **segmento** de uma linea vizinha ainda
   alcance a zona de blend. Como a orientação de toda linea é ~paralela a `feature_direction`
@@ -83,7 +89,7 @@
   vértices que relaxa a tolerância.
 - [ ] `TerrainParams.res` só vale para a malha monolítica legada (`build_terrain_mesh`,
   `spawn_terrain`, usadas em testes). O pipeline com chunks usa `TerrainLodConfig`. Mesma
-  família da duplicação de `amp` acima: não removido agora porque quebraria os literais de
+  família da antiga duplicação de `amp` (já removido): não removido agora porque quebraria os literais de
   `TerrainParams` em vários testes de integração.
 - [ ] LOD não considera se o chunk está dentro do frustum (chunks atrás da câmera são
   refinados igual aos da frente, para a câmera poder girar sem ver terreno grosso), não há
@@ -111,8 +117,8 @@
 - [ ] **Código de lineae sintéticas ficou sem uso em Europa.** `height::linea`
   (`LineaField`, `LineaColorField`, `generate_linea_specs`) e `height::warp` não são mais
   chamados por `europa_recipe`, já que as cristas agora vêm do DTM. Também ficaram sem
-  efeito para Europa `warp_amplitude_meters`, `feature_direction` e (já era o caso)
-  `vertical_amplitude_meters`, que só chega em `TerrainParams.amp`. Mantidos porque outra
+  efeito para Europa `warp_amplitude_meters` e `feature_direction` (Io também não os usa).
+  Mantidos porque outra
   lua pode reaproveitar as lineae e remover campos de `TerrainCalibration` mexe no `.ron` e
   nos testes de `eigc_moons`. O destaque das cristas reais é só por inclinação
   (`SlopeColorField`), sem identificar cada crista individualmente.
@@ -142,11 +148,15 @@
 - [ ] **A máscara de cor das cristas de Europa é inclinação do DTM, não a máscara de linea.** As
   lineae sintéticas não participam mais da altura (ver item acima), então o tingimento por
   vértice reaproveita o `SlopeColorField` (mesma fonte de altura do relevo) com
-  `terrain_base_color` branco e `terrain_valley_color` acastanhado em `europa.ron`. O nome
-  `terrain_valley_color` ficou impreciso: hoje é a cor das encostas íngremes. Renomear mexe no
-  `.ron` e nos testes de `eigc_moons`.
+  `terrain_base_color` branco e `terrain_steep_color` acastanhado em `europa.ron` (o campo se
+  chamava `terrain_valley_color`, renomeado ao calibrar Io).
 
 ## Cena / Visual
+- [ ] **Com a calibração atual de Europa, o eclipse por Júpiter nunca acontece.** Pela conta, a
+  trajetória do sol (elevação fixa de 25 graus) passa a no mínimo ~10,5 graus do centro de
+  Júpiter (elevação ~14,5 graus), mais que o raio de Júpiter mais a suavização (~7 graus).
+  Não conferido com o app rodando. O `io.ron` usa direções provisórias; a calibração do eclipse
+  de Io (que acontece em toda órbita) fica para a fase do céu.
 - [X] Câmera e luz em eigc_app::scene_placeholder eram fixas e hardcoded, sem
   calibração por lua. A luz placeholder (`spawn_placeholder_light`) foi
   removida — o céu real (`SkyPlugin`, com `SunLight` e `PlanetShine`) já
@@ -193,16 +203,18 @@ não por teste unitário de função pura.
   `OnEnter(Running)`. Sem isso, reentrar em `Running` duplicaria Sol, Júpiter e estrelas e
   estouraria o teste de orçamento de `DirectionalLight`. Trade-off: troca de lua exige reiniciar
   o app.
-- [ ] `transition_when_moon_profile_loaded` (`eigc_app::moon_loading`) não trata
-  `LoadState::Failed`. Se o `.ron` da lua escolhida falhar ao carregar, o app fica preso em
-  `LoadingMoonProfile` com a tela de carregamento. Hoje só Europa é selecionável e o RON dela é
-  válido, então não dispara. Passa a importar quando as outras luas forem liberadas.
+- [X] `transition_when_moon_profile_loaded` não tratava `LoadState::Failed`. Resolvido com
+  `return_to_menu_when_moon_profile_fails` (`eigc_app::moon_loading`), que registra o erro e
+  volta para `MainMenu`. A tela de carregamento agora some em `DespawnOnExit(LoadingMoonProfile)`.
+- [ ] Ao voltar ao menu por falha no `.ron`, o jogador não recebe aviso na tela (só `error!` no
+  log). Um toast exigiria expor uma mensagem do `eigc_menu` para o `eigc_app` ou mover o sistema
+  para o menu. Não testado com o app rodando.
 - [ ] **`MoonInfo` (`eigc_moons::moon_info`) duplica três dados do `MoonProfile`.** São eles o
   nome (`display_name`), a disponibilidade (`available` vs `walkable`) e o período orbital
   (`orbital_period_days` vs `sky.orbital_period_seconds`, o segundo com o valor exato, o primeiro
   arredondado). Diâmetro, gravidade, distância de Júpiter e textos existem só no `MoonInfo`, então
   não duplicam. É duplicação consciente, aceita por três motivos:
-  1. Os `.ron` de Io, Ganimedes e Calisto estão vazios (0 bytes), e o menu precisa mostrar as
+  1. Os `.ron` de Ganimedes e Calisto estão vazios (0 bytes), e o menu precisa mostrar as
      quatro luas na partida, sem esperar o carregamento assíncrono de perfis que falhariam no
      parse.
   2. O `MoonProfile` não tem campos de apresentação (descrição, estatísticas). Acrescentá-los

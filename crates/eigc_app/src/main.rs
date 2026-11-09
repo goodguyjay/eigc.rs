@@ -1,10 +1,12 @@
 //! Estado de alto nível da aplicação: menu de seleção de lua, carregamento do perfil da lua
 //! escolhida e simulação rodando com o terreno já spawnado.
 
-use crate::moon_loading::transition_when_moon_profile_loaded;
+use crate::moon_loading::{
+    return_to_menu_when_moon_profile_fails, transition_when_moon_profile_loaded,
+};
 use bevy::DefaultPlugins;
 #[cfg(feature = "dev")]
-use bevy::prelude::Vec3;
+use bevy::prelude::{Resource, Vec3};
 use bevy::prelude::{
     App, AppExtStates, AssetPlugin, IntoScheduleConfigs, MessageWriter, NextState, OnEnter, OnExit,
     PluginGroup, Res, ResMut, Startup, State, SystemCondition, Update, default, in_state,
@@ -59,21 +61,48 @@ fn finish_intro_when_leaving_menu(mut next_intro_state: ResMut<NextState<IntroSt
     next_intro_state.set(IntroState::Done);
 }
 
-/// Atalho de debug (`--europa`): pede a exploração de Europa.
+/// Lua pedida por flag de debug (`--europa` ou `--io`), para entrar direto sem clicar no menu.
 #[cfg(feature = "dev")]
-fn send_europa_request(mut requests: MessageWriter<ExploreRequested>) {
-    requests.write(ExploreRequested(MoonId::Europa));
+#[derive(Resource, Clone, Copy, Debug)]
+struct DebugMoonRequest(MoonId);
+
+/// Atalho de debug: pede a exploração da lua escolhida pela flag.
+#[cfg(feature = "dev")]
+fn send_debug_moon_request(
+    debug_moon: Res<DebugMoonRequest>,
+    mut requests: MessageWriter<ExploreRequested>,
+) {
+    requests.write(ExploreRequested(debug_moon.0));
 }
 
 /// Cobre o caso de a abertura já nascer em `Done` (flag `skip_intro`), quando `OnEnter(Done)`
 /// nunca dispara porque o estado nunca chega a *entrar* em `Done` (ele já começa lá).
 #[cfg(feature = "dev")]
-fn send_europa_request_if_intro_already_done(
+fn send_debug_moon_request_if_intro_already_done(
     intro_state: Res<State<IntroState>>,
+    debug_moon: Res<DebugMoonRequest>,
     requests: MessageWriter<ExploreRequested>,
 ) {
     if *intro_state.get() == IntroState::Done {
-        send_europa_request(requests);
+        send_debug_moon_request(debug_moon, requests);
+    }
+}
+
+/// Lê a flag de lua de debug (`--europa` ou `--io`). `Ok(None)` sem flag; `Err` com a mensagem
+/// de uso quando as duas aparecem juntas.
+#[cfg(feature = "dev")]
+fn parse_debug_moon(args: &[String]) -> Result<Option<MoonId>, String> {
+    const FLAGS: [(&str, MoonId); 2] = [("--europa", MoonId::Europa), ("--io", MoonId::Io)];
+
+    let mut requested = FLAGS
+        .iter()
+        .filter(|(flag, _)| args.iter().any(|arg| arg == flag))
+        .map(|&(_, moon_id)| moon_id);
+
+    match (requested.next(), requested.next()) {
+        (None, _) => Ok(None),
+        (Some(moon_id), None) => Ok(Some(moon_id)),
+        (Some(_), Some(_)) => Err("uso: escolha só uma lua de debug (--europa ou --io)".to_string()),
     }
 }
 
@@ -126,26 +155,37 @@ fn main() {
 
     gate_simulation_clock(&mut app).add_systems(
         Update,
-        transition_when_moon_profile_loaded.run_if(
-            in_state(AppState::LoadingMoonProfile).and(resource_exists::<ActiveMoonProfileHandle>),
-        ),
+        (
+            transition_when_moon_profile_loaded,
+            return_to_menu_when_moon_profile_fails,
+        )
+            .run_if(
+                in_state(AppState::LoadingMoonProfile)
+                    .and(resource_exists::<ActiveMoonProfileHandle>),
+            ),
     );
 
     #[cfg(feature = "dev")]
     app.add_plugins(eigc_perf::debug_tools::DebugToolsPlugin);
 
-    // Só debug: espera a abertura terminar de vez (clarão desfeito) antes de pedir a exploração
-    // de Europa, para a transição do menu pro jogo não ficar brusca.
-    #[cfg(feature = "dev")]
-    if std::env::args().any(|arg| arg == "--europa") {
-        app.add_systems(Startup, send_europa_request_if_intro_already_done)
-            .add_systems(OnEnter(IntroState::Done), send_europa_request);
-    }
-
-    // Só debug: `--spawn x y z` (usado junto de `--europa`) faz a câmera nascer na posição pedida.
+    // Só debug: `--europa`/`--io` esperam a abertura terminar de vez (clarão desfeito) antes de
+    // pedir a exploração, para a transição do menu pro jogo não ficar brusca. `--spawn x y z`
+    // (usado junto de uma delas) faz a câmera nascer na posição pedida.
     #[cfg(feature = "dev")]
     {
         let args: Vec<String> = std::env::args().collect();
+        match parse_debug_moon(&args) {
+            Ok(Some(moon_id)) => {
+                app.insert_resource(DebugMoonRequest(moon_id))
+                    .add_systems(Startup, send_debug_moon_request_if_intro_already_done)
+                    .add_systems(OnEnter(IntroState::Done), send_debug_moon_request);
+            }
+            Ok(None) => {}
+            Err(message) => {
+                eprintln!("{message}");
+                std::process::exit(2);
+            }
+        }
         match parse_spawn_position(&args) {
             Ok(Some(position)) => {
                 app.insert_resource(DebugSpawnPosition(position));
@@ -195,6 +235,29 @@ mod tests {
     #[cfg(feature = "dev")]
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| value.to_string()).collect()
+    }
+
+    /// Testa que `--europa` e `--io` escolhem a lua de debug correspondente.
+    #[cfg(feature = "dev")]
+    #[test]
+    fn debug_moon_flag_picks_the_requested_moon() {
+        assert_eq!(
+            parse_debug_moon(&args(&["eigc_app", "--europa"])),
+            Ok(Some(MoonId::Europa))
+        );
+        assert_eq!(
+            parse_debug_moon(&args(&["eigc_app", "--io", "--spawn", "0", "5", "0"])),
+            Ok(Some(MoonId::Io))
+        );
+        assert_eq!(parse_debug_moon(&args(&["eigc_app"])), Ok(None));
+    }
+
+    /// Testa que pedir duas luas de debug ao mesmo tempo é recusado, em vez de uma vencer em
+    /// silêncio.
+    #[cfg(feature = "dev")]
+    #[test]
+    fn debug_moon_flag_rejects_two_moons() {
+        assert!(parse_debug_moon(&args(&["eigc_app", "--europa", "--io"])).is_err());
     }
 
     /// Testa que `--spawn` lê três coordenadas, inclusive negativas e fracionárias.
