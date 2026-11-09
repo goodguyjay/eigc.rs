@@ -235,10 +235,13 @@ não por teste unitário de função pura.
   As duas escalas são amostradas no shader por hex tiling (3 amostras por textura, offset e rotação
   aleatórios por vértice de grade triangular). Só deslocar não bastava: o `snow_02` tem fileiras de
   marcas dentro do tile, que apareciam alinhadas entre as cópias; a rotação por vértice resolveu. Pontos
-  conscientes: (1) o normal map do `snow_02` tem inclinação média de ~9 graus (xy médio 0,152 /
-  0,154), que girada por célula virava manchas grandes e chiado no horizonte; o shader subtrai essa
-  média (`NORMAL_MAP_MEAN_XY`, medida offline) antes de girar, e a inclinação do terreno passa a vir
-  só da malha. Trocar a textura exige remedir a constante; (2) nas zonas de transição há mistura
+  conscientes: (1) o normal map original do `snow_02` tem inclinação média de ~9 graus por eixo
+  (xy médio 0,152 / 0,154, cerca de 12,8 graus combinados), que girada por célula virava manchas
+  grandes e chiado no horizonte; o shader subtrai essa média (`NORMAL_MAP_MEAN_XY`) antes de girar,
+  e a inclinação do terreno passa a vir só da malha. O normal map atenuado
+  (`tools/attenuate_surface_marks.py --kind normal`) já vem sem a inclinação média, então a
+  constante vale perto de zero. Trocar a textura exige remedir a constante, e o teste
+  `surface_normal_map_mean_matches_shader` falha se ela ficar desatualizada; (2) nas zonas de transição há mistura
   fantasma, controlada por `HEX_BLEND_SHARPNESS` (3 e 6 ficaram indistinguíveis nos testes); (3) o
   custo é de até 6 amostras por textura onde as duas escalas se misturam (entre 4 m e 30 m); (4) a
   lógica de grade/hash/rotação vive só no WGSL e foi validada só a olho, com o app rodando; (5) o
@@ -246,6 +249,16 @@ não por teste unitário de função pura.
   teste. `HEX_CELL_SCALE` e `HEX_BLEND_SHARPNESS` são chutes calibráveis. As duas escalas usam as
   imagens da extensão (`macro_*`) e não as do `StandardMaterial`, então dependem dos escalares
   neutros do material.
+- [ ] **As bordas finas das pegadas continuam no albedo atenuado do `snow_02`.** A atenuação
+  (`tools/attenuate_surface_marks.py`, sigma de 16 px) só reduz as manchas acima de ~1,6 cm; o
+  traço escuro da borda tem poucos milímetros e passa intacto junto com o grão fino. Um segundo
+  passe que comprima o contraste dos traços escuros fica para depois.
+- [ ] **O AO do ARM do `snow_02` ainda carrega as pegadas.** Só o albedo e o normal map foram
+  atenuados; `snow_02_arm_2k.jpg` é o original, então a oclusão das pegadas pode continuar
+  aparecendo como sombra.
+- [ ] **Os dois PNGs atenuados do `snow_02` somam cerca de 14 MB no repositório** (albedo 4,7 MB,
+  normal map 9,4 MB), contra 6 MB dos JPEGs originais, que ficam como fonte. PNG evita uma segunda
+  perda de compressão; se o tamanho pesar, trocar por JPEG de qualidade alta ou KTX2.
 
 ## Plataformas
 - Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS
