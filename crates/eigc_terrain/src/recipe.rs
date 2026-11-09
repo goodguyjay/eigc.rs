@@ -4,6 +4,7 @@
 
 use crate::height::comb::{Add2, Bias, FlattenColorNearOrigin, FlattenNearOrigin, Scale};
 use crate::height::heightmap::HeightmapHeight;
+use crate::height::linea::{LineaField, LineaScale, generate_linea_specs};
 use crate::height::noise::PerlinFbm;
 use crate::height::slope::SlopeColorField;
 use crate::height::{ColorFn, HeightFn, HeightSource, arc, arc_color};
@@ -28,19 +29,59 @@ const EUROPA_HEIGHTMAP_RON: &str =
 /// `1.0` mantém a elevação medida no DTM.
 const VERTICAL_EXAGGERATION: f32 = 1.0;
 
+/// Tamanho do recorte, em metros. Casa com o DTM (~22082 m); o excedente de ~41 m por lado do DTM
+/// fica fora do terreno.
+const TERRAIN_SIZE_M: f32 = 22000.0;
+
+/// Distância correspondente a 1 pixel do DTM, em metros.
+const DTM_PIXEL_M: f32 = 227.65;
+
+/// Diferença rms de altura do DTM entre pontos a 1 pixel de distância, em metros (13,0 medido
+/// direto, 13,6 pelo ajuste da lei de potência; fica no meio).
+const DTM_ROUGHNESS_AT_PIXEL_M: f32 = 13.2;
+
 /// Comprimento de onda da primeira oitava do detalhe sintético, em metros: 1 pixel do DTM. A
 /// rugosidade do DTM já segue a lei de potência abaixo até ~190 m de distância; começar o detalhe
 /// em escalas maiores somaria rugosidade que o DTM já tem.
-const DETAIL_BASE_WAVELENGTH_M: f32 = 227.65;
+const DETAIL_BASE_WAVELENGTH_M: f32 = DTM_PIXEL_M;
 
 /// Oitavas do detalhe sintético: de ~228 m a ~28 m de comprimento de onda. Abaixo disso o nível 0
-/// da malha (~10,7 m entre vértices) não amostra o suficiente para representar a feição.
+/// da malha (~5,4 m entre vértices) teria poucos vértices por comprimento de onda.
 const DETAIL_OCTAVES: u32 = 4;
 
 /// Expoente de Hurst da rugosidade do DTM: a diferença rms de altura entre dois pontos cresce com
 /// a distância elevada a `H`. Medido no recorte de Rhadamanthys (ajuste entre 1 e 12 pixels de
 /// distância, `H` entre 0,85 e 0,89), ver `tools/dtm_roughness.py`.
 const DTM_HURST_EXPONENT: f32 = 0.85;
+
+/// Quantidade de lineae do recorte. Provisória (faixa em discussão: 40 a 80), ainda não
+/// confirmada com o jay.
+const LINEA_COUNT: usize = 60;
+
+/// Medidas das lineae de Europa como detalhe entre o DTM e a rugosidade fractal: crista de 100 a
+/// 400 m, onde o DTM tem pouca energia (desvio padrão de ~2 m entre 455 m e 1 km de comprimento
+/// de onda) e o fractal ainda não chega (primeira oitava em 228 m). Provisórias, ainda não
+/// confirmadas com o jay.
+///
+/// A altura segue a rugosidade rms do DTM numa distância igual à largura da crista (mesma lei de
+/// potência do detalhe fractal): ~6,4 m para 100 m de largura, ~21 m para 400 m. Assim a crista
+/// tem o tamanho do relevo que o DTM já tem nessa escala e não compete com ele. O teto de
+/// altura/largura de 0,065 dá inclinação máxima de ~0,20 (π × 0,065), perto do p95 do DTM (0,17).
+const EUROPA_LINEA_SCALE: LineaScale = LineaScale {
+    ridge_width_min_m: 100.0,
+    regular_width_max_m: 300.0,
+    ridge_width_max_m: 400.0,
+    valley_to_ridge_min: 0.5,
+    valley_to_ridge_max: 1.0,
+    length_min_m: 1500.0,
+    regular_length_max_m: 4500.0,
+    length_max_m: 6000.0,
+    height_at_reference_width_m: DTM_ROUGHNESS_AT_PIXEL_M,
+    reference_width_m: DTM_PIXEL_M,
+    height_width_exponent: DTM_HURST_EXPONENT,
+    height_fraction_min: 0.75,
+    max_slope_ratio: 0.065,
+};
 
 /// Amplitude do detalhe sintético (soma normalizada das oitavas), em metros. Calibrada para que
 /// a rugosidade total (DTM + detalhe) siga a lei de potência medida do DTM (ver o teste
@@ -95,11 +136,9 @@ pub fn build_recipe(profile: &MoonProfile) -> TerrainRecipe {
 
 /// Monta a receita de geração de terreno para Europa.
 /// A forma macro vem de um DTM real (USGS/Galileo) recentrado em zero e exagerado
-/// verticalmente, por cima entra só uma rugosidade fina procedural. Cor por inclinação do DTM.
+/// verticalmente, por cima entram lineae de centenas de metros e uma rugosidade fina procedural.
+/// Cor por inclinação do DTM (as lineae não entram na cor).
 fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
-    // Tamanho do recorte, em metros. Casa com o DTM (~22082 m); o excedente de ~41 m por lado
-    // do DTM fica fora do terreno.
-    const TERRAIN_SIZE_M: f32 = 22000.0;
     // Resolução da malha monolítica legada (vértices por lado). O terreno em jogo usa chunks
     // com LOD (ver `lod` abaixo), então isto só alimenta `TerrainParams.res` (ver BACKLOG.md).
     const TERRAIN_RES: u32 = 1536;
@@ -139,11 +178,16 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         scale: terrain_params.vertical_exaggeration,
     };
 
-    let fine_detail = europa_fine_detail(seed);
+    // lineae em metros absolutos, sem o exagero vertical: a altura delas já é calibrada contra a
+    // rugosidade medida do DTM.
+    let relief_with_lineae = Add2 {
+        a: real_relief,
+        b: europa_lineae(seed, feature_direction),
+    };
 
     let hybrid_terrain = Add2 {
-        a: real_relief,
-        b: fine_detail,
+        a: relief_with_lineae,
+        b: europa_fine_detail(seed),
     };
 
     // clareira plana na origem: garante um ponto de spawn legível e sem relevo caótico, com
@@ -183,8 +227,9 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         reflectance: calibration.reflectance,
     };
 
-    // 64x64 chunks de 343,75 m. O nível 0 tem espaçamento de ~10,7 m (melhor que os 14,3 m da
-    // malha monolítica) e o mais grosso ~86 m, ainda menor que a largura das lineae (100-300 m).
+    // 64x64 chunks de 343,75 m. O nível 0 tem espaçamento de ~5,4 m (melhor que os 14,3 m da
+    // malha monolítica) e o mais grosso ~43 m, menor que a largura das cristas das lineae
+    // (100 a 400 m).
     // O nível de cada chunk sai do erro geométrico medido (ver `lod_error.rs`) projetado na tela:
     // `max_screen_error_px` menor = mais detalhe de mais longe. `min_error_fraction` é o piso
     // para chunks lisos (e para a cor por vértice, que também perde resolução ao engrossar).
@@ -224,6 +269,21 @@ fn europa_fine_detail(seed: u32) -> PerlinFbm {
     }
 }
 
+/// Lineae de Europa: cristas duplas de centenas de metros somadas ao DTM, fora do alcance da
+/// clareira de spawn (platô mais transição), para não mudar a altura do platô.
+fn europa_lineae(seed: u32, feature_direction: Vec2) -> LineaField {
+    LineaField {
+        specs: generate_linea_specs(
+            seed,
+            feature_direction,
+            TERRAIN_SIZE_M * 0.5,
+            LINEA_COUNT,
+            SPAWN_CLEARING_RADIUS_M + SPAWN_CLEARING_BLEND_M,
+            &EUROPA_LINEA_SCALE,
+        ),
+    }
+}
+
 /// Converte um array [r, g, b, a] em componentes lineares (formato salvo no .ron) para o tipo Color do bevy
 fn color_from_linear_rgba(components: [f32; 4]) -> Color {
     Color::srgba(components[0], components[1], components[2], components[3])
@@ -233,16 +293,13 @@ fn color_from_linear_rgba(components: [f32; 4]) -> Color {
 mod tests {
     use super::*;
 
-    /// Diferença rms de altura do DTM entre pontos a 1 pixel (227,65 m) de distância, em metros
-    /// (13,0 medido direto, 13,6 pelo ajuste da lei de potência; fica no meio).
-    const DTM_ROUGHNESS_AT_PIXEL_M: f32 = 13.2;
-
-    /// Distância correspondente a 1 pixel do DTM, em metros.
-    const DTM_PIXEL_M: f32 = 227.65;
-
     fn dtm() -> HeightmapHeight {
         HeightmapHeight::from_png_and_ron(EUROPA_HEIGHTMAP_PNG, EUROPA_HEIGHTMAP_RON)
             .expect("o heightmap de Europa embutido deveria ser valido")
+    }
+
+    fn europa_direction() -> Vec2 {
+        Vec2::new(0.8, 0.2).normalize()
     }
 
     /// Diferença rms de altura entre pontos separados por `lag_m`, nos eixos x e z, numa grade
@@ -266,31 +323,81 @@ mod tests {
         (sum / f64::from(count)).sqrt() as f32
     }
 
-    struct Hybrid(HeightmapHeight, PerlinFbm);
-    impl HeightSource for Hybrid {
-        fn height_at(&self, x: f32, z: f32) -> f32 {
-            self.0.height_at(x, z) + self.1.height_at(x, z)
-        }
-    }
-
-    /// Testa que o detalhe sintético continua a lei de potência de rugosidade do DTM: entre 24 m e
-    /// 192 m a diferença rms de altura total fica a até 15% da extrapolada de `H` e da rugosidade
-    /// a 1 pixel, e o DTM sozinho fica claramente abaixo dela nas distâncias curtas (é o detalhe
-    /// que preenche a lacuna).
+    /// Testa que o detalhe sintético (lineae e rugosidade fractal) continua a lei de potência de
+    /// rugosidade do DTM: entre 24 m e 900 m a diferença rms de altura total fica a até 15% da
+    /// extrapolada de `H` e da rugosidade a 1 pixel, ou seja, as lineae não competem com o
+    /// relevo do DTM. O DTM sozinho fica claramente abaixo da lei nas distâncias curtas (é o
+    /// detalhe que preenche a lacuna).
     #[test]
     fn fine_detail_continues_the_dtm_roughness_power_law() {
         let dtm_only = dtm();
-        let hybrid = Hybrid(dtm(), europa_fine_detail(204));
+        let hybrid = Add2 {
+            a: Add2 {
+                a: dtm(),
+                b: europa_lineae(204, europa_direction()),
+            },
+            b: europa_fine_detail(204),
+        };
 
-        for lag_m in [24.0_f32, 48.0, 96.0, 192.0] {
-            let target = DTM_ROUGHNESS_AT_PIXEL_M * (lag_m / DTM_PIXEL_M).powf(DTM_HURST_EXPONENT);
-            let total = rms_difference(&hybrid, lag_m);
+        let rows: Vec<(f32, f32, f32)> = [24.0_f32, 48.0, 96.0, 192.0, 384.0, 768.0, 900.0]
+            .into_iter()
+            .map(|lag_m| {
+                let target =
+                    DTM_ROUGHNESS_AT_PIXEL_M * (lag_m / DTM_PIXEL_M).powf(DTM_HURST_EXPONENT);
+                (lag_m, rms_difference(&hybrid, lag_m), target)
+            })
+            .collect();
+        for &(lag_m, total, target) in &rows {
             assert!(
                 (total / target - 1.0).abs() < 0.15,
-                "a {lag_m} m: rms {total}, alvo {target}"
+                "a {lag_m} m: rms {total}, alvo {target} (distância, rms, alvo: {rows:?})"
             );
         }
 
         assert!(rms_difference(&dtm_only, 24.0) < 0.85 * rms_difference(&hybrid, 24.0));
+    }
+
+    /// Testa que as lineae não mexem na clareira de spawn: valem exatamente zero em todo o
+    /// alcance da clareira (platô mais transição), e a altura do platô, tirada da borda da
+    /// transição, é idêntica com e sem lineae, para várias sementes.
+    #[test]
+    fn lineae_leave_the_spawn_clearing_plateau_unchanged() {
+        let reach = SPAWN_CLEARING_RADIUS_M + SPAWN_CLEARING_BLEND_M;
+        for seed in [1_u32, 42, 204, 999, 31_337] {
+            let lineae = europa_lineae(seed, europa_direction());
+            for ring in 0..=14 {
+                let radius = reach * ring as f32 / 14.0;
+                for step in 0..64 {
+                    let angle = step as f32 / 64.0 * std::f32::consts::TAU;
+                    let (x, z) = (angle.cos() * radius, angle.sin() * radius);
+                    assert_eq!(
+                        lineae.height_at(x, z),
+                        0.0,
+                        "seed {seed}: linea dentro da clareira em ({x}, {z})"
+                    );
+                }
+            }
+
+            let with_lineae = FlattenNearOrigin::new(
+                Add2 {
+                    a: Add2 {
+                        a: dtm(),
+                        b: lineae,
+                    },
+                    b: europa_fine_detail(seed),
+                },
+                SPAWN_CLEARING_RADIUS_M,
+                SPAWN_CLEARING_BLEND_M,
+            );
+            let without_lineae = FlattenNearOrigin::new(
+                Add2 {
+                    a: dtm(),
+                    b: europa_fine_detail(seed),
+                },
+                SPAWN_CLEARING_RADIUS_M,
+                SPAWN_CLEARING_BLEND_M,
+            );
+            assert_eq!(with_lineae.flat_height, without_lineae.flat_height);
+        }
     }
 }

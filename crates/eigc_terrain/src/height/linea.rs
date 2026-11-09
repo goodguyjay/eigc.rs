@@ -36,18 +36,18 @@ pub enum LineaPath {
 pub struct LineaSpec {
     /// Traçado central da linea.
     pub path: LineaPath,
-    /// Largura de cada crista, em metros (fisicamente 0.2km–4km, tipicamente ~2000.0).
+    /// Largura de cada crista, em metros (faixa em `LineaScale`).
     pub ridge_width_m: f32,
-    /// Altura de cada crista, em metros (fisicamente ~100–300).
+    /// Altura de cada crista, em metros (regra em `LineaScale`).
     pub ridge_height_m: f32,
-    /// Largura do vale entre as duas cristas, em metros (fisicamente ~1500.0).
+    /// Largura do vale entre as duas cristas, em metros (proporcional à largura da crista).
     pub valley_width_m: f32,
     /// Se true, esta é uma linea "protagonista": mais longa/larga.
     pub is_protagonist: bool,
 }
 
 impl LineaSpec {
-    /// Razão altura/largura da crista. Deve ser sempre ≤0.53 (inclinação máxima ~28°).
+    /// Razão altura/largura da crista. Nunca passa de `LineaScale::max_slope_ratio`.
     pub fn slope_ratio(&self) -> f32 {
         self.ridge_height_m / self.ridge_width_m
     }
@@ -55,6 +55,12 @@ impl LineaSpec {
     /// Distância do centro do vale até o centro de cada crista, em metros.
     fn ridge_center_offset(&self) -> f32 {
         self.valley_width_m * 0.5 + self.ridge_width_m * 0.5
+    }
+
+    /// Distância do traçado central até a borda externa das cristas, em metros. Além dela a
+    /// linea não contribui com altura nenhuma.
+    fn outer_half_width(&self) -> f32 {
+        self.ridge_center_offset() + self.ridge_width_m * 0.5
     }
 
     /// Ponto médio aproximado do traçado da linea, no plano XZ.
@@ -186,12 +192,8 @@ const WIDTH_SCALE_EPSILON: f32 = 1e-3;
 /// Calcula o fator de encolhimento longitudinal em (x, z) e retorna uma cópia de `spec` com
 /// `ridge_width_m`/`valley_width_m`/`ridge_height_m` escalados por ele, ou `None` se o ponto está
 /// na ponta do traçado ou além dela, caso em que a linea não tem influência nenhuma ali (nem
-/// altura, nem contribuição pra cor/proximidade).
+/// altura, nem contribuição pra cor/proximidade). Vale para reta e arco.
 fn tapered_spec(spec: &LineaSpec, x: f32, z: f32) -> Option<LineaSpec> {
-    if matches!(spec.path, LineaPath::Straight { .. }) {
-        return Some(*spec);
-    }
-
     let width_scale = longitudinal_width_scale(&spec.path, x, z);
     if width_scale < WIDTH_SCALE_EPSILON {
         return None;
@@ -242,19 +244,52 @@ fn hash01(seed: u32, index: u32) -> f32 {
     (raw + 1.0) * 0.5
 }
 
-const RIDGE_WIDTH_MIN_M: f32 = 200.0;
-const RIDGE_WIDTH_MAX_M: f32 = 4000.0;
-/// Teto de largura para lineae regulares.
-const REGULAR_WIDTH_MAX_M: f32 = 2600.0;
-const RIDGE_HEIGHT_MIN_M: f32 = 100.0;
-const RIDGE_HEIGHT_MAX_M: f32 = 300.0;
-const MAX_SLOPE_RATIO: f32 = 0.169;
-const VALLEY_WIDTH_M: f32 = 1500.0;
-/// Comprimento de um arco regular, em metros, faixa absoluta, não proporcional ao tamanho do
-/// recorte.
-const LINEA_LENGTH_MIN_M: f32 = 6000.0;
-const LINEA_LENGTH_MAX_M: f32 = 14000.0;
-const PROTAGONIST_LENGTH_SCALE: f32 = 1.6;
+/// Faixas de medida das lineae geradas por `generate_linea_specs`. Dependem da lua e da escala
+/// em que as lineae entram no relevo, por isso vêm de fora (ver `europa_recipe`).
+#[derive(Clone, Copy, Debug)]
+pub struct LineaScale {
+    /// Menor largura de crista, em metros.
+    pub ridge_width_min_m: f32,
+    /// Maior largura de crista das lineae regulares, em metros. As protagonistas sorteiam entre
+    /// este valor e `ridge_width_max_m`, então toda protagonista é mais larga que toda regular.
+    pub regular_width_max_m: f32,
+    /// Maior largura de crista, em metros (só protagonistas chegam aqui).
+    pub ridge_width_max_m: f32,
+    /// Menor largura do vale, como fração da largura da crista.
+    pub valley_to_ridge_min: f32,
+    /// Maior largura do vale, como fração da largura da crista.
+    pub valley_to_ridge_max: f32,
+    /// Menor comprimento do traçado, em metros.
+    pub length_min_m: f32,
+    /// Maior comprimento das lineae regulares, em metros. As protagonistas sorteiam entre este
+    /// valor e `length_max_m`.
+    pub regular_length_max_m: f32,
+    /// Maior comprimento do traçado, em metros (só protagonistas chegam aqui).
+    pub length_max_m: f32,
+    /// Altura da crista, em metros, quando a largura vale `reference_width_m`.
+    pub height_at_reference_width_m: f32,
+    /// Largura de referência da regra de altura, em metros.
+    pub reference_width_m: f32,
+    /// Expoente da regra de altura: altura = `height_at_reference_width_m` vezes
+    /// (largura / `reference_width_m`) elevado a este expoente.
+    pub height_width_exponent: f32,
+    /// Menor fração da altura da regra que uma linea pode sortear (a maior é 1,0).
+    pub height_fraction_min: f32,
+    /// Teto da razão altura/largura da crista. Com o perfil cos², a inclinação máxima da encosta
+    /// é π vezes esta razão.
+    pub max_slope_ratio: f32,
+}
+
+impl LineaScale {
+    /// Altura máxima da crista para uma largura, em metros: a regra de altura, limitada por
+    /// `max_slope_ratio`.
+    fn max_height_for_width(&self, ridge_width_m: f32) -> f32 {
+        let rule = self.height_at_reference_width_m
+            * (ridge_width_m / self.reference_width_m).powf(self.height_width_exponent);
+        rule.min(ridge_width_m * self.max_slope_ratio)
+    }
+}
+
 const STRAIGHT_PATH_PROBABILITY: f32 = 0.8;
 
 /// Quantidade de famílias de orientação de linea. Europa real registra múltiplas gerações de
@@ -289,13 +324,7 @@ fn pick_orientation_family(t: f32) -> usize {
     1 + ((remaining * other_count as f32) as usize).min(other_count - 1)
 }
 
-/// Multiplicador de `terrain_half_extent_m` usado como meio-comprimento de um traçado reto. O
-/// traçado reto não sorteia comprimento, ele se estende bem além do recorte visível nos dois
-/// sentidos.
-const ETERNAL_STRAIGHT_HALF_LENGTH_FACTOR: f32 = 4.0;
-
-/// Fração máxima segura de `ridge_width_m` em relação ao `length` de um arco. Só se aplica a
-/// `LineaPath::Arc`.
+/// Fração máxima segura de `ridge_width_m` em relação ao comprimento do traçado (reta ou arco).
 const MAX_WIDTH_TO_LENGTH_RATIO: f32 = 0.5;
 
 /// Divide o recorte numa grade quadrada alinhada aos eixos (along, ortho) e retorna os centros de
@@ -335,213 +364,245 @@ fn stratified_cell_centers(
     }
 }
 
-/// Ponto da reta infinita (que passa por `point` na direção `dir`, unitária) mais próximo da
-/// origem.
-fn closest_point_on_line_to_origin(point: Vec2, dir: Vec2) -> Vec2 {
-    point + dir * (-point).dot(dir)
+/// Quantos valores de `hash01` cada linea reserva; cada sorteio usa um índice próprio dentro
+/// dessa faixa.
+const HASH_SLOTS_PER_LINEA: u32 = 16;
+
+/// Fração da célula da grade estratificada usada como deslocamento aleatório do centro.
+const JITTER_FRACTION: f32 = 0.35;
+
+/// Tentativas de re-sortear uma linea cujo traçado invade a clareira de spawn, antes de
+/// afastá-la por translação (ver `push_path_clear_of_origin`).
+const CLEARING_REDRAW_ATTEMPTS: u32 = 8;
+
+/// Passo somado à semente a cada re-sorteio. A tentativa 0 usa a semente original.
+const REDRAW_SEED_STEP: u32 = 0x85EB_CA6B;
+
+/// Folga, em metros, além da distância mínima exigida entre o traçado e a origem. Garante que a
+/// altura da linea dentro da clareira seja exatamente zero, sem resíduo de arredondamento.
+const CLEARING_MARGIN_M: f32 = 1.0;
+
+/// Comprimento do traçado, em metros.
+fn path_length(path: &LineaPath) -> f32 {
+    match *path {
+        LineaPath::Straight { start, end } => (end - start).length(),
+        LineaPath::Arc {
+            radius,
+            sweep_angle,
+            ..
+        } => sweep_angle.abs() * radius,
+    }
 }
 
-/// Empurra `center` (perpendicularmente a `dir`, sem mudar a posição ao longo da reta) até que a
-/// distância perpendicular da reta infinita que passa por `center` na direção `dir` até a origem
-/// seja pelo menos `min_distance_m`. Não faz nada se a reta já está longe o bastante.
-fn push_line_away_from_origin(center: Vec2, dir: Vec2, normal: Vec2, min_distance_m: f32) -> Vec2 {
-    let closest = closest_point_on_line_to_origin(center, dir);
-    let perp_distance = closest.length();
+/// Desloca o traçado inteiro por `offset`.
+fn translate_path(path: LineaPath, offset: Vec2) -> LineaPath {
+    match path {
+        LineaPath::Straight { start, end } => LineaPath::Straight {
+            start: start + offset,
+            end: end + offset,
+        },
+        LineaPath::Arc {
+            center,
+            radius,
+            start_angle,
+            sweep_angle,
+        } => LineaPath::Arc {
+            center: center + offset,
+            radius,
+            start_angle,
+            sweep_angle,
+        },
+    }
+}
 
-    if perp_distance >= min_distance_m {
-        return center;
+/// Distância mínima entre o traçado de `spec` e a origem para que nenhuma parte da linea alcance
+/// o disco de raio `clearing_reach_m`.
+fn required_clearance(spec: &LineaSpec, clearing_reach_m: f32) -> f32 {
+    clearing_reach_m + spec.outer_half_width() + CLEARING_MARGIN_M
+}
+
+/// Afasta `spec` da origem por translação até o traçado ficar a pelo menos `required_clearance`
+/// dela. Não faz nada se já está longe o bastante. Desloca na direção do ponto médio do traçado
+/// (ou `fallback_dir`, se ele cai na origem) pela distância exigida mais meio comprimento: todo
+/// ponto do traçado está a no máximo meio comprimento do ponto médio, então a distância fica
+/// garantida para reta e arco.
+fn push_path_clear_of_origin(
+    spec: LineaSpec,
+    clearing_reach_m: f32,
+    fallback_dir: Vec2,
+) -> LineaSpec {
+    let required = required_clearance(&spec, clearing_reach_m);
+    if distance_to_path(&spec.path, 0.0, 0.0) >= required {
+        return spec;
     }
 
-    // `closest` (como vetor a partir da origem) é perpendicular a `dir`
-    let push_dir = if perp_distance > f32::EPSILON {
-        closest / perp_distance
+    let push_dir = spec.approx_center().try_normalize().unwrap_or(fallback_dir);
+    let offset = push_dir * (required + path_length(&spec.path) * 0.5);
+    LineaSpec {
+        path: translate_path(spec.path, offset),
+        ..spec
+    }
+}
+
+/// Sorteia a linea `index` na célula `cell` (along, ortho) da grade estratificada. Todo sorteio
+/// sai de `hash01(seed, index * HASH_SLOTS_PER_LINEA + k)`, então a mesma semente e o mesmo
+/// índice sempre dão a mesma linea.
+fn draw_linea_spec(
+    seed: u32,
+    index: u32,
+    cell: (f32, f32),
+    cell_size: f32,
+    feature_direction: Vec2,
+    scale: &LineaScale,
+) -> LineaSpec {
+    let draw = |slot: u32| hash01(seed, index * HASH_SLOTS_PER_LINEA + slot);
+    let is_protagonist = index < 2;
+    let is_straight = draw(7) < STRAIGHT_PATH_PROBABILITY;
+
+    // largura e comprimento sorteados de subfaixas distintas para protagonista e regular,
+    // garantindo por construção que toda protagonista é maior que toda regular.
+    let (width_min, width_max, length_min, length_max) = if is_protagonist {
+        (
+            scale.regular_width_max_m,
+            scale.ridge_width_max_m,
+            scale.regular_length_max_m,
+            scale.length_max_m,
+        )
     } else {
-        normal // reta passa exatamente pela origem: empurra numa direção arbitrária
+        (
+            scale.ridge_width_min_m,
+            scale.regular_width_max_m,
+            scale.length_min_m,
+            scale.regular_length_max_m,
+        )
     };
-    center + push_dir * (min_distance_m - perp_distance)
+    let length = length_min + draw(5) * (length_max - length_min);
+    let ridge_width_m =
+        (width_min + draw(1) * (width_max - width_min)).min(length * MAX_WIDTH_TO_LENGTH_RATIO);
+
+    // altura derivada da largura já final, nunca sorteada de forma independente.
+    let height_fraction = scale.height_fraction_min + draw(2) * (1.0 - scale.height_fraction_min);
+    let ridge_height_m = scale.max_height_for_width(ridge_width_m) * height_fraction;
+
+    let valley_ratio = scale.valley_to_ridge_min
+        + draw(9) * (scale.valley_to_ridge_max - scale.valley_to_ridge_min);
+    let valley_width_m = ridge_width_m * valley_ratio;
+
+    // a grade se alinha à família 0 (a mais numerosa), sem significado físico.
+    let grid_dir = family_base_direction(feature_direction, 0);
+    let grid_normal = Vec2::new(-grid_dir.y, grid_dir.x);
+    let jitter_range = cell_size * JITTER_FRACTION;
+    let (cell_along, cell_ortho) = cell;
+    let center = grid_dir * (cell_along + (draw(4) * 2.0 - 1.0) * jitter_range)
+        + grid_normal * (cell_ortho + (draw(3) * 2.0 - 1.0) * jitter_range);
+
+    let family_dir = family_base_direction(feature_direction, pick_orientation_family(draw(8)));
+    let angle_jitter = (draw(6) - 0.5) * 0.3;
+    let dir = Vec2::new(
+        family_dir.x * angle_jitter.cos() - family_dir.y * angle_jitter.sin(),
+        family_dir.x * angle_jitter.sin() + family_dir.y * angle_jitter.cos(),
+    )
+    .normalize();
+
+    let path = if is_straight {
+        let half = dir * (length * 0.5);
+        LineaPath::Straight {
+            start: center - half,
+            end: center + half,
+        }
+    } else {
+        let radius = length * 1.2;
+        let arc_center = center - dir.perp() * radius;
+        // ancora o MEIO do arco em `center` (não o início), igual ao traçado reto
+        let anchor_angle = (center - arc_center).y.atan2((center - arc_center).x);
+        let sweep_angle = length / radius;
+        LineaPath::Arc {
+            center: arc_center,
+            radius,
+            start_angle: anchor_angle - sweep_angle * 0.5,
+            sweep_angle,
+        }
+    };
+
+    LineaSpec {
+        path,
+        ridge_width_m,
+        ridge_height_m,
+        valley_width_m,
+        is_protagonist,
+    }
 }
 
 /// Gera o conjunto determinístico de lineae do recorte, a partir do seed e da direção de feature
 /// calibrada. As duas primeiras specs geradas saem marcadas como protagonistas (mais
-/// longas/largas, servem de ponto focal); as demais têm dimensões físicas variadas dentro das
-/// faixas reais de Europa.
+/// longas/largas, servem de ponto focal); as demais têm medidas dentro das faixas de `scale`.
+///
+/// Nenhuma parte de nenhuma linea alcança o disco de raio `clearing_reach_m` ao redor da origem
+/// (clareira de spawn mais a transição): uma linea cujo traçado invade o disco é re-sorteada e,
+/// se continuar invadindo, afastada por translação.
 pub fn generate_linea_specs(
     seed: u32,
     feature_direction: Vec2,
     terrain_half_extent_m: f32,
     count: usize,
-    spawn_exclusion_radius_m: f32,
+    clearing_reach_m: f32,
+    scale: &LineaScale,
 ) -> Vec<LineaSpec> {
-    // a grade de posicionamento não tem mais uma única `feature_direction` pra se alinhar (cada
-    // linea agora sorteia sua própria família de orientação, abaixo). Alinha-se à família 0 (a
-    // mais numerosa/base) só por que sim, sem significado físico nenhum.
+    let (cell_size, cell_centers) =
+        stratified_cell_centers(terrain_half_extent_m, count, clearing_reach_m);
     let grid_dir = family_base_direction(feature_direction, 0);
     let grid_normal = Vec2::new(-grid_dir.y, grid_dir.x);
-    let mut specs = Vec::with_capacity(count);
 
-    // posicionamento em grade estratificada (não puramente aleatório): divide o recorte numa
-    // grade quadrada alinhada a `grid_dir` e sorteia cada centro numa célula própria,
-    // com jitter limitado a uma fração da célula.
-    let (cell_size, cell_centers) =
-        stratified_cell_centers(terrain_half_extent_m, count, spawn_exclusion_radius_m);
-    const JITTER_FRACTION: f32 = 0.35;
-
-    for i in 0..count {
-        let index = i as u32;
-        let is_protagonist = i < 2;
-
-        // traçado reto agora é "eterno"
-        let style_t = hash01(seed, index * 8 + 7);
-        let is_straight = style_t < STRAIGHT_PATH_PROBABILITY;
-
-        // largura sorteada de uma subfaixa distinta pra protagonista vs. regular, garantindo por
-        // construção que toda protagonista é mais larga que toda linea regular (não é um
-        // multiplicador pós-hoc, que poderia perder pra uma regular sorteada no topo da faixa).
-        let width_t = hash01(seed, index * 8 + 1);
-        let ridge_width_m = if is_protagonist {
-            REGULAR_WIDTH_MAX_M + width_t * (RIDGE_WIDTH_MAX_M - REGULAR_WIDTH_MAX_M)
-        } else {
-            RIDGE_WIDTH_MIN_M + width_t * (REGULAR_WIDTH_MAX_M - RIDGE_WIDTH_MIN_M)
-        };
-
-        // comprimento (e a salvaguarda de largura/comprimento) só existem pro arco: o traçado
-        // reto é eterno, não tem "comprimento" que uma largura possa exceder.
-        let arc_length = if is_straight {
-            None
-        } else {
-            let length_t = hash01(seed, index * 8 + 5);
-            let base_length =
-                LINEA_LENGTH_MIN_M + length_t * (LINEA_LENGTH_MAX_M - LINEA_LENGTH_MIN_M);
-            Some(if is_protagonist {
-                base_length * PROTAGONIST_LENGTH_SCALE
-            } else {
-                base_length
-            })
-        };
-
-        let ridge_width_m = match arc_length {
-            Some(length) => ridge_width_m.min(length * MAX_WIDTH_TO_LENGTH_RATIO),
-            None => ridge_width_m,
-        };
-
-        // altura derivada da largura já final (nunca sorteada de forma independente nem escalada
-        // depois), garantindo a razão altura/largura máxima e o teto físico por construção.
-        let height_t = hash01(seed, index * 8 + 2);
-        let max_height_for_ratio = ridge_width_m * MAX_SLOPE_RATIO;
-        let height_ceiling = RIDGE_HEIGHT_MAX_M.min(max_height_for_ratio);
-        let height_floor = RIDGE_HEIGHT_MIN_M.min(height_ceiling);
-        let ridge_height_m = height_floor + height_t * (height_ceiling - height_floor);
-
-        let (cell_along, cell_ortho) = cell_centers[i];
-        let jitter_range = cell_size * JITTER_FRACTION;
-
-        let center_t = hash01(seed, index * 8 + 3) * 2.0 - 1.0;
-        let along_t = hash01(seed, index * 8 + 4) * 2.0 - 1.0;
-        let mut center = grid_dir * (cell_along + along_t * jitter_range)
-            + grid_normal * (cell_ortho + center_t * jitter_range);
-
-        // família de orientação (ver ORIENTATION_FAMILY_COUNT/ORIENTATION_FAMILY_OFFSETS_RAD):
-        // substitui o jitter único em feature_direction, que deixava toda linea quase paralela
-        // (convergência de perspectiva, sem cruzamento real).
-        let family_t = hash01(seed, index * 8 + 8);
-        let family = pick_orientation_family(family_t);
-        let family_dir = family_base_direction(feature_direction, family);
-
-        let angle_jitter = (hash01(seed, index * 8 + 6) - 0.5) * 0.3;
-        let dir = Vec2::new(
-            family_dir.x * angle_jitter.cos() - family_dir.y * angle_jitter.sin(),
-            family_dir.x * angle_jitter.sin() + family_dir.y * angle_jitter.cos(),
-        )
-        .normalize();
-
-        if is_straight {
-            // traçado reto eterno: a âncora (center) pode estar longe da origem e a reta ainda
-            // assim passar perto/em cima da clareira de spawn, dependendo de `dir`.
-            center = push_line_away_from_origin(center, dir, grid_normal, spawn_exclusion_radius_m);
-        } else {
-            let dist_from_origin = center.length();
-            if dist_from_origin < spawn_exclusion_radius_m && dist_from_origin > f32::EPSILON {
-                center *= spawn_exclusion_radius_m / dist_from_origin;
-            }
-        }
-
-        let path = if is_straight {
-            // se estende bem além do recorte visível nos dois sentidos, pra que a ponta real
-            // (onde a crista teria que existir sem afunilamento).
-            let half_length = terrain_half_extent_m * ETERNAL_STRAIGHT_HALF_LENGTH_FACTOR;
-            let half = dir * half_length;
-            LineaPath::Straight {
-                start: center - half,
-                end: center + half,
-            }
-        } else {
-            let length = arc_length.expect("arco sempre tem comprimento finito calculado acima");
-            let radius = length * 1.2;
-            let arc_center = center - dir.perp() * radius;
-            // ancora o MEIO do arco em `center` (não o início), igual ao traçado reto
-            let anchor_angle = (center - arc_center).y.atan2((center - arc_center).x);
-            let sweep_angle = length / radius;
-            let start_angle = anchor_angle - sweep_angle * 0.5;
-            LineaPath::Arc {
-                center: arc_center,
-                radius,
-                start_angle,
-                sweep_angle,
-            }
-        };
-
-        specs.push(LineaSpec {
-            path,
-            ridge_width_m,
-            ridge_height_m,
-            valley_width_m: VALLEY_WIDTH_M,
-            is_protagonist,
-        });
-    }
-
-    specs
+    cell_centers
+        .into_iter()
+        .enumerate()
+        .map(|(i, cell)| {
+            let index = i as u32;
+            let draw_attempt = |attempt: u32| {
+                let attempt_seed = seed.wrapping_add(attempt.wrapping_mul(REDRAW_SEED_STEP));
+                draw_linea_spec(
+                    attempt_seed,
+                    index,
+                    cell,
+                    cell_size,
+                    feature_direction,
+                    scale,
+                )
+            };
+            let spec = (0..=CLEARING_REDRAW_ATTEMPTS)
+                .map(draw_attempt)
+                .find(|spec| {
+                    distance_to_path(&spec.path, 0.0, 0.0)
+                        >= required_clearance(spec, clearing_reach_m)
+                })
+                .unwrap_or_else(|| draw_attempt(0));
+            push_path_clear_of_origin(spec, clearing_reach_m, grid_normal)
+        })
+        .collect()
 }
 
-/// Fonte de altura que soma a contribuição de todas as lineae de um recorte, em metros, mais um
-/// ruído de detalhe fino confinado à crista/encosta (quase nulo longe de qualquer linea).
+/// Fonte de altura das lineae de um recorte, em metros: em cada ponto, a altura da crista mais
+/// alta entre as lineae que o alcançam. Não tem ruído próprio; o detalhe fino vem de fora (em
+/// Europa, a rugosidade fractal de `europa_recipe`).
 pub struct LineaField {
     /// Lineae que compõem o campo.
     pub specs: Vec<LineaSpec>,
-    /// Gerador de ruído usado para o detalhe fino da encosta.
-    pub detail_noise: Perlin,
-    /// Amplitude do ruído de detalhe fino, em metros (pequena e arbitrária).
-    pub detail_amplitude_m: f32,
-    /// Frequência do ruído de detalhe fino.
-    pub detail_frequency: f32,
 }
 
 impl HeightSource for LineaField {
     fn height_at(&self, x: f32, z: f32) -> f32 {
-        let mut height = 0.0_f32;
-        let mut max_proximity = 0.0_f32;
-
         // max, não soma: duas lineae que passam perto uma da outra não empilham crista sobre
         // crista fisicamente, a mais alta domina.
-        for spec in &self.specs {
-            let Some(shrunk) = tapered_spec(spec, x, z) else {
-                continue;
-            };
-            let d = distance_to_path(&spec.path, x, z);
-            height = height.max(linea_cross_section_height(&shrunk, d));
-
-            let proximity = 1.0 - linea_feature_factor(&shrunk, d).min(1.0);
-            max_proximity = max_proximity.max(proximity);
-        }
-
-        if max_proximity > 0.0 {
-            let detail = self.detail_noise.get([
-                (x * self.detail_frequency) as f64,
-                (z * self.detail_frequency) as f64,
-            ]) as f32;
-            height += detail * self.detail_amplitude_m * max_proximity;
-        }
-
-        height
+        self.specs
+            .iter()
+            .filter_map(|spec| {
+                let shrunk = tapered_spec(spec, x, z)?;
+                Some(linea_cross_section_height(
+                    &shrunk,
+                    distance_to_path(&spec.path, x, z),
+                ))
+            })
+            .fold(0.0_f32, f32::max)
     }
 }
 
@@ -576,6 +637,7 @@ impl ColorSource for LineaColorField {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::{prop_assert, proptest};
 
     fn straight_spec() -> LineaSpec {
         LineaSpec {
@@ -598,13 +660,11 @@ mod tests {
         let spec = straight_spec();
         let field = LineaField {
             specs: vec![spec, spec],
-            detail_noise: Perlin::new(0),
-            detail_amplitude_m: 0.0,
-            detail_frequency: 1.0,
         };
+        let ridge_offset = spec.ridge_center_offset();
 
-        let single = linea_cross_section_height(&spec, 0.0);
-        let doubled = field.height_at(0.0, 0.0);
+        let single = linea_cross_section_height(&spec, ridge_offset);
+        let doubled = field.height_at(0.0, ridge_offset);
 
         assert!(
             (doubled - single).abs() < 1e-3,
@@ -636,24 +696,29 @@ mod tests {
     }
 
     #[test]
-    fn straight_linea_never_tapers_and_matches_untapered_profile_anywhere() {
-        // tapered_spec devolve a spec original sem encolher pra LineaPath::Straight
+    fn finite_straight_linea_has_full_profile_in_the_middle_and_vanishes_at_and_beyond_tips() {
         let spec = straight_spec(); // start=(-1000,0), end=(1000,0)
-        let field = LineaField {
-            specs: vec![spec],
-            detail_noise: Perlin::new(0),
-            detail_amplitude_m: 0.0,
-            detail_frequency: 1.0,
-        };
+        let field = LineaField { specs: vec![spec] };
         let ridge_offset = spec.ridge_center_offset();
         let untapered = linea_cross_section_height(&spec, ridge_offset);
 
-        for x in [-1000.0, -700.0, 0.0, 700.0, 1000.0] {
+        // fora das zonas de afinamento (15% do comprimento em cada ponta) o perfil é o completo
+        for x in [-600.0, 0.0, 600.0] {
             let height = field.height_at(x, ridge_offset);
             assert!(
                 (height - untapered).abs() < 1e-3,
-                "altura em x={x} deveria bater com o perfil sem afunilamento em qualquer ponto: {height} vs {untapered}"
+                "altura em x={x} deveria ser a do perfil completo: {height} vs {untapered}"
             );
+        }
+
+        for x in [-1000.0, 1000.0, -1001.0, 1001.0, -1500.0, 2500.0] {
+            for z in [0.0, ridge_offset, -ridge_offset] {
+                assert_eq!(
+                    field.height_at(x, z),
+                    0.0,
+                    "a linea deveria valer zero na ponta e além dela: ({x}, {z})"
+                );
+            }
         }
     }
 
@@ -732,14 +797,52 @@ mod tests {
         );
     }
 
+    /// Escala de teste: as mesmas ordens de grandeza das lineae de Europa (crista de 100 a 400 m,
+    /// traçado de 1,5 a 6 km), sem depender da receita.
+    fn test_scale() -> LineaScale {
+        LineaScale {
+            ridge_width_min_m: 100.0,
+            regular_width_max_m: 300.0,
+            ridge_width_max_m: 400.0,
+            valley_to_ridge_min: 0.5,
+            valley_to_ridge_max: 1.0,
+            length_min_m: 1500.0,
+            regular_length_max_m: 4500.0,
+            length_max_m: 6000.0,
+            height_at_reference_width_m: 13.2,
+            reference_width_m: 227.65,
+            height_width_exponent: 0.85,
+            height_fraction_min: 0.75,
+            max_slope_ratio: 0.065,
+        }
+    }
+
+    /// Meia extensão do recorte de Europa, em metros.
+    const HALF_EXTENT_M: f32 = 11000.0;
+
+    /// Alcance da clareira de spawn de Europa (platô mais transição), em metros.
+    const CLEARING_REACH_M: f32 = 350.0;
+
+    fn europa_like_specs(seed: u32) -> Vec<LineaSpec> {
+        generate_linea_specs(
+            seed,
+            Vec2::new(0.8, 0.2).normalize(),
+            HALF_EXTENT_M,
+            60,
+            CLEARING_REACH_M,
+            &test_scale(),
+        )
+    }
+
     #[test]
     fn generate_linea_specs_keeps_a_minimum_spacing_between_centers() {
         // posicionamento em grade estratificada deve evitar que várias lineae se aglomerem no
         // mesmo ponto
         for seed in [1u32, 204, 999, 42] {
-            let specs =
-                generate_linea_specs(seed, Vec2::new(0.8, 0.2).normalize(), 3000.0, 8, 350.0);
-            let centers: Vec<Vec2> = specs.iter().map(LineaSpec::approx_center).collect();
+            let centers: Vec<Vec2> = europa_like_specs(seed)
+                .iter()
+                .map(LineaSpec::approx_center)
+                .collect();
 
             for i in 0..centers.len() {
                 for j in (i + 1)..centers.len() {
@@ -753,26 +856,62 @@ mod tests {
         }
     }
 
-    #[test]
-    fn generate_linea_specs_keeps_all_centers_outside_spawn_exclusion_radius() {
-        // nenhuma linea deveria nascer ancorada em cima da clareira de spawn.
-        let exclusion_radius_m = 350.0;
-        for seed in [1u32, 204, 999, 42] {
-            let specs = generate_linea_specs(
-                seed,
-                Vec2::new(0.8, 0.2).normalize(),
-                3000.0,
-                8,
-                exclusion_radius_m,
-            );
-            for (i, spec) in specs.iter().enumerate() {
-                let distance = spec.approx_center().length();
-                assert!(
-                    distance >= exclusion_radius_m - 1e-3,
-                    "linea {i} (seed {seed}) está a {distance}m da origem, dentro do raio de exclusão de {exclusion_radius_m}m"
+    proptest! {
+        /// Para qualquer semente, nenhuma parte de nenhuma linea alcança a clareira de spawn: o
+        /// traçado fica a pelo menos o alcance da clareira mais a meia largura externa da linea.
+        #[test]
+        fn no_linea_path_reaches_the_spawn_clearing(seed in 0_u32..u32::MAX) {
+            for spec in europa_like_specs(seed) {
+                let distance = distance_to_path(&spec.path, 0.0, 0.0);
+                let minimum = CLEARING_REACH_M + spec.outer_half_width();
+                prop_assert!(
+                    distance >= minimum,
+                    "traçado a {} m da origem, mínimo {} m",
+                    distance,
+                    minimum
                 );
             }
         }
+    }
+
+    #[test]
+    fn push_path_clear_of_origin_moves_a_path_crossing_the_origin_out_of_the_clearing() {
+        let crossing_arc = LineaSpec {
+            path: LineaPath::Arc {
+                center: Vec2::new(0.0, -1000.0),
+                radius: 1000.0,
+                start_angle: 0.5,
+                sweep_angle: 1.5,
+            },
+            ..straight_spec()
+        };
+
+        for spec in [straight_spec(), crossing_arc] {
+            assert!(distance_to_path(&spec.path, 0.0, 0.0) < required_clearance(&spec, 350.0));
+
+            let pushed = push_path_clear_of_origin(spec, 350.0, Vec2::Y);
+
+            assert!(
+                distance_to_path(&pushed.path, 0.0, 0.0) >= required_clearance(&pushed, 350.0),
+                "o traçado empurrado ainda alcança a clareira: {:?}",
+                pushed.path
+            );
+            assert_eq!(path_length(&pushed.path), path_length(&spec.path));
+        }
+    }
+
+    #[test]
+    fn push_path_clear_of_origin_is_noop_when_already_far_enough() {
+        let far = LineaSpec {
+            path: LineaPath::Straight {
+                start: Vec2::new(-1000.0, 5000.0),
+                end: Vec2::new(1000.0, 5000.0),
+            },
+            ..straight_spec()
+        };
+
+        let pushed = push_path_clear_of_origin(far, 350.0, Vec2::Y);
+        assert_eq!(pushed.approx_center(), far.approx_center());
     }
 
     #[test]
@@ -808,10 +947,8 @@ mod tests {
         let feature_angle = feature_direction.y.atan2(feature_direction.x);
 
         for seed in [1u32, 204, 999, 42] {
-            let specs = generate_linea_specs(seed, feature_direction, 11000.0, 8, 350.0);
-
             let mut max_deviation = 0.0_f32;
-            for spec in &specs {
+            for spec in &europa_like_specs(seed) {
                 if let LineaPath::Straight { start, end } = spec.path {
                     let dir = (end - start).normalize();
                     let angle = dir.y.atan2(dir.x);
@@ -832,86 +969,20 @@ mod tests {
     }
 
     #[test]
-    fn generate_linea_specs_straight_lineae_extend_far_beyond_terrain() {
-        // traçado reto é "eterno": nunca deveria sortear um comprimento finito derivado de
-        // LINEA_LENGTH_MIN/MAX_M
-        let terrain_half_extent_m = 11000.0;
+    fn generate_linea_specs_keeps_every_path_length_within_the_scale_range() {
+        // reta e arco têm comprimento finito sorteado, nenhuma reta atravessa o recorte inteiro
+        let scale = test_scale();
         for seed in [1u32, 204, 999, 42] {
-            let specs = generate_linea_specs(
-                seed,
-                Vec2::new(0.8, 0.2).normalize(),
-                terrain_half_extent_m,
-                8,
-                350.0,
-            );
-            for (i, spec) in specs.iter().enumerate() {
-                if let LineaPath::Straight { start, end } = spec.path {
-                    let length = (end - start).length();
-                    assert!(
-                        length > terrain_half_extent_m * 4.0,
-                        "linea reta {i} (seed {seed}) tem comprimento {length}m, deveria se \
-                         estender bem além do recorte (meia-extensão {terrain_half_extent_m}m)"
-                    );
-                }
+            for (i, spec) in europa_like_specs(seed).iter().enumerate() {
+                let length = path_length(&spec.path);
+                assert!(
+                    length >= scale.length_min_m - 1e-2 && length <= scale.length_max_m + 1e-2,
+                    "linea {i} (seed {seed}) tem comprimento {length} m, fora de {} a {} m",
+                    scale.length_min_m,
+                    scale.length_max_m
+                );
             }
         }
-    }
-
-    #[test]
-    fn generate_linea_specs_keeps_straight_lines_away_from_spawn_exclusion() {
-        let exclusion_radius_m = 350.0;
-        for seed in [1u32, 204, 999, 42] {
-            let specs = generate_linea_specs(
-                seed,
-                Vec2::new(0.8, 0.2).normalize(),
-                11000.0,
-                8,
-                exclusion_radius_m,
-            );
-            for (i, spec) in specs.iter().enumerate() {
-                if let LineaPath::Straight { start, end } = spec.path {
-                    let dir = (end - start).normalize();
-                    let distance = closest_point_on_line_to_origin(start, dir).length();
-                    assert!(
-                        distance >= exclusion_radius_m - 1e-2,
-                        "linea reta {i} (seed {seed}) passa a {distance}m da origem, dentro do \
-                         raio de exclusão de {exclusion_radius_m}m"
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn push_line_away_from_origin_increases_distance_to_min_and_preserves_along_position() {
-        let center = Vec2::new(500.0, 100.0);
-        let dir = Vec2::new(1.0, 0.0);
-        let normal = Vec2::new(0.0, 1.0);
-        let min_distance_m = 350.0;
-
-        let pushed = push_line_away_from_origin(center, dir, normal, min_distance_m);
-
-        let new_distance = closest_point_on_line_to_origin(pushed, dir).length();
-        assert!(
-            (new_distance - min_distance_m).abs() < 1e-3,
-            "distância da reta empurrada até a origem deveria bater exatamente no mínimo: {new_distance}"
-        );
-
-        // a posição ao longo da reta (projeção em dir) não deveria mudar, só a perpendicular
-        assert!(
-            (pushed.dot(dir) - center.dot(dir)).abs() < 1e-3,
-            "empurrão não deveria alterar a posição ao longo da reta"
-        );
-    }
-
-    #[test]
-    fn push_line_away_from_origin_is_noop_when_already_far_enough() {
-        let center = Vec2::new(0.0, 1000.0);
-        let dir = Vec2::new(1.0, 0.0);
-        let normal = Vec2::new(0.0, 1.0);
-
-        let pushed = push_line_away_from_origin(center, dir, normal, 350.0);
-        assert_eq!(pushed, center);
     }
 
     #[test]
@@ -931,47 +1002,74 @@ mod tests {
 
     #[test]
     fn generate_linea_specs_is_deterministic() {
-        let a = generate_linea_specs(204, Vec2::new(0.8, 0.2).normalize(), 1500.0, 8, 350.0);
-        let b = generate_linea_specs(204, Vec2::new(0.8, 0.2).normalize(), 1500.0, 8, 350.0);
+        let a = LineaField {
+            specs: europa_like_specs(204),
+        };
+        let b = LineaField {
+            specs: europa_like_specs(204),
+        };
 
-        assert_eq!(a.len(), b.len());
-        for (sa, sb) in a.iter().zip(b.iter()) {
+        assert_eq!(a.specs.len(), b.specs.len());
+        for (sa, sb) in a.specs.iter().zip(b.specs.iter()) {
             assert_eq!(sa.ridge_width_m, sb.ridge_width_m);
             assert_eq!(sa.ridge_height_m, sb.ridge_height_m);
+            assert_eq!(sa.valley_width_m, sb.valley_width_m);
             assert_eq!(sa.is_protagonist, sb.is_protagonist);
+            assert_eq!(sa.approx_center(), sb.approx_center());
+        }
+        for i in 0..200 {
+            let x = -HALF_EXTENT_M + i as f32 * 109.7;
+            let z = HALF_EXTENT_M - i as f32 * 97.3;
+            assert_eq!(a.height_at(x, z), b.height_at(x, z));
         }
     }
 
     #[test]
     fn generate_linea_specs_marks_exactly_two_protagonists_as_the_largest() {
-        let specs = generate_linea_specs(204, Vec2::new(0.8, 0.2).normalize(), 1500.0, 8, 350.0);
+        let specs = europa_like_specs(204);
         let protagonist_count = specs.iter().filter(|s| s.is_protagonist).count();
         assert_eq!(protagonist_count, 2);
 
-        let max_regular_width = specs
-            .iter()
-            .filter(|s| !s.is_protagonist)
+        let regulars = specs.iter().filter(|s| !s.is_protagonist);
+        let max_regular_width = regulars
+            .clone()
             .map(|s| s.ridge_width_m)
+            .fold(0.0_f32, f32::max);
+        let max_regular_length = regulars
+            .map(|s| path_length(&s.path))
             .fold(0.0_f32, f32::max);
 
         for spec in specs.iter().filter(|s| s.is_protagonist) {
             assert!(spec.ridge_width_m >= max_regular_width);
+            assert!(path_length(&spec.path) >= max_regular_length - 1e-2);
         }
     }
 
     #[test]
-    fn generate_linea_specs_respects_physical_ranges_and_slope_ratio() {
+    fn generate_linea_specs_respects_scale_ranges_and_slope_ratio() {
+        let scale = test_scale();
         for seed in [1u32, 204, 999, 42] {
-            let specs = generate_linea_specs(seed, Vec2::new(1.0, 0.0), 1500.0, 8, 350.0);
-            for spec in &specs {
+            for spec in &europa_like_specs(seed) {
                 assert!(
-                    spec.ridge_width_m >= RIDGE_WIDTH_MIN_M
-                        && spec.ridge_width_m <= RIDGE_WIDTH_MAX_M
+                    spec.ridge_width_m >= scale.ridge_width_min_m
+                        && spec.ridge_width_m <= scale.ridge_width_max_m
                 );
-                assert!(spec.ridge_height_m > 0.0 && spec.ridge_height_m <= RIDGE_HEIGHT_MAX_M);
+                let ceiling = scale.max_height_for_width(spec.ridge_width_m);
                 assert!(
-                    spec.slope_ratio() <= MAX_SLOPE_RATIO + 1e-4,
-                    "razão altura/largura {} excede o máximo físico",
+                    spec.ridge_height_m >= ceiling * scale.height_fraction_min - 1e-4
+                        && spec.ridge_height_m <= ceiling + 1e-4,
+                    "altura {} fora da regra para largura {}",
+                    spec.ridge_height_m,
+                    spec.ridge_width_m
+                );
+                let valley_ratio = spec.valley_width_m / spec.ridge_width_m;
+                assert!(
+                    valley_ratio >= scale.valley_to_ridge_min - 1e-4
+                        && valley_ratio <= scale.valley_to_ridge_max + 1e-4
+                );
+                assert!(
+                    spec.slope_ratio() <= scale.max_slope_ratio + 1e-4,
+                    "razão altura/largura {} excede o teto",
                     spec.slope_ratio()
                 );
             }
