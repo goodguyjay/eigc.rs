@@ -155,7 +155,8 @@
   (`MAX_DIRECTIONAL_LIGHTS = 10`). Guarda de regressão adicionada em
   `crates/eigc_scene/tests/directional_light_budget.rs`. A parte de câmera
   dupla andar/órbita continua pendente, não fazia parte desse fix.
-- [ ] Jupiter está com orientação incorreta no céu
+- [X] Jupiter está com orientação incorreta no céu. Corrigido: a rotação de correção usava
+  `FRAC_2_PI` (cerca de 36,5 graus) no lugar de `FRAC_PI_2` (90 graus).
 - [ ] falta damping/smoothing na transição, e não desabilitar mouse_look completamente durante o lock
 - [ ] `place_and_scale_jupiter`, `track_camera` e `dim_stars_near_sun` leem `SkyState` sem
   ordem garantida em relação a `animate_sky_physical`, que o escreve todo frame. Nenhum dos
@@ -259,8 +260,18 @@ não por teste unitário de função pura.
 - [ ] **Os dois PNGs atenuados do `snow_02` somam cerca de 14 MB no repositório** (albedo 4,7 MB,
   normal map 9,4 MB), contra 6 MB dos JPEGs originais, que ficam como fonte. PNG evita uma segunda
   perda de compressão; se o tamanho pesar, trocar por JPEG de qualidade alta ou KTX2.
+- [ ] **O seletor de tela cheia do painel de configurações é só visual.** O valor fica em
+  `SettingsState::fullscreen_enabled` (`crates/eigc_menu/src/settings.rs`), mas só muda a cor das
+  opções "Não"/"Sim" (`sync_fullscreen_selector`, `ui/update.rs`): nenhum sistema troca o
+  `WindowMode` da janela, e nada é salvo em disco. Falta aplicar o modo na janela e decidir se a
+  escolha persiste entre execuções.
+- [ ] **A linha "Configurar controles" do painel de configurações não faz nada.**
+  `ConfigureControlsRow` (`crates/eigc_menu/src/ui/components.rs`, criada em
+  `spawn_configure_controls_row`, `ui/spawn.rs`) é um `Button` que destaca o fundo em hover, mas
+  não tem observer de clique. Falta a tela de configuração de teclado e mouse; até lá, o card
+  promete uma ação que não existe.
 
 ## Plataformas
-- Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS
-e X11 não possuem suporte completo e o bevy pode recair silenciosamente para `CursorGrabMode::Confined`.
-**todo (jay): vê isso depois Rodger**
+- [ ] Em `camera/look.rs` e `camera/plugin.rs` o comportamento de `CursorGrabMode::Locked` não é
+  garantido em todas as plataformas. macOS e X11 não possuem suporte completo e o bevy pode
+  recair silenciosamente para `CursorGrabMode::Confined`. Não testado em macOS nem em X11.
