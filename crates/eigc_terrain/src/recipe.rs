@@ -67,6 +67,10 @@ const LINEA_COUNT: usize = 60;
 /// potência do detalhe fractal): ~6,4 m para 100 m de largura, ~21 m para 400 m. Assim a crista
 /// tem o tamanho do relevo que o DTM já tem nessa escala e não compete com ele. O teto de
 /// altura/largura de 0,065 dá inclinação máxima de ~0,20 (π × 0,065), perto do p95 do DTM (0,17).
+///
+/// As famílias de orientação 1 e 2 seguem herdadas a ±50 graus da direção medida
+/// (`EUROPA_MEASURED_RIDGE_DIRECTION`). O DTM sustenta pouco essas famílias (~5% do peso do
+/// gradiente em cada uma); reduzir o ângulo é decisão do jay.
 const EUROPA_LINEA_SCALE: LineaScale = LineaScale {
     ridge_width_min_m: 100.0,
     regular_width_max_m: 300.0,
@@ -81,7 +85,20 @@ const EUROPA_LINEA_SCALE: LineaScale = LineaScale {
     height_width_exponent: DTM_HURST_EXPONENT,
     height_fraction_min: 0.75,
     max_slope_ratio: 0.065,
+    family_offset_rad: 0.8727,
 };
+
+/// Direção dominante das cristas no DTM de Rhadamanthys, no referencial do terreno (x = coluna do
+/// raster, z = linha). Usada no lugar de `feature_direction` do perfil, que é (0.8, 0.2) ou +14
+/// graus e nunca foi conferida contra o DTM.
+///
+/// Medida pelo tensor de estrutura do gradiente (médias de gx², gz² e gx·gz no recorte sem o
+/// plano médio; as cristas correm na perpendicular do gradiente dominante): -24,5 graus a partir
+/// de +x girando para +z com coerência 0,46, e -23,3 graus com coerência 0,27 olhando só as
+/// escalas abaixo de ~700 m. Incerteza alta: amostra de 97x97 pixels com poucas cristas grandes,
+/// e as cristas menores que o DTM não resolve podem ter outra orientação. Experimental, ainda não
+/// aprovada pelo jay; o `europa.ron` não foi alterado.
+const EUROPA_MEASURED_RIDGE_DIRECTION: Vec2 = Vec2::new(0.91, -0.41);
 
 /// Amplitude do detalhe sintético (soma normalizada das oitavas), em metros. Calibrada para que
 /// a rugosidade total (DTM + detalhe) siga a lei de potência medida do DTM (ver o teste
@@ -148,7 +165,8 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
     let seed = calibration.seed;
     let base_frequency = calibration.base_frequency;
 
-    let feature_direction = Vec2::from(calibration.feature_direction).normalize();
+    // em Europa a direção das lineae vem do DTM, não de `calibration.feature_direction`
+    let ridge_direction = EUROPA_MEASURED_RIDGE_DIRECTION.normalize();
 
     let heightmap = HeightmapHeight::from_png_and_ron(EUROPA_HEIGHTMAP_PNG, EUROPA_HEIGHTMAP_RON)
         .expect("o heightmap de Europa embutido deveria ser valido");
@@ -163,7 +181,7 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         res: TERRAIN_RES,
         amp: calibration.vertical_amplitude_meters,
         freq: base_frequency,
-        line_dir: feature_direction,
+        line_dir: ridge_direction,
         seed,
         vertical_exaggeration: VERTICAL_EXAGGERATION,
     };
@@ -182,7 +200,7 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
     // rugosidade medida do DTM.
     let relief_with_lineae = Add2 {
         a: real_relief,
-        b: europa_lineae(seed, feature_direction),
+        b: europa_lineae(seed, ridge_direction),
     };
 
     let hybrid_terrain = Add2 {
@@ -299,7 +317,7 @@ mod tests {
     }
 
     fn europa_direction() -> Vec2 {
-        Vec2::new(0.8, 0.2).normalize()
+        EUROPA_MEASURED_RIDGE_DIRECTION.normalize()
     }
 
     /// Diferença rms de altura entre pontos separados por `lag_m`, nos eixos x e z, numa grade

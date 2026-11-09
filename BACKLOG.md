@@ -13,16 +13,16 @@
   não via `TerrainParams.amp` (que segue sem uso real no pipeline, só testado). Duplicação
   de estado consciente, não resolvida agora. `amp` deveria ser removido ou passar a ser
   a única fonte de verdade quando outra lua for calibrada.
-- [ ] **Ainda não totalmente resolvido**: a exclusão acima impede uma linea de nascer
-  *ancorada* dentro do raio, mas não impede que o **segmento** de uma linea vizinha ainda
-  alcance a zona de blend. Como a orientação de toda linea é ~paralela a `feature_direction`
-  (mesmo eixo usado pra alinhar a grade), uma linea na célula logo ao lado da excluída, com
-  comprimento longo o bastante (protagonistas chegam a ~5600m, metade = ~2800m de cada lado
-  do centro), ainda pode ultrapassar a origem. Quando isso acontece, `FlattenNearOrigin`
-  ainda atenua a altura dessa crista de forma radialmente simétrica em torno da origem (`d =
-  sqrt(x²+z²)`, não a distância à própria linea), o que pode ler como a crista "convergindo"
-  pro centro. Resolver de vez exigiria testar interseção do traçado inteiro (segmento/arco)
-  contra o disco de exclusão, não só a distância do centro. Não fizemos isso ainda.
+- [X] **Lineae alcançando a clareira de spawn.** A exclusão antiga só impedia o *centro* de uma
+  linea de nascer dentro do raio; o traçado de uma linea vizinha ainda podia alcançar a zona de
+  blend, e `FlattenNearOrigin` atenuava a crista de forma radial em torno da origem (lia como a
+  crista "convergindo" pro centro). Resolvido em `generate_linea_specs`: a distância do
+  **traçado** à origem (`distance_to_path` em (0, 0)) precisa ser pelo menos o alcance da
+  clareira (platô mais transição, 350 m) mais a meia largura externa da linea. Quem invade é
+  re-sorteada até 8 vezes e, se continuar invadindo, afastada por translação. Testado por
+  proptest sobre sementes e pela altura do platô, idêntica com e sem lineae. Trade-off: a
+  translação pode levar a linea para longe da sua célula da grade; não foi contado quantas
+  lineae caem nesse caso.
 - [ ] A câmera spawna em posição mundial fixa
   (`SPAWN_POSITION` em `eigc_scene::camera::plugin`, hoje `(0.0, 0.3, 0.0)`, no centro
   da clareira de spawn), sem nenhuma leitura do `HeightResource` do terreno. O `y = 0.3` vem de
@@ -51,9 +51,9 @@
   descomentar o bloco, voltar a importar `PerlinRidged` (`height::noise`) e `Oriented`
   (`height::warp`), e trocar `combined_features` de volta pra
   `Add2 { a: base_noise, b: subtle_ridges }`.
-- [ ] Traçado em arco de linea (`LineaPath::Arc`, `height/linea.rs`) é uma aproximação
-  geométrica estilizada e deliberadamente exagerada, não um modelo físico da tensão de
-  maré real. Meramente estético/artístico.
+- [ ] Traçado em arco de linea (`LineaPath::Arc`, `height/linea.rs`; 20% das lineae de Europa,
+  de 1,5 a 6 km, com o mesmo afinamento nas pontas da reta) é uma aproximação geométrica
+  estilizada, não um modelo físico da tensão de maré real. Meramente estético/artístico.
 - [ ] **LOD do terreno usa skirts, não stitching.** Chunks vizinhos de níveis diferentes têm
   vértices de borda diferentes (o grosso é subconjunto do fino), então a emenda é escondida por
   um anel de skirt (`chunk_mesh.rs`, `skirt_depth_factor` em `TerrainLodConfig`) e não por
@@ -108,14 +108,25 @@
   feições identificáveis de ~450 a 700 m e declive mediano de 2,5 graus (máximo 21,6). Subir o
   exagero é uma escolha visual, não uma correção física, e exigiria rever o `y` de spawn da câmera contra o relevo
   da clareira.
-- [ ] **Código de lineae sintéticas ficou sem uso em Europa.** `height::linea`
-  (`LineaField`, `LineaColorField`, `generate_linea_specs`) e `height::warp` não são mais
-  chamados por `europa_recipe`, já que as cristas agora vêm do DTM. Também ficaram sem
-  efeito para Europa `warp_amplitude_meters`, `feature_direction` e (já era o caso)
-  `vertical_amplitude_meters`, que só chega em `TerrainParams.amp`. Mantidos porque outra
-  lua pode reaproveitar as lineae e remover campos de `TerrainCalibration` mexe no `.ron` e
-  nos testes de `eigc_moons`. O destaque das cristas reais é só por inclinação
-  (`SlopeColorField`), sem identificar cada crista individualmente.
+- [ ] **Parte do código de lineae e da calibração segue sem uso em Europa.** As lineae voltaram
+  ao relevo como detalhe de centenas de metros (`europa_lineae` em `recipe.rs`, com
+  `LineaField` e `generate_linea_specs`), mas `LineaColorField` e `height::warp` continuam sem
+  uso. Também ficam sem efeito para Europa `warp_amplitude_meters`, `feature_direction` (as
+  lineae usam a direção medida no DTM, ver o item abaixo) e (já era o caso)
+  `vertical_amplitude_meters`, que só chega em `TerrainParams.amp`. Mantidos porque outra lua
+  pode reaproveitá-los e remover campos de `TerrainCalibration` mexe no `.ron` e nos testes de
+  `eigc_moons`. O destaque das cristas na cor continua só por inclinação do DTM
+  (`SlopeColorField`), sem as lineae.
+- [ ] **Direção das lineae de Europa medida no DTM, ainda não aprovada.**
+  `EUROPA_MEASURED_RIDGE_DIRECTION` em `recipe.rs` (~(0.91, -0.41), -24 graus a partir de +x
+  girando para +z) substitui a `feature_direction` (0.8, 0.2) do perfil, +14 graus, que nunca
+  foi conferida contra o DTM. Medida por tensor de estrutura do gradiente, com coerência de 0,27
+  a 0,46 numa amostra de 97x97 pixels: incerteza alta. Também vira `TerrainParams.line_dir`, para
+  não haver duas direções. O `europa.ron` não foi alterado. Se o jay aprovar, mover a direção
+  para o `.ron` (fonte única) e apagar a constante; se não, voltar a usar `feature_direction`.
+  As famílias de orientação 1 e 2 seguem a ±50 graus (`family_offset_rad` em
+  `EUROPA_LINEA_SCALE`), embora o DTM tenha só ~5% do peso do gradiente em cada uma dessas
+  direções; reduzir o ângulo é decisão do jay.
 
 - [X] **Textura de superfície de Europa (`snow_02`) sem mipmaps.** O loader de JPEG do Bevy
   não gera mipmaps e o tile físico é de 2 m (`TILE_SIZE_M` em `chunk_mesh.rs`), o que deixava o
@@ -140,7 +151,7 @@
   2048 px. Aceito por ora (não observado como artefato). Se aparecer tremor de textura, passar a
   UV relativa à origem do chunk com offset por material.
 - [ ] **A máscara de cor das cristas de Europa é inclinação do DTM, não a máscara de linea.** As
-  lineae sintéticas não participam mais da altura (ver item acima), então o tingimento por
+  lineae entram só na altura, não na cor (ver item acima), então o tingimento por
   vértice reaproveita o `SlopeColorField` (mesma fonte de altura do relevo) com
   `terrain_base_color` branco e `terrain_valley_color` acastanhado em `europa.ron`. O nome
   `terrain_valley_color` ficou impreciso: hoje é a cor das encostas íngremes. Renomear mexe no

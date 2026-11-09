@@ -244,8 +244,9 @@ fn hash01(seed: u32, index: u32) -> f32 {
     (raw + 1.0) * 0.5
 }
 
-/// Faixas de medida das lineae geradas por `generate_linea_specs`. Dependem da lua e da escala
-/// em que as lineae entram no relevo, por isso vêm de fora (ver `europa_recipe`).
+/// Faixas de medida e espalhamento de orientação das lineae geradas por `generate_linea_specs`.
+/// Dependem da lua e da escala em que as lineae entram no relevo, por isso vêm de fora (ver
+/// `europa_recipe`).
 #[derive(Clone, Copy, Debug)]
 pub struct LineaScale {
     /// Menor largura de crista, em metros.
@@ -278,6 +279,11 @@ pub struct LineaScale {
     /// Teto da razão altura/largura da crista. Com o perfil cos², a inclinação máxima da encosta
     /// é π vezes esta razão.
     pub max_slope_ratio: f32,
+    /// Deslocamento angular, em radianos, das famílias de orientação 1 e 2 em relação à família 0
+    /// (que segue a direção de feature): a família 1 gira `+family_offset_rad` e a 2,
+    /// `-family_offset_rad`. Com 0, todas as lineae seguem a direção de feature, a menos do
+    /// desvio aleatório de cada uma.
+    pub family_offset_rad: f32,
 }
 
 impl LineaScale {
@@ -296,16 +302,19 @@ const STRAIGHT_PATH_PROBABILITY: f32 = 0.8;
 /// fratura em orientações distintas, cruzando umas às outras. Valor inicial arbitrário.
 const ORIENTATION_FAMILY_COUNT: usize = 3;
 
-/// Deslocamento angular de cada família em relação a `feature_direction`, em radianos.
-const ORIENTATION_FAMILY_OFFSETS_RAD: [f32; ORIENTATION_FAMILY_COUNT] = [0.0, 0.8727, -0.8727];
-
 /// Probabilidade de uma linea sair da família 0 (a mais numerosa/base).
 const FAMILY_0_PROBABILITY: f32 = 0.5;
 
+/// Deslocamento angular de cada família em relação a `feature_direction`, em radianos: 0 para a
+/// família 0, `+family_offset_rad` para a 1 e `-family_offset_rad` para a 2.
+fn family_offsets_rad(family_offset_rad: f32) -> [f32; ORIENTATION_FAMILY_COUNT] {
+    [0.0, family_offset_rad, -family_offset_rad]
+}
+
 /// Rotaciona `feature_direction` pelo deslocamento angular da família `family` (ver
-/// `ORIENTATION_FAMILY_OFFSETS_RAD`).
-fn family_base_direction(feature_direction: Vec2, family: usize) -> Vec2 {
-    let angle = ORIENTATION_FAMILY_OFFSETS_RAD[family];
+/// `family_offsets_rad`).
+fn family_base_direction(feature_direction: Vec2, family: usize, family_offset_rad: f32) -> Vec2 {
+    let angle = family_offsets_rad(family_offset_rad)[family];
     Vec2::new(
         feature_direction.x * angle.cos() - feature_direction.y * angle.sin(),
         feature_direction.x * angle.sin() + feature_direction.y * angle.cos(),
@@ -489,14 +498,18 @@ fn draw_linea_spec(
     let valley_width_m = ridge_width_m * valley_ratio;
 
     // a grade se alinha à família 0 (a mais numerosa), sem significado físico.
-    let grid_dir = family_base_direction(feature_direction, 0);
+    let grid_dir = family_base_direction(feature_direction, 0, scale.family_offset_rad);
     let grid_normal = Vec2::new(-grid_dir.y, grid_dir.x);
     let jitter_range = cell_size * JITTER_FRACTION;
     let (cell_along, cell_ortho) = cell;
     let center = grid_dir * (cell_along + (draw(4) * 2.0 - 1.0) * jitter_range)
         + grid_normal * (cell_ortho + (draw(3) * 2.0 - 1.0) * jitter_range);
 
-    let family_dir = family_base_direction(feature_direction, pick_orientation_family(draw(8)));
+    let family_dir = family_base_direction(
+        feature_direction,
+        pick_orientation_family(draw(8)),
+        scale.family_offset_rad,
+    );
     let angle_jitter = (draw(6) - 0.5) * 0.3;
     let dir = Vec2::new(
         family_dir.x * angle_jitter.cos() - family_dir.y * angle_jitter.sin(),
@@ -550,7 +563,7 @@ pub fn generate_linea_specs(
 ) -> Vec<LineaSpec> {
     let (cell_size, cell_centers) =
         stratified_cell_centers(terrain_half_extent_m, count, clearing_reach_m);
-    let grid_dir = family_base_direction(feature_direction, 0);
+    let grid_dir = family_base_direction(feature_direction, 0, scale.family_offset_rad);
     let grid_normal = Vec2::new(-grid_dir.y, grid_dir.x);
 
     cell_centers
@@ -814,6 +827,7 @@ mod tests {
             height_width_exponent: 0.85,
             height_fraction_min: 0.75,
             max_slope_ratio: 0.065,
+            family_offset_rad: 0.8727,
         }
     }
 
@@ -915,16 +929,49 @@ mod tests {
     }
 
     #[test]
-    fn family_base_direction_matches_expected_offsets() {
+    fn family_base_direction_matches_the_configured_offset() {
         let feature_direction = Vec2::new(1.0, 0.0);
-        for family in 0..ORIENTATION_FAMILY_COUNT {
-            let dir = family_base_direction(feature_direction, family);
-            let actual_angle = dir.y.atan2(dir.x);
-            let expected_angle = ORIENTATION_FAMILY_OFFSETS_RAD[family];
-            assert!(
-                (actual_angle - expected_angle).abs() < 1e-4,
-                "família {family}: ângulo {actual_angle} não bate com o deslocamento esperado {expected_angle}"
+        for family_offset_rad in [0.8727, 0.3, 0.0] {
+            for (family, expected_angle) in [0.0, family_offset_rad, -family_offset_rad]
+                .into_iter()
+                .enumerate()
+            {
+                let dir = family_base_direction(feature_direction, family, family_offset_rad);
+                let actual_angle = dir.y.atan2(dir.x);
+                assert!(
+                    (actual_angle - expected_angle).abs() < 1e-4,
+                    "família {family}: ângulo {actual_angle} não bate com o deslocamento esperado {expected_angle}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn zero_family_offset_keeps_every_straight_linea_along_the_feature_direction() {
+        // só sobra o desvio aleatório de cada linea, de ±0,15 rad
+        let feature_direction = Vec2::new(0.91, -0.41).normalize();
+        let scale = LineaScale {
+            family_offset_rad: 0.0,
+            ..test_scale()
+        };
+        for seed in [1u32, 204, 999, 42] {
+            let specs = generate_linea_specs(
+                seed,
+                feature_direction,
+                HALF_EXTENT_M,
+                60,
+                CLEARING_REACH_M,
+                &scale,
             );
+            for spec in &specs {
+                if let LineaPath::Straight { start, end } = spec.path {
+                    let deviation = (end - start).normalize().angle_to(feature_direction).abs();
+                    assert!(
+                        deviation <= 0.15 + 1e-4,
+                        "seed {seed}: reta a {deviation} rad da direção de feature"
+                    );
+                }
+            }
         }
     }
 
