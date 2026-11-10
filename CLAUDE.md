@@ -37,6 +37,14 @@ cargo build -p eigc_app --features dev
 
 Use os aliases já configurados em `.cargo/config.toml` quando existirem, em vez de escrever o comando cru.
 
+## Análise estática do RustRover (se disponível)
+
+Se o servidor MCP `rustrover` estiver conectado (ferramentas `mcp__rustrover__*`), use `lint_files` depois de editar arquivos `.rs` para pegar erros e warnings sem compilar. Ele recebe caminhos relativos à raiz do repo, funciona com o arquivo fechado no editor e não troca a aba do Jay. Passe `projectPath` com a raiz do repo.
+
+Não use `mcp__ide__getDiagnostics` (plugin Claude Code da JetBrains) para isso: ele só responde para o arquivo que está como aba ativa no RustRover e dá timeout nos outros (limitação da API da JetBrains, issue anthropics/claude-code#3085).
+
+Se o servidor não estiver disponível, siga sem ele. Não é obrigatório e não substitui rodar os testes do crate.
+
 ## Pular a abertura (config/environment.ron)
 
 A animação de abertura pode ser pulada definindo `skip_intro: true` em `config/environment.ron`. Esse arquivo não existe por padrão: crie copiando `config/environment.example.ron`, que fica versionado como modelo. `config/environment.ron` está no `.gitignore`, é configuração local, não arquivo do repositório.
