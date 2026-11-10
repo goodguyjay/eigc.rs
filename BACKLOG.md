@@ -1,24 +1,38 @@
 # Débito técnico e pendências conhecidas
 
 ## Terreno
-- [ ] **Receita de Io é a mínima (fase 1).** `io_recipe` (`recipe.rs`) é planície procedural
-  (fbm de grande escala + rugosidade fina + clareira de spawn) com cor por inclinação. Não há
-  DTM público de Io utilizável para um recorte de ~22 km: o único DEM baixável é o de Tvashtar
-  Paterae (USGS, 900 m/px, sem controle), ~24 pixels no recorte inteiro; os DEMs de White et al.
-  (2014, ~1 km/px global) e de fotoclinometria de paterae (White & Schenk 2015, até 270 m/px)
-  não estão públicos. Por isso o relevo é todo procedural, por decisão do desenvolvedor.
-  Faltam paterae, cor característica (enxofre, lava escura, halos, geada de SO2) e textura de
-  superfície. `IO_PLAINS_AMPLITUDE_M` e `IO_DETAIL_AMPLITUDE_M` são chutes, não medidos com o
-  app rodando. `IO_SLOPE_COLOR_START/END` seguem a inclinação medida das planícies (teste
-  `io_slope_color_thresholds_follow_the_measured_plains_slope`); se a amplitude mudar, o teste
-  aponta quando os limiares precisam ser refeitos.
-- [ ] Calibrar receita de terreno de ganimedes (`recipe.rs`, hoje unimplemented!)
-- [ ] Calibrar receita de terreno de calisto (`recipe.rs`, hoje unimplemented!)
+- [ ] **Receita de Io é procedural e não foi calibrada com o app rodando.** `io_recipe`
+  (`recipe/io.rs`) é planície procedural (fbm de grande escala + rugosidade fina + clareira de
+  spawn) com 3 paterae escavadas (`height::patera`) e cor por inclinação, geada de SO2
+  (`height::patches`), piso escuro e halo avermelhado. Não há DTM público de Io utilizável para
+  um recorte de ~22 km: o único DEM baixável é o de Tvashtar Paterae (USGS, 900 m/px, sem
+  controle), ~24 pixels no recorte inteiro; os DEMs de White et al. (2014, ~1 km/px global) e de
+  fotoclinometria de paterae (White & Schenk 2015, até 270 m/px) não estão públicos. Por isso o
+  relevo é todo procedural, por decisão do desenvolvedor. `IO_PLAINS_AMPLITUDE_M`,
+  `IO_DETAIL_AMPLITUDE_M`, `IO_PATERA_SCALE`, `IO_HALO_WIDTH_FRACTION` e as cores de piso, halo e
+  geada são valores de partida, não ajustados visualmente. `IO_SLOPE_COLOR_START/END` seguem a
+  inclinação medida das planícies (teste
+  `io_slope_color_thresholds_follow_the_measured_plains_slope`) e a geada cobre ~8% do recorte
+  (teste `io_frost_covers_a_minority_of_the_plains`); se a amplitude ou a máscara mudarem, os
+  testes apontam quando refazer os limiares. Falta textura de superfície (fase 4).
+- [ ] **Paterae de Io são menores que as reais.** As paterae reais têm em média ~40 km de
+  diâmetro e 0,5 a 2,5 km de profundidade (Radebaugh et al. 2001), maiores que o recorte
+  inteiro. `IO_PATERA_SCALE` usa 2,4 a 6 km de diâmetro e 150 a 400 m de profundidade para caber
+  mais de uma. O halo também é estilizado: os anéis vermelhos reais (ex.: Pele) são depósitos de
+  pluma de centenas de km. Trade-off consciente: variedade de feições no recorte em troca de
+  escala fiel. Não há mesa nem montanha na borda do recorte (era opcional na fase 2).
+- [ ] **Escarpa das paterae chega a ~39 graus (inclinação 0,8) e a câmera não tem limite de
+  inclinação.** A primeira pessoa sobe e desce a escarpa direto (ver o item "Primeira pessoa
+  segue a função de altura"). Também não foi conferido com o app rodando se o skirt do LOD
+  esconde a emenda nos chunks que cortam a escarpa, onde a diferença de altura entre níveis é a
+  maior do terreno de Io.
+- [ ] Calibrar receita de terreno de ganimedes (`recipe/mod.rs`, hoje unimplemented!)
+- [ ] Calibrar receita de terreno de calisto (`recipe/mod.rs`, hoje unimplemented!)
 - [X] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa
   documentada de motivo geológico ou estético
 - [X] `TerrainParams.amp` não era mais a fonte de verdade da escala vertical do terreno.
   Resolvido ao calibrar Io: `amp` e `TerrainCalibration::vertical_amplitude_meters` foram
-  removidos, e cada receita define a própria amplitude em constantes de `recipe.rs`.
+  removidos, e cada receita define a própria amplitude em constantes do próprio submódulo em `recipe/`.
 - [X] **Lineae alcançando a clareira de spawn.** A exclusão antiga só impedia o *centro* de uma
   linea de nascer dentro do raio; o traçado de uma linea vizinha ainda podia alcançar a zona de
   blend, e `FlattenNearOrigin` atenuava a crista de forma radial em torno da origem (lia como a
@@ -94,7 +108,7 @@
   refinados igual aos da frente, para a câmera poder girar sem ver terreno grosso), não há
   culling por oclusão, e não existe colisão (a primeira pessoa, `follow_ground`, já lê
   `HeightResource::height_at` direto, não a malha visível).
-- [ ] **Heightmap de Europa embutido no binário (`include_bytes!` em `recipe.rs`).** Os
+- [ ] **Heightmap de Europa embutido no binário (`include_bytes!` em `recipe/europa.rs`).** Os
   arquivos continuam em `assets/terrain/europa/` (uma única cópia dos dados), mas são lidos
   em tempo de compilação. Motivo: `build_recipe` é síncrona e pura, chamada em testes sem
   nenhum caminho de assets configurado, e o caminho de assets em runtime é relativo ao
@@ -103,7 +117,7 @@
   luas ganharem heightmap ou o tamanho crescer, migrar para carregar via `AssetServer`.
 - [ ] **Constantes visuais do relevo híbrido de Europa não foram calibradas com o app
   rodando.** `DETAIL_AMPLITUDE_M`, `DETAIL_BASE_WAVELENGTH_M`, `DETAIL_OCTAVES` e
-  os limiares `SLOPE_COLOR_START/END` em `recipe.rs` são valores de partida, não resultado de
+  os limiares `SLOPE_COLOR_START/END` em `recipe/europa.rs` são valores de partida, não resultado de
   inspeção visual sistemática. A interpolação já é bicúbica (Catmull-Rom) em
   `HeightmapHeight::height_at`: a bilinear inicial deixava o terreno em tabuleiro (gradiente
   descontínuo a cada pixel de 227,65 m, visível nas normais e na cor por inclinação). A
@@ -114,7 +128,7 @@
   exagero é uma escolha visual, não uma correção física, e exigiria rever o `y` de spawn da câmera contra o relevo
   da clareira.
 - [ ] **Parte do código de lineae e da calibração segue sem uso em Europa.** As lineae voltaram
-  ao relevo como detalhe de centenas de metros (`europa_lineae` em `recipe.rs`, com
+  ao relevo como detalhe de centenas de metros (`europa_lineae` em `recipe/europa.rs`, com
   `LineaField` e `generate_linea_specs`), mas `LineaColorField` e `height::warp` continuam sem
   uso. Também ficam sem efeito para Europa `warp_amplitude_meters`, `feature_direction` (as
   lineae usam a direção medida no DTM, ver o item abaixo) e `base_frequency`, que em Europa só
@@ -124,7 +138,7 @@
   `eigc_moons`. O destaque das cristas na cor continua só por inclinação do DTM
   (`SlopeColorField`), sem as lineae.
 - [ ] **Direção das lineae de Europa medida no DTM, com incerteza alta.**
-  `EUROPA_MEASURED_RIDGE_DIRECTION` em `recipe.rs` (~(0.91, -0.41), -24 graus a partir de +x
+  `EUROPA_MEASURED_RIDGE_DIRECTION` em `recipe/europa.rs` (~(0.91, -0.41), -24 graus a partir de +x
   girando para +z) substitui a `feature_direction` (0.8, 0.2) do perfil, +14 graus, que nunca
   foi conferida contra o DTM. Medida por tensor de estrutura do gradiente, com coerência de 0,27
   a 0,46 numa amostra de 97x97 pixels: incerteza alta. Também vira `TerrainParams.line_dir`, para
@@ -164,7 +178,7 @@
   `terrain_base_color` branco e `terrain_steep_color` acastanhado em `europa.ron` (o campo se
   chamava `terrain_valley_color`, renomeado ao calibrar Io).
 - [ ] **As medidas das lineae de Europa não foram calibradas visualmente.** `LINEA_COUNT` (60) e
-  `EUROPA_LINEA_SCALE` em `recipe.rs` (crista de 100 a 400 m, altura pela rugosidade rms do DTM,
+  `EUROPA_LINEA_SCALE` em `recipe/europa.rs` (crista de 100 a 400 m, altura pela rugosidade rms do DTM,
   de ~5 a ~21 m, vale de 0,5 a 1 vez a crista, traçado de 1,5 a 6 km) saíram de medição no DTM,
   sem inspeção visual sistemática. Decisão da autora, a recalibrar após inspeção visual. O teste
   `fine_detail_continues_the_dtm_roughness_power_law` vai até 900 m com pouca folga nas
