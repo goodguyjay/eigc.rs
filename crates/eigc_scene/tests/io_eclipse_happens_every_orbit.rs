@@ -16,7 +16,7 @@ const ORBITS: usize = 4;
 const SAMPLES_PER_ORBIT: usize = 720;
 
 /// Faixa aceita para a duração da escuridão total, em horas.
-const MIN_TOTAL_ECLIPSE_HOURS: f32 = 1.8;
+const MIN_TOTAL_ECLIPSE_HOURS: f32 = 2.0;
 const MAX_TOTAL_ECLIPSE_HOURS: f32 = 3.0;
 
 /// Fração mínima de cada órbita com o sol totalmente visível.
