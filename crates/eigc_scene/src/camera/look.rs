@@ -239,7 +239,7 @@ mod tests {
     }
 
     /// Testa que, com o lock travado no Sol, a câmera acaba orientada na direção
-    /// de `base_sun_dir` após um update, e que yaw/pitch ficam sincronizados
+    /// de `SkyState.sun_dir` após um update, e que yaw/pitch ficam sincronizados
     /// com essa orientação.
     #[test]
     fn lock_aim_update_orients_camera_toward_sun_when_locked() {

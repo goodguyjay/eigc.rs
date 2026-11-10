@@ -16,7 +16,6 @@ MoonProfile(
     sky: SkyCalibration(
         orbital_period_seconds: 152853.5, // 1.769138 dias * 86400
         // direções provisórias: a calibração do eclipse de Io (toda órbita) fica para a fase do céu
-        base_sun_dir: (-0.15, 0.35, -0.92),
         base_jupiter_dir: (0.35, 0.37, -0.86),
         jupiter_libration_lat_deg: 2.0,
         jupiter_libration_lon_deg: 2.0,

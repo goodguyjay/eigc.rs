@@ -49,8 +49,6 @@ pub struct SkyCalibration {
     /// Período orbital da lua ao redor de Júpiter em segundos
     pub orbital_period_seconds: f32,
     /// Direção base de Júpiter
-    pub base_sun_dir: [f32; 3],
-    /// Direção base de Júpiter
     pub base_jupiter_dir: [f32; 3],
     /// Amplitude artística de libração de Júpiter em graus
     pub jupiter_libration_lat_deg: f32,

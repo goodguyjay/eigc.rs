@@ -24,7 +24,6 @@ fn minimal_profile_for(moon_id: MoonId) -> MoonProfile {
         walkable: true,
         sky: SkyCalibration {
             base_jupiter_dir: [0.0, 0.0, -1.0],
-            base_sun_dir: [0.0, 1.0, 0.0],
             planet_shine_max: 0.01,
             jupiter_ang_radius: 0.10384709,
             orbital_period_seconds: 3.551181 * 86_400.0,

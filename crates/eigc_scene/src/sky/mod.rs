@@ -49,8 +49,6 @@ pub struct SkyState {
 pub struct SkySettings {
     /// Direção base de Júpiter
     pub base_jupiter_dir: Vec3,
-    /// Direção base do Sol
-    pub base_sun_dir: Vec3,
     /// Iluminância do sol, em lux
     pub sun_illuminance: f32,
     /// Brilho ambiente, em lux
@@ -82,7 +80,6 @@ impl SkySettings {
         let sky = &profile.sky;
         Self {
             base_jupiter_dir: Vec3::from_array(sky.base_jupiter_dir).normalize(),
-            base_sun_dir: Vec3::from_array(sky.base_sun_dir).normalize(),
             sun_illuminance: 4500.0, // sol a ~5.2 UA, universal entre as quatro luas
             ambient_brightness: 0.05,
             orbital_period_seconds: sky.orbital_period_seconds,
@@ -253,7 +250,6 @@ mod tests {
             walkable: true,
             sky: SkyCalibration {
                 orbital_period_seconds: 100_000.0,
-                base_sun_dir: [0.0, 0.0, -1.0],
                 base_jupiter_dir: [1.0, 0.0, 0.0],
                 jupiter_libration_lat_deg: 4.0,
                 jupiter_libration_lon_deg: 8.0,
@@ -282,16 +278,14 @@ mod tests {
         assert!((settings.sun_elevation - 30.0_f32.to_radians()).abs() < 1e-6);
     }
 
-    /// Testa se direções base chegam normalizadas como `Vec3` em `SkySettings`.
+    /// Testa se a direção base de Júpiter chega normalizada como `Vec3` em `SkySettings`.
     #[test]
-    fn from_profile_converts_and_normalizes_base_directions() {
-        let profile = test_profile();
+    fn from_profile_converts_and_normalizes_base_jupiter_direction() {
+        let mut profile = test_profile();
+        profile.sky.base_jupiter_dir = [2.0, 0.0, 0.0];
         let settings = SkySettings::from_profile(&profile);
 
-        assert!((settings.base_sun_dir - Vec3::new(0.0, 0.0, -1.0)).length() < 1e-6);
         assert!((settings.base_jupiter_dir - Vec3::new(1.0, 0.0, 0.0)).length() < 1e-6);
-        assert!((settings.base_sun_dir.length() - 1.0).abs() < 1e-6);
-        assert!((settings.base_jupiter_dir.length() - 1.0).abs() < 1e-6);
     }
 
     /// Calibração com sol e Júpiter na mesma elevação e sem libração: a trajetória do sol passa

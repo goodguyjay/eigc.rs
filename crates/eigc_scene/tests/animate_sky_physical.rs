@@ -23,7 +23,6 @@ fn test_profile() -> MoonProfile {
         walkable: true,
         sky: SkyCalibration {
             orbital_period_seconds: 1000.0,
-            base_sun_dir: [0.0, 0.3, -1.0],
             base_jupiter_dir: [1.0, 0.2, 0.0],
             jupiter_libration_lat_deg: 0.0,
             jupiter_libration_lon_deg: 0.0,
@@ -113,11 +112,12 @@ fn planet_shine_factor_never_exceeds_configured_max() {
     }
 }
 
-/// Testa se a função de animação do céu não altera a direção base do sol no `SkySettings`.
+/// Testa se a função de animação do céu não altera a direção base de Júpiter no `SkySettings`:
+/// a direção animada vai para `SkyState`, a calibração fica intacta.
 #[test]
-fn animate_sky_physical_does_not_mutate_base_sun_dir_in_settings() {
+fn animate_sky_physical_does_not_mutate_base_jupiter_dir_in_settings() {
     let mut app = app_with_sky_animation();
-    let original_base_sun_dir = app.world().resource::<SkySettings>().base_sun_dir;
+    let original_base_jupiter_dir = app.world().resource::<SkySettings>().base_jupiter_dir;
 
     {
         let mut sim_time = app.world_mut().resource_mut::<SimTime>();
@@ -127,8 +127,8 @@ fn animate_sky_physical_does_not_mutate_base_sun_dir_in_settings() {
 
     let settings = app.world().resource::<SkySettings>();
     assert_eq!(
-        settings.base_sun_dir, original_base_sun_dir,
-        "SkySettings::base_sun_dir não deveria mudar depois de animate_sky_physical, mas mudou de {:?} para {:?}",
-        original_base_sun_dir, settings.base_sun_dir
+        settings.base_jupiter_dir, original_base_jupiter_dir,
+        "SkySettings::base_jupiter_dir não deveria mudar depois de animate_sky_physical, mas mudou de {:?} para {:?}",
+        original_base_jupiter_dir, settings.base_jupiter_dir
     );
 }

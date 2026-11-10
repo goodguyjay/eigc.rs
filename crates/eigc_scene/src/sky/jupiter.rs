@@ -138,7 +138,6 @@ mod tests {
             walkable: true,
             sky: SkyCalibration {
                 orbital_period_seconds: 1000.0,
-                base_sun_dir: [0.0, 0.3, -1.0],
                 base_jupiter_dir: [1.0, 0.2, 0.0],
                 jupiter_libration_lat_deg: 0.0,
                 jupiter_libration_lon_deg: 0.0,
