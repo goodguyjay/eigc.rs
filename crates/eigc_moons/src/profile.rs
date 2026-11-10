@@ -32,7 +32,8 @@ pub struct TerrainCalibration {
     pub seed: u32,
     /// Frequência base do ruído (menor → características mais amplas)
     pub base_frequency: f32,
-    /// Direção normalizada das características lineares (como "lineae" em Europa)
+    /// Direção normalizada das características lineares. Europa não usa: as lineae seguem a
+    /// direção medida no DTM (`recipe.rs`).
     pub feature_direction: [f32; 2],
     /// Quantidade de deslocamento de distorção (warp) em metros
     pub warp_amplitude_meters: f32,
