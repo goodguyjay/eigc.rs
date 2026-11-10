@@ -7,28 +7,41 @@ use crate::interaction::{
     restrict_mesh_picking_to_marked_cameras,
 };
 use crate::scene::{spawn_menu_scene, spin_menu_moons};
+use crate::settings::{SettingsState, close_settings_panel_on_escape};
 use crate::ui::{
-    ToastState, highlight_labels, position_moon_labels, refresh_panel_content, slide_detail_panel,
-    spawn_loading_overlay, spawn_menu_ui, style_buttons, update_overview_visibility, update_toast,
+    ToastState, animate_settings_panel_open, highlight_labels, position_moon_labels,
+    refresh_panel_content, slide_detail_panel, spawn_loading_overlay, spawn_menu_ui, style_buttons,
+    style_configure_controls_row, style_settings_gear, sync_fullscreen_selector,
+    toggle_settings_panel_visibility, update_overview_visibility, update_toast,
 };
 use bevy::picking::mesh_picking::MeshPickingPlugin;
-use bevy::prelude::{App, IntoScheduleConfigs, OnEnter, Plugin, Update, in_state};
+use bevy::prelude::{
+    App, IntoScheduleConfigs, Message, OnEnter, Plugin, Update, in_state, on_message,
+};
 use eigc_moons::AppState;
 
-/// Registra o menu de seleção de lua, ativo enquanto a aplicação está em `AppState::MainMenu`.
-/// Em `LoadingMoonProfile`, mantém a cena do menu e exibe a tela de carregamento por cima.
+/// Sinal para o menu spawnar sua cena e UI. Emitido pelo binário da aplicação, depois que a
+/// abertura termina ou é pulada.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct ShowMenu;
+
+/// Registra o menu de seleção de lua. A cena e a UI nascem quando `ShowMenu` é recebido, e os
+/// sistemas de interação ficam ativos enquanto a aplicação está em `AppState::MainMenu`. Em
+/// `LoadingMoonProfile`, mantém a cena do menu e exibe a tela de carregamento por cima.
 pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MeshPickingPlugin)
+            .add_message::<ShowMenu>()
             .add_message::<ExploreRequested>()
             .add_message::<NotImplementedNotice>()
             .init_resource::<MenuSelection>()
             .init_resource::<ToastState>()
+            .init_resource::<SettingsState>()
             .add_systems(
-                OnEnter(AppState::MainMenu),
-                (spawn_menu_scene, spawn_menu_ui),
+                Update,
+                (spawn_menu_scene, spawn_menu_ui).run_if(on_message::<ShowMenu>),
             )
             .add_systems(OnEnter(AppState::LoadingMoonProfile), spawn_loading_overlay)
             .add_systems(
@@ -40,6 +53,7 @@ impl Plugin for MenuPlugin {
                 (
                     handle_explore_requests,
                     exit_focus_on_escape,
+                    close_settings_panel_on_escape,
                     animate_menu_camera,
                     animate_moon_scale,
                     spin_menu_moons,
@@ -50,6 +64,11 @@ impl Plugin for MenuPlugin {
                     highlight_labels,
                     style_buttons,
                     update_toast,
+                    toggle_settings_panel_visibility,
+                    sync_fullscreen_selector,
+                    style_configure_controls_row,
+                    style_settings_gear,
+                    animate_settings_panel_open,
                 )
                     .chain()
                     .run_if(in_state(AppState::MainMenu)),

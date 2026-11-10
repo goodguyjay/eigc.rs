@@ -13,4 +13,4 @@ eigc_scene.workspace = true
 eigc_perf.workspace = true
 
 [features]
-dev = ["bevy/dynamic_linking", "eigc_perf/dev"]
+dev = ["bevy/dynamic_linking", "eigc_perf/dev", "eigc_scene/dev"]

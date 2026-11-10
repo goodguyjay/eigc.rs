@@ -23,12 +23,26 @@
   sqrt(x²+z²)`, não a distância à própria linea), o que pode ler como a crista "convergindo"
   pro centro. Resolver de vez exigiria testar interseção do traçado inteiro (segmento/arco)
   contra o disco de exclusão, não só a distância do centro. Não fizemos isso ainda.
-- [ ] A câmera free-fly spawna em posição mundial fixa
-  (`SPAWN_POSITION` em `eigc_scene::camera::free_fly_camera`, hoje `(0.0, 0.3, 0.0)`, no centro
+- [ ] A câmera spawna em posição mundial fixa
+  (`SPAWN_POSITION` em `eigc_scene::camera::plugin`, hoje `(0.0, 0.3, 0.0)`, no centro
   da clareira de spawn), sem nenhuma leitura do `HeightResource` do terreno. O `y = 0.3` vem de
   medir o platô da clareira em Europa (y = -1,45 m, a ~1,75 m de altura de olho): se a receita
   mudar o DTM, o `SPAWN_CLEARING_RADIUS_M` ou a elevação de referência, a câmera pode nascer
-  dentro do relevo ou flutuando.
+  dentro do relevo ou flutuando. Em primeira pessoa (modo padrão) o `y` é corrigido no primeiro
+  quadro por `follow_ground`, então o problema só persiste no free-fly de debug (`dev`) e no
+  `x`/`z` de spawn, que seguem fixos. Não resolvido de propósito: o spawn em si não lê o terreno.
+- [ ] **Primeira pessoa segue a função de altura, não a malha visível.** `follow_ground` usa
+  `HeightResource::height_at`, que é contínua, enquanto a malha do nível 0 interpola linearmente
+  entre vértices (~5 m de espaçamento, a conferir) e o detalhe tem 1,5 m de amplitude. O olho pode
+  ficar alguns decímetros acima ou abaixo do chão desenhado. Não verificado com o app rodando. Se
+  incomodar, amostrar a mesma grade do nível 0 (função pura em `eigc_terrain`) em vez da função.
+  Também não há colisão nem limite de inclinação: a câmera sobe qualquer ladeira (máx. 21,6 graus
+  no DTM de Europa).
+- [ ] **Segunda câmera (viewmodel de mãos/traje) quebra o céu em silêncio.** `track_camera`,
+  `dim_stars_near_sun`, `position_sun_disc` e `place_and_scale_jupiter` usam
+  `Query<..., With<Camera3d>>.single()` e saem sem erro quando há mais de um `Camera3d`. Antes da
+  issue de primeira pessoa com animação, introduzir um marcador `MainCamera` e usá-lo nessas
+  queries, e definir `RenderLayers` das luzes para a câmera do viewmodel.
 - [X] **Crateras desligadas (feedback visual: terreno "artificial", alturas
   empilhadas, crateras em lugares estranhos).** Não existe um sistema de "cratera" dedicado
   no projeto, o que lia como cratera era o ruído `PerlinRidged`/`Oriented` (`ridged_noise`/
@@ -217,6 +231,34 @@ não por teste unitário de função pura.
 - [ ] A tela de carregamento é estática. O terreno é construído em `OnEnter(Running)`, então a
   tela provavelmente congela por um instante na transição. Não medido; confirmar em teste
   visual antes de investir num indicador animado.
+- [ ] **Anti-tiling do terreno (`terrain_detail.wgsl`) não tem teste e depende da textura.**
+  As duas escalas são amostradas no shader por hex tiling (3 amostras por textura, offset e rotação
+  aleatórios por vértice de grade triangular). Só deslocar não bastava: o `snow_02` tem fileiras de
+  marcas dentro do tile, que apareciam alinhadas entre as cópias; a rotação por vértice resolveu. Pontos
+  conscientes: (1) o normal map original do `snow_02` tem inclinação média de ~9 graus por eixo
+  (xy médio 0,152 / 0,154, cerca de 12,8 graus combinados), que girada por célula virava manchas
+  grandes e chiado no horizonte; o shader subtrai essa média (`NORMAL_MAP_MEAN_XY`) antes de girar,
+  e a inclinação do terreno passa a vir só da malha. O normal map atenuado
+  (`tools/attenuate_surface_marks.py --kind normal`) já vem sem a inclinação média, então a
+  constante vale perto de zero. Trocar a textura exige remedir a constante, e o teste
+  `surface_normal_map_mean_matches_shader` falha se ela ficar desatualizada; (2) nas zonas de transição há mistura
+  fantasma, controlada por `HEX_BLEND_SHARPNESS` (3 e 6 ficaram indistinguíveis nos testes); (3) o
+  custo é de até 6 amostras por textura onde as duas escalas se misturam (entre 4 m e 30 m); (4) a
+  lógica de grade/hash/rotação vive só no WGSL e foi validada só a olho, com o app rodando; (5) o
+  sentido da rotação do xy da normal foi escolhido por derivação e conferido visualmente, sem
+  teste. `HEX_CELL_SCALE` e `HEX_BLEND_SHARPNESS` são chutes calibráveis. As duas escalas usam as
+  imagens da extensão (`macro_*`) e não as do `StandardMaterial`, então dependem dos escalares
+  neutros do material.
+- [ ] **As bordas finas das pegadas continuam no albedo atenuado do `snow_02`.** A atenuação
+  (`tools/attenuate_surface_marks.py`, sigma de 16 px) só reduz as manchas acima de ~1,6 cm; o
+  traço escuro da borda tem poucos milímetros e passa intacto junto com o grão fino. Um segundo
+  passe que comprima o contraste dos traços escuros fica para depois.
+- [ ] **O AO do ARM do `snow_02` ainda carrega as pegadas.** Só o albedo e o normal map foram
+  atenuados; `snow_02_arm_2k.jpg` é o original, então a oclusão das pegadas pode continuar
+  aparecendo como sombra.
+- [ ] **Os dois PNGs atenuados do `snow_02` somam cerca de 14 MB no repositório** (albedo 4,7 MB,
+  normal map 9,4 MB), contra 6 MB dos JPEGs originais, que ficam como fonte. PNG evita uma segunda
+  perda de compressão; se o tamanho pesar, trocar por JPEG de qualidade alta ou KTX2.
 
 ## Plataformas
 - Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS

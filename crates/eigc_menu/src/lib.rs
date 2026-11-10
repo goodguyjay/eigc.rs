@@ -7,8 +7,9 @@ mod layout;
 mod moon_stats;
 mod plugin;
 mod scene;
+mod settings;
 mod theme;
 mod ui;
 
 pub use explore::ExploreRequested;
-pub use plugin::MenuPlugin;
+pub use plugin::{MenuPlugin, ShowMenu};

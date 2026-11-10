@@ -4,7 +4,7 @@ Câmera (free-fly, camera lock sol/Júpiter) e céu (sol, Júpiter, starfield, p
 
 ## Histórico de bugs neste crate — contexto que não está no CLAUDE.md da raiz
 
-O porte de `CamLock`/`LockMode` (módulo `camera::free_fly_camera`) já revelou uma sequência de bugs sutis, todos de dessincronia de estado, não de lógica óbvia errada:
+O porte de `CamLock`/`LockMode` (módulo `camera::look`, antes em `camera::free_fly_camera`) já revelou uma sequência de bugs sutis, todos de dessincronia de estado, não de lógica óbvia errada:
 
 - **`CamLock` nunca era inserido como resource** — causava panic silencioso até ser rastreado.
 - **`base_sun_dir` e `base_jupiter_dir` trocados** dentro de `resolve_lock_direction` — sintoma era Júpiter parecendo funcionar (libração pequena, erro pouco visível) enquanto o sol travava errado.
@@ -12,6 +12,17 @@ O porte de `CamLock`/`LockMode` (módulo `camera::free_fly_camera`) já revelou 
 - **`CamLock` lia de `SkySettings.base_sun_dir` (valor estático calibrado uma vez) em vez de `SkyState.sun_dir` (direção animada por frame).** Esse é o caso canônico de duplicação de estado do projeto: `SkySettings` e `SkyState` representam a mesma grandeza física em momentos diferentes do pipeline, e é fácil ler a fonte errada sem erro de compilação nem panic — só o comportamento fica sutilmente errado.
 
 Se você for tocar em qualquer sistema que leia direção de sol, Júpiter, ou orientação de câmera, primeiro identifique se a fonte é `SkySettings` (estático, calibração) ou `SkyState` (dinâmico, atualizado por `animate_sky_physical`). Ler a errada não quebra a build.
+
+## Câmera: primeira pessoa e free-fly
+
+A câmera é **uma entidade raiz** (sem pai, com `Transform` em coordenadas de mundo) que carrega `CameraLook` (orientação), `FirstPersonCamera` e `FreeFlyCamera` (parâmetros de cada modo). Quem decide o modo é o resource `MovementMode`, com primeira pessoa (`Walk`) por padrão. Tab alterna para o free-fly **só com a feature `dev`** (`toggle_movement_mode`); em release não existe como sair da primeira pessoa.
+
+- **Nunca coloque a câmera como filha de outra entidade.** O céu (`track_camera`, `position_sun_disc`, `place_and_scale_jupiter`, `dim_stars_near_sun`) e `publish_lod_focus` leem o `Transform` dela como se fosse mundial. Com pai, ele vira local e o domo de estrelas e o LOD quebram sem erro.
+- **Só pode existir um `Camera3d`.** Esses mesmos sistemas usam `.single()` e saem em silêncio com duas câmeras. Uma segunda câmera (ex.: viewmodel de mãos/traje) exige antes um marcador `MainCamera` nas queries do céu.
+- A posição autoritativa é `Transform.translation`. Em primeira pessoa `follow_ground` calcula `y = HeightResource::height_at(x, z) + eye_height` (função de altura, não a malha). Não crie um campo separado de posição dos pés.
+- `walk_movement` usa o **yaw**, nunca o `forward()` da câmera: olhar para baixo não pode afundar nem frear.
+- `follow_ground` precisa de `run_if(resource_exists::<HeightResource>)`, já que o terreno insere o resource por `Commands` em `OnEnter(Running)`, sem ordem garantida em relação ao spawn da câmera.
+- Sistemas de movimento entram na `.chain()` de `CameraPlugin`, antes de `publish_lod_focus`.
 
 ## Ordenação de sistema
 

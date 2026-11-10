@@ -2,3 +2,6 @@
 .idea/
 .claude/
 tools/.raw_dtms_cache/
+config/environment.ron
+tools/out/
+tools/__pycache__/
