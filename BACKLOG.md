@@ -228,7 +228,7 @@ smoothstep, orientação de disco celeste, glare de estrelas) direto em Bevy sys
 
 `place_and_scale_jupiter` e `position_sun_disc` já usam `place_celestial_disc` para posição
 e escala; a orientação continua inline. `animate_sky_physical` já é um wrapper fino de
-`sky_state_at` (função pura). `dim_stars_near_sun` segue sem extração.
+`sky_state_at` (função pura), e `dim_stars_near_sun` de `star_brightness`.
 
 Motivo: extrair exigiria transformar os systems em wrappers finos, retrabalho grande em
 código recém-validado.

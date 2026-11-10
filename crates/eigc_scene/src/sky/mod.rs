@@ -206,13 +206,7 @@ fn sky_state_at(settings: &SkySettings, t: f32) -> SkyState {
     let sun_dir = (rot * noon).normalize();
 
     let sep = sun_dir.angle_between(-jupiter_dir);
-    let penumbra = settings.jupiter_ang_radius + settings.sun_ang_radius;
-    let eclipse = eigc_common::math::smoothstep(
-        penumbra,
-        penumbra + settings.eclipse_soft,
-        std::f32::consts::PI - sep,
-    )
-    .clamp(0.0, 1.0);
+    let eclipse = eclipse_factor(std::f32::consts::PI - sep, settings);
 
     let phase_brightness = (std::f32::consts::PI - sep) / std::f32::consts::PI;
     let planet_shine =
@@ -224,6 +218,20 @@ fn sky_state_at(settings: &SkySettings, t: f32) -> SkyState {
         sun_dir,
         jupiter_dir,
     }
+}
+
+/// Fator de eclipse dado o ângulo entre o sol e o centro de Júpiter, em radianos.
+///
+/// A rampa é centrada na borda de Júpiter: vale 0,5 com o centro do sol sobre a borda, 0 com o
+/// disco do sol inteiro mais meia suavização para dentro, e 1 com o disco inteiro mais meia
+/// suavização para fora. Assim a luz cai enquanto o sol some atrás do disco, e não antes.
+fn eclipse_factor(angle_to_jupiter: f32, settings: &SkySettings) -> f32 {
+    let half_width = settings.sun_ang_radius + 0.5 * settings.eclipse_soft;
+    eigc_common::math::smoothstep(
+        settings.jupiter_ang_radius - half_width,
+        settings.jupiter_ang_radius + half_width,
+        angle_to_jupiter,
+    )
 }
 
 #[cfg(test)]
@@ -320,6 +328,30 @@ mod tests {
         assert!(state.sun_dir.angle_between(state.jupiter_dir) < 1e-3);
         assert_eq!(state.eclipse_factor, 0.0);
         assert!(state.planet_shine_factor < 1e-4);
+    }
+
+    /// Testa que a rampa do eclipse é centrada na borda de Júpiter.
+    #[test]
+    fn eclipse_factor_is_half_with_sun_center_on_jupiter_limb() {
+        let settings = SkySettings::from_profile(&test_profile());
+
+        let at_limb = eclipse_factor(settings.jupiter_ang_radius, &settings);
+        assert!((at_limb - 0.5).abs() < 1e-5, "na borda: {at_limb}");
+    }
+
+    /// Regressão: a rampa antiga ficava toda do lado de fora do disco, e a luz caía com o sol
+    /// ainda inteiro ao lado de Júpiter. Além de meia suavização para fora, a luz é cheia; além
+    /// de meia suavização para dentro, o eclipse é total.
+    #[test]
+    fn eclipse_factor_is_full_outside_and_zero_inside_the_ramp() {
+        let settings = SkySettings::from_profile(&test_profile());
+        let half_width = settings.sun_ang_radius + 0.5 * settings.eclipse_soft;
+
+        let outside = eclipse_factor(settings.jupiter_ang_radius + half_width + 1e-4, &settings);
+        let inside = eclipse_factor(settings.jupiter_ang_radius - half_width - 1e-4, &settings);
+
+        assert_eq!(outside, 1.0);
+        assert_eq!(inside, 0.0);
     }
 
     /// Testa se campos universais (sol, brilho ambiente, normal orbital) permanecem constantes independentemente da calibração da lua.
