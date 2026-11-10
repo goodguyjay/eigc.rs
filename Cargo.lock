@@ -2312,6 +2312,7 @@ dependencies = [
  "eigc_sim",
  "eigc_terrain",
  "noise",
+ "ron",
 ]
 
 [[package]]

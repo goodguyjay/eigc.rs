@@ -185,7 +185,12 @@ pub fn animate_sky_physical(
     mut state: ResMut<SkyState>,
     sim: Res<SimTime>,
 ) {
-    let t = sim.0;
+    *state = sky_state_at(&settings, sim.0);
+}
+
+/// Calcula direções do sol e de Júpiter, fator de eclipse e planet shine no instante `t`, em
+/// segundos de simulação.
+fn sky_state_at(settings: &SkySettings, t: f32) -> SkyState {
     let wob_lat = settings.jupiter_libration_lat
         * (0.3 * t / settings.orbital_period_seconds * 2.0 * std::f32::consts::PI).sin();
     let wob_lon = settings.jupiter_libration_lon
@@ -216,10 +221,12 @@ pub fn animate_sky_physical(
     let planet_shine =
         (settings.planet_shine_max * phase_brightness).clamp(0.0, settings.planet_shine_max);
 
-    state.sun_dir = sun_dir;
-    state.jupiter_dir = jupiter_dir;
-    state.eclipse_factor = eclipse;
-    state.planet_shine_factor = planet_shine;
+    SkyState {
+        eclipse_factor: eclipse,
+        planet_shine_factor: planet_shine,
+        sun_dir,
+        jupiter_dir,
+    }
 }
 
 #[cfg(test)]
@@ -285,6 +292,40 @@ mod tests {
         assert!((settings.base_jupiter_dir - Vec3::new(1.0, 0.0, 0.0)).length() < 1e-6);
         assert!((settings.base_sun_dir.length() - 1.0).abs() < 1e-6);
         assert!((settings.base_jupiter_dir.length() - 1.0).abs() < 1e-6);
+    }
+
+    /// Calibração com sol e Júpiter na mesma elevação e sem libração: a trajetória do sol passa
+    /// pelo centro de Júpiter em meia órbita.
+    fn settings_with_central_eclipse() -> SkySettings {
+        let mut profile = test_profile();
+        profile.sky.sun_elevation_deg = 0.0;
+        profile.sky.jupiter_libration_lat_deg = 0.0;
+        profile.sky.jupiter_libration_lon_deg = 0.0;
+        SkySettings::from_profile(&profile)
+    }
+
+    /// Testa que no início da órbita o sol fica oposto a Júpiter: sem eclipse e com planet shine
+    /// máximo (Júpiter "cheio").
+    #[test]
+    fn sky_state_at_start_puts_sun_opposite_jupiter() {
+        let settings = settings_with_central_eclipse();
+        let state = sky_state_at(&settings, 0.0);
+
+        assert!((state.sun_dir + state.jupiter_dir).length() < 1e-4);
+        assert_eq!(state.eclipse_factor, 1.0);
+        assert!((state.planet_shine_factor - settings.planet_shine_max).abs() < 1e-6);
+    }
+
+    /// Testa que em meia órbita o sol fica atrás de Júpiter: eclipse total e planet shine nulo
+    /// (lado noturno de Júpiter voltado para a lua).
+    #[test]
+    fn sky_state_at_half_orbit_puts_sun_behind_jupiter() {
+        let settings = settings_with_central_eclipse();
+        let state = sky_state_at(&settings, settings.orbital_period_seconds * 0.5);
+
+        assert!(state.sun_dir.angle_between(state.jupiter_dir) < 1e-3);
+        assert_eq!(state.eclipse_factor, 0.0);
+        assert!(state.planet_shine_factor < 1e-4);
     }
 
     /// Testa se campos universais (sol, brilho ambiente, normal orbital) permanecem constantes independentemente da calibração da lua.
