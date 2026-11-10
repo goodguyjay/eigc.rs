@@ -171,37 +171,31 @@ fn io_recipe_produces_color_and_keeps_spawn_clearing_flat() {
     }
 }
 
-/// Testa se o relevo procedural de Io fica centrado em zero e com variação de planície (dezenas
-/// de metros), sem herdar as centenas de metros do DTM de Europa.
+/// Testa se o relevo procedural de Io é uma planície centrada em zero, sem montanhas (nada sobe
+/// mais que dezenas de metros), com paterae que afundam o piso em pelo menos cerca de 100 m.
 #[test]
-fn io_recipe_relief_is_a_gentle_plain_around_zero() {
+fn io_recipe_relief_is_a_plain_around_zero_with_patera_depressions() {
     let profile = minimal_profile_for(MoonId::Io);
     let recipe = build_recipe(&profile);
 
     let half_size = recipe.params.size * 0.5;
     let steps = 40;
-    let mut lowest = f32::MAX;
-    let mut highest = f32::MIN;
+    let mut heights = Vec::new();
     for i in 0..=steps {
         for j in 0..=steps {
             let x = -half_size + recipe.params.size * i as f32 / steps as f32;
             let z = -half_size + recipe.params.size * j as f32 / steps as f32;
             let height = recipe.height.height_at(x, z);
             assert!(height.is_finite(), "altura não finita em ({x}, {z})");
-            lowest = lowest.min(height);
-            highest = highest.max(height);
+            heights.push(height);
         }
     }
+    heights.sort_by(f32::total_cmp);
+    let (lowest, median, highest) = (heights[0], heights[heights.len() / 2], heights[heights.len() - 1]);
 
-    let range = highest - lowest;
-    assert!(
-        range > 10.0 && range < 150.0,
-        "a planície de Io deveria variar dezenas de metros, variou {range}"
-    );
-    assert!(
-        lowest < 0.0 && highest > 0.0,
-        "o relevo deveria ficar centrado em zero: de {lowest} a {highest}"
-    );
+    assert!(highest < 75.0, "Io não deveria ter montanhas: máximo {highest}");
+    assert!(median.abs() < 40.0, "a planície deveria ficar em torno de zero: mediana {median}");
+    assert!(lowest < -100.0, "as paterae deveriam afundar o piso: mínimo {lowest}");
 }
 
 /// Testa se a receita para luas não calibradas (Ganymede, Callisto) causa pânico ao invés de

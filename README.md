@@ -27,7 +27,7 @@ ainda não estão implementadas e mostram apenas um aviso.
   tela de carregamento)
 - `eigc_terrain`: geração procedural de terreno, composta por um kit de
   peças genérico (`height/`, `mesh.rs`) e receitas específicas por lua
-  (`recipe.rs`)
+  (`recipe/`, um submódulo por lua)
 - `eigc_scene`: câmera de voo livre e céu (sol, Júpiter, estrelas, eclipse e luz refletida de
   Júpiter)
 - `eigc_app`: binário principal, amarra os plugins e o estado da aplicação (menu, carregamento

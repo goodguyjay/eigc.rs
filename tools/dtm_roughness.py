@@ -3,7 +3,7 @@
 mede a rugosidade de um heightmap gerado por dtm_to_heightmap.py: a diferenca rms de altura
 entre pontos separados por uma distancia L, e o expoente de hurst H (rms ~ L^H).
 
-os valores de europa_recipe (DTM_HURST_EXPONENT, DTM_ROUGHNESS_AT_PIXEL_M em recipe.rs) vem
+os valores de europa_recipe (DTM_HURST_EXPONENT, DTM_ROUGHNESS_AT_PIXEL_M em recipe/europa.rs) vem
 daqui. o ajuste usa distancias curtas (1 a 12 pixels) porque acima disso a curva satura.
 
 dependencias: numpy, pillow
