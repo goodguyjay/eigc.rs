@@ -65,6 +65,34 @@ const SPAWN_CLEARING_RADIUS_M: f32 = 150.0;
 /// suavemente da clareira plana até os parâmetros completos da receita.
 const SPAWN_CLEARING_BLEND_M: f32 = 200.0;
 
+/// Amplitude da ondulação de grande escala das planícies de Io, em metros. As planícies de Io
+/// estão entre as superfícies mais lisas das luas galileanas; valor de partida, não medido.
+const IO_PLAINS_AMPLITUDE_M: f32 = 40.0;
+
+/// Oitavas da ondulação de grande escala das planícies de Io.
+const IO_PLAINS_OCTAVES: u32 = 5;
+
+/// Comprimento de onda da primeira oitava da rugosidade fina de Io, em metros.
+const IO_DETAIL_BASE_WAVELENGTH_M: f32 = 230.0;
+
+/// Oitavas da rugosidade fina de Io: de ~230 m a ~29 m, limite do nível 0 da malha (~10,7 m).
+const IO_DETAIL_OCTAVES: u32 = 4;
+
+/// Amplitude da rugosidade fina de Io, em metros. Valor de partida, não medido.
+const IO_DETAIL_AMPLITUDE_M: f32 = 4.0;
+
+/// Distância entre as amostras usadas para estimar a inclinação na cor de Io, em metros.
+const IO_SLOPE_SAMPLE_STEP_M: f32 = 100.0;
+
+/// Inclinação abaixo da qual o terreno de Io recebe só a cor de planície. Medida nas planícies
+/// com o `io.ron` (ver `io_slope_color_thresholds_follow_the_measured_plains_slope`): mediana
+/// ~0,016, percentil 95 ~0,033 e máximo ~0,06. Começa logo acima da mediana, como em Europa.
+const IO_SLOPE_COLOR_START: f32 = 0.02;
+
+/// Inclinação a partir da qual o terreno de Io recebe totalmente a cor de encosta. Fica entre o
+/// percentil 95 e o máximo, para só as encostas mais íngremes saturarem.
+const IO_SLOPE_COLOR_END: f32 = 0.045;
+
 /// Agrupa os produtos de uma receita de terreno: a função de altura composta, os parâmetros
 /// de malha/mundo, a aparência visual e, opcionalmente, uma fonte de cor por vértice.
 pub struct TerrainRecipe {
@@ -87,7 +115,7 @@ pub struct TerrainRecipe {
 pub fn build_recipe(profile: &MoonProfile) -> TerrainRecipe {
     match profile.moon_id {
         MoonId::Europa => europa_recipe(profile),
-        MoonId::Io => unimplemented!("receita de IO ainda não calibrada"),
+        MoonId::Io => io_recipe(profile),
         MoonId::Ganymede => unimplemented!("receita de Ganymede ainda não calibrada"),
         MoonId::Callisto => unimplemented!("receita de Callisto ainda não calibrada"),
     }
@@ -122,7 +150,6 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
     let terrain_params = TerrainParams {
         size: TERRAIN_SIZE_M,
         res: TERRAIN_RES,
-        amp: calibration.vertical_amplitude_meters,
         freq: base_frequency,
         line_dir: feature_direction,
         seed,
@@ -159,7 +186,7 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         source: slope_source,
         sample_step_m: SLOPE_SAMPLE_STEP_M,
         flat_color: profile.terrain_base_color,
-        steep_color: profile.terrain_valley_color,
+        steep_color: profile.terrain_steep_color,
         slope_start: SLOPE_COLOR_START,
         slope_end: SLOPE_COLOR_END,
     };
@@ -183,22 +210,7 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         reflectance: calibration.reflectance,
     };
 
-    // 64x64 chunks de 343,75 m. O nível 0 tem espaçamento de ~10,7 m (melhor que os 14,3 m da
-    // malha monolítica) e o mais grosso ~86 m, ainda menor que a largura das lineae (100-300 m).
-    // O nível de cada chunk sai do erro geométrico medido (ver `lod_error.rs`) projetado na tela:
-    // `max_screen_error_px` menor = mais detalhe de mais longe. `min_error_fraction` é o piso
-    // para chunks lisos (e para a cor por vértice, que também perde resolução ao engrossar).
-    // Valores calibráveis: medir com o app rodando antes de mexer.
-    let lod = TerrainLodConfig {
-        chunks_per_side: 64,
-        quads_per_chunk: [64, 32, 16, 8],
-        max_screen_error_px: 1.5,
-        min_error_fraction: 0.2,
-        hysteresis_fraction: 0.1,
-        skirt_depth_factor: 0.35,
-        in_flight_vertex_budget: 30_000,
-        max_error_tasks_in_flight: 16,
-    };
+    let lod = chunked_lod_config();
 
     TerrainRecipe {
         height: arc(terrain_with_clearing),
@@ -207,6 +219,116 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         material_properties,
         color: Some(arc_color(color_with_clearing)),
         lod,
+    }
+}
+
+/// Monta a receita de geração de terreno para Io.
+///
+/// Não existe DTM público de Io com resolução útil para um recorte local, então o relevo é todo
+/// procedural. Esta é a receita mínima: planície de enxofre levemente ondulada, com rugosidade
+/// fina por cima e cor por inclinação. Paterae e demais feições ainda não existem.
+fn io_recipe(profile: &MoonProfile) -> TerrainRecipe {
+    // Mesmo recorte de Europa, para câmera, LOD e spawn de debug valerem igual nas duas luas.
+    const TERRAIN_SIZE_M: f32 = 22000.0;
+    const TERRAIN_RES: u32 = 1536;
+
+    let calibration = &profile.terrain;
+    let seed = calibration.seed;
+
+    let terrain_params = TerrainParams {
+        size: TERRAIN_SIZE_M,
+        res: TERRAIN_RES,
+        freq: calibration.base_frequency,
+        line_dir: Vec2::from(calibration.feature_direction).normalize(),
+        seed,
+        vertical_exaggeration: VERTICAL_EXAGGERATION,
+    };
+
+    let plains = io_plains(seed, calibration.base_frequency);
+    let slope_source = io_plains(seed, calibration.base_frequency);
+
+    let terrain = Add2 {
+        a: plains,
+        b: io_fine_detail(seed),
+    };
+
+    let terrain_with_clearing =
+        FlattenNearOrigin::new(terrain, SPAWN_CLEARING_RADIUS_M, SPAWN_CLEARING_BLEND_M);
+
+    let slope_color = SlopeColorField {
+        source: slope_source,
+        sample_step_m: IO_SLOPE_SAMPLE_STEP_M,
+        flat_color: profile.terrain_base_color,
+        steep_color: profile.terrain_steep_color,
+        slope_start: IO_SLOPE_COLOR_START,
+        slope_end: IO_SLOPE_COLOR_END,
+    };
+
+    let color_with_clearing = FlattenColorNearOrigin {
+        source: slope_color,
+        flat_color: profile.terrain_base_color,
+        flat_radius_m: SPAWN_CLEARING_RADIUS_M,
+        blend_radius_m: SPAWN_CLEARING_BLEND_M,
+    };
+
+    TerrainRecipe {
+        height: arc(terrain_with_clearing),
+        params: terrain_params,
+        appearance: TerrainAppearance {
+            base_color: color_from_linear_rgba(profile.terrain_base_color),
+            display_name: profile.display_name.clone(),
+        },
+        material_properties: TerrainMaterialProperties {
+            perceptual_roughness: calibration.perceptual_roughness,
+            reflectance: calibration.reflectance,
+        },
+        color: Some(arc_color(color_with_clearing)),
+        lod: chunked_lod_config(),
+    }
+}
+
+/// Ondulação de grande escala das planícies de Io, centrada em zero.
+fn io_plains(seed: u32, base_frequency: f32) -> PerlinFbm {
+    PerlinFbm {
+        perlin: Perlin::new(seed),
+        freq: base_frequency,
+        octaves: IO_PLAINS_OCTAVES,
+        lacunarity: 2.0,
+        gain: 0.5,
+        amplitude: IO_PLAINS_AMPLITUDE_M,
+    }
+}
+
+/// Rugosidade fina das planícies de Io, com semente própria para não repetir o padrão da
+/// ondulação de grande escala.
+fn io_fine_detail(seed: u32) -> PerlinFbm {
+    PerlinFbm {
+        perlin: Perlin::new(seed.wrapping_add(1)),
+        freq: 1.0 / IO_DETAIL_BASE_WAVELENGTH_M,
+        octaves: IO_DETAIL_OCTAVES,
+        lacunarity: 2.0,
+        gain: 0.5,
+        amplitude: IO_DETAIL_AMPLITUDE_M,
+    }
+}
+
+/// Configuração de LOD por chunks compartilhada pelas receitas de recorte de ~22 km.
+fn chunked_lod_config() -> TerrainLodConfig {
+    // 64x64 chunks de 343,75 m. O nível 0 tem espaçamento de ~10,7 m (melhor que os 14,3 m da
+    // malha monolítica) e o mais grosso ~86 m, ainda menor que a largura das lineae (100-300 m).
+    // O nível de cada chunk sai do erro geométrico medido (ver `lod_error.rs`) projetado na tela:
+    // `max_screen_error_px` menor = mais detalhe de mais longe. `min_error_fraction` é o piso
+    // para chunks lisos (e para a cor por vértice, que também perde resolução ao engrossar).
+    // Valores calibráveis: medir com o app rodando antes de mexer.
+    TerrainLodConfig {
+        chunks_per_side: 64,
+        quads_per_chunk: [64, 32, 16, 8],
+        max_screen_error_px: 1.5,
+        min_error_fraction: 0.2,
+        hysteresis_fraction: 0.1,
+        skirt_depth_factor: 0.35,
+        in_flight_vertex_budget: 30_000,
+        max_error_tasks_in_flight: 16,
     }
 }
 
@@ -292,5 +414,48 @@ mod tests {
         }
 
         assert!(rms_difference(&dtm_only, 24.0) < 0.85 * rms_difference(&hybrid, 24.0));
+    }
+
+    /// Perfil real de Io, para medir a receita com a frequência que o jogo usa.
+    fn io_profile() -> MoonProfile {
+        ron::de::from_str(include_str!("../../../assets/moons/io.ron"))
+            .expect("o io.ron deveria ser um MoonProfile válido")
+    }
+
+    /// Percentis 50, 95 e máximo da inclinação (subida/avanço) das planícies de Io, medida como
+    /// `SlopeColorField` mede, numa grade que cobre o recorte.
+    fn io_plains_slope_percentiles() -> (f32, f32, f32) {
+        let profile = io_profile();
+        let plains = io_plains(profile.terrain.seed, profile.terrain.base_frequency);
+        let step = IO_SLOPE_SAMPLE_STEP_M;
+        let mut slopes = Vec::new();
+        for i in 0..150 {
+            for j in 0..150 {
+                let x = -10_500.0 + i as f32 * 140.3;
+                let z = -10_500.0 + j as f32 * 139.7;
+                let dx = (plains.height_at(x + step, z) - plains.height_at(x - step, z))
+                    / (2.0 * step);
+                let dz = (plains.height_at(x, z + step) - plains.height_at(x, z - step))
+                    / (2.0 * step);
+                slopes.push(dx.hypot(dz));
+            }
+        }
+        slopes.sort_by(f32::total_cmp);
+        let at = |q: f32| slopes[((slopes.len() - 1) as f32 * q) as usize];
+        (at(0.5), at(0.95), at(1.0))
+    }
+
+    /// Testa que os limiares de cor por inclinação de Io acompanham a inclinação medida das
+    /// planícies: a mediana fica abaixo do início (a maior parte é planície), o percentil 95
+    /// passa do início (há encostas visíveis) e o máximo passa do fim (algumas saturam). Sem
+    /// isso, a cor de encosta não aparece e o chão fica uniforme.
+    #[test]
+    fn io_slope_color_thresholds_follow_the_measured_plains_slope() {
+        let (median, p95, max) = io_plains_slope_percentiles();
+        println!("inclinação de Io: mediana {median}, p95 {p95}, máximo {max}");
+
+        assert!(median < IO_SLOPE_COLOR_START, "mediana {median}");
+        assert!(p95 > IO_SLOPE_COLOR_START, "p95 {p95}");
+        assert!(max > IO_SLOPE_COLOR_END, "máximo {max}");
     }
 }

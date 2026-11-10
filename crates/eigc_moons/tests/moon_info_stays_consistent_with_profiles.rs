@@ -77,3 +77,31 @@ fn name_availability_and_period_match_every_filled_profile() {
         );
     }
 }
+
+/// Diferença relativa aceita entre `jupiter_angular_diameter_deg` e o dobro de
+/// `jupiter_ang_radius`: os dois são escritos à mão no `.ron`, com arredondamento.
+const JUPITER_SIZE_TOLERANCE: f32 = 0.001;
+
+/// Testa que, em todo `.ron` preenchido, o diâmetro angular de Júpiter em graus e o raio
+/// angular em radianos descrevem o mesmo tamanho. São a mesma grandeza guardada duas vezes no
+/// perfil, e uma pode mudar sem a outra.
+#[test]
+fn jupiter_angular_diameter_and_radius_agree_in_every_filled_profile() {
+    for moon_id in MOON_DISPLAY_ORDER {
+        if profile_text(moon_id).trim().is_empty() {
+            continue;
+        }
+        let profile = parse_profile(moon_id);
+        let diameter_from_radius_deg = (2.0 * profile.sky.jupiter_ang_radius).to_degrees();
+        let relative_difference = ((diameter_from_radius_deg
+            - profile.jupiter_angular_diameter_deg)
+            / profile.jupiter_angular_diameter_deg)
+            .abs();
+        assert!(
+            relative_difference < JUPITER_SIZE_TOLERANCE,
+            "tamanho de Júpiter diverge em {moon_id:?}: {} graus no diâmetro, {} graus pelo raio",
+            profile.jupiter_angular_diameter_deg,
+            diameter_from_radius_deg
+        );
+    }
+}

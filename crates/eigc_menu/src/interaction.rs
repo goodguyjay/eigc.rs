@@ -198,8 +198,8 @@ mod tests {
             focused: Some(MoonId::Europa),
         };
         assert_eq!(
-            resolve_click(moon_info(MoonId::Io), &selection),
-            ClickOutcome::NotImplemented(MoonId::Io)
+            resolve_click(moon_info(MoonId::Ganymede), &selection),
+            ClickOutcome::NotImplemented(MoonId::Ganymede)
         );
     }
 

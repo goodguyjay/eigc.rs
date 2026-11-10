@@ -31,3 +31,7 @@ run-eigc-europa = "run --package eigc_app --features dev -- --europa"
 # só debug: entra em Europa com a câmera em voo livre na posição dada.
 # uso: cargo run-eigc-europa-at <x> <y> <z>  (metros; o terreno é centrado em 0,0 e tem ~22 km)
 run-eigc-europa-at = "run --package eigc_app --features dev -- --europa --spawn"
+# só debug: pula o menu e entra direto em Io
+run-eigc-io = "run --package eigc_app --features dev -- --io"
+# só debug: entra em Io com a câmera em voo livre na posição dada (mesmo uso de run-eigc-europa-at)
+run-eigc-io-at = "run --package eigc_app --features dev -- --io --spawn"

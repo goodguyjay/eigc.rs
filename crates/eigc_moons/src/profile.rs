@@ -34,8 +34,6 @@ pub struct TerrainCalibration {
     pub base_frequency: f32,
     /// Direção normalizada das características lineares (como "lineae" em Europa)
     pub feature_direction: [f32; 2],
-    /// Escala vertical do terreno em metros
-    pub vertical_amplitude_meters: f32,
     /// Quantidade de deslocamento de distorção (warp) em metros
     pub warp_amplitude_meters: f32,
     /// Quantidade de distorção (warp) em frequência
@@ -82,7 +80,7 @@ pub struct MoonProfile {
     /// deixa a textura passar sem alteração.
     pub terrain_base_color: [f32; 4],
     /// Cor por vértice das encostas íngremes (cristas), que multiplica a textura de superfície.
-    pub terrain_valley_color: [f32; 4],
+    pub terrain_steep_color: [f32; 4],
     /// Se esta lua tem modo de caminha completo implementado
     pub walkable: bool,
     /// Parâmetros de calibração do céu e ajustes artísticos

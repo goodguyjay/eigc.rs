@@ -15,13 +15,12 @@ fn minimal_profile_for(moon_id: MoonId) -> MoonProfile {
             seed: 99,
             base_frequency: 0.001,
             feature_direction: [1.0, 0.0],
-            vertical_amplitude_meters: 10.0,
             warp_amplitude_meters: 20.0,
             perceptual_roughness: 0.5,
             reflectance: 0.3,
         },
         terrain_base_color: [1.0, 1.0, 1.0, 1.0],
-        terrain_valley_color: [0.3, 0.2, 0.1, 1.0],
+        terrain_steep_color: [0.3, 0.2, 0.1, 1.0],
         walkable: true,
         sky: SkyCalibration {
             base_jupiter_dir: [0.0, 0.0, -1.0],
@@ -44,7 +43,6 @@ fn europa_recipe_produces_height_function_and_matching_params() {
     let recipe = build_recipe(&profile);
 
     assert_eq!(recipe.params.seed, profile.terrain.seed);
-    assert_eq!(recipe.params.amp, profile.terrain.vertical_amplitude_meters);
     assert_eq!(recipe.appearance.display_name, profile.display_name);
 
     assert_eq!(
@@ -152,10 +150,63 @@ fn europa_recipe_relief_follows_the_real_dtm_recentered_around_zero() {
     );
 }
 
-/// Testa se a receita para luas não calibradas (Io, Ganymede, Callisto) causa pânico ao invés de
+/// Testa se a receita de Io produz altura finita, cor por vértice e mantém a clareira de spawn
+/// plana em volta da origem.
+#[test]
+fn io_recipe_produces_color_and_keeps_spawn_clearing_flat() {
+    let profile = minimal_profile_for(MoonId::Io);
+    let recipe = build_recipe(&profile);
+
+    assert_eq!(recipe.params.seed, profile.terrain.seed);
+    assert_eq!(recipe.appearance.display_name, profile.display_name);
+    assert!(recipe.color.is_some(), "Io deveria produzir cor por vértice (inclinação)");
+
+    let origin_height = recipe.height.height_at(0.0, 0.0);
+    for (x, z) in [(100.0, 0.0), (0.0, -140.0), (-90.0, 90.0)] {
+        assert_eq!(
+            recipe.height.height_at(x, z),
+            origin_height,
+            "ponto ({x}, {z}) dentro da clareira deveria ter a altura plana da origem"
+        );
+    }
+}
+
+/// Testa se o relevo procedural de Io fica centrado em zero e com variação de planície (dezenas
+/// de metros), sem herdar as centenas de metros do DTM de Europa.
+#[test]
+fn io_recipe_relief_is_a_gentle_plain_around_zero() {
+    let profile = minimal_profile_for(MoonId::Io);
+    let recipe = build_recipe(&profile);
+
+    let half_size = recipe.params.size * 0.5;
+    let steps = 40;
+    let mut lowest = f32::MAX;
+    let mut highest = f32::MIN;
+    for i in 0..=steps {
+        for j in 0..=steps {
+            let x = -half_size + recipe.params.size * i as f32 / steps as f32;
+            let z = -half_size + recipe.params.size * j as f32 / steps as f32;
+            let height = recipe.height.height_at(x, z);
+            assert!(height.is_finite(), "altura não finita em ({x}, {z})");
+            lowest = lowest.min(height);
+            highest = highest.max(height);
+        }
+    }
+
+    let range = highest - lowest;
+    assert!(
+        range > 10.0 && range < 150.0,
+        "a planície de Io deveria variar dezenas de metros, variou {range}"
+    );
+    assert!(
+        lowest < 0.0 && highest > 0.0,
+        "o relevo deveria ficar centrado em zero: de {lowest} a {highest}"
+    );
+}
+
+/// Testa se a receita para luas não calibradas (Ganymede, Callisto) causa pânico ao invés de
 /// reutilizar silenciosamente a receita de Europa.
 #[rstest]
-#[case(MoonId::Io)]
 #[case(MoonId::Ganymede)]
 #[case(MoonId::Callisto)]
 #[should_panic(expected = "ainda não calibrada")]

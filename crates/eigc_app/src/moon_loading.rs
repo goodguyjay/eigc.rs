@@ -1,7 +1,8 @@
 //! Sistema responsável por transicionar a aplicação para o estado running assim que o perfil da
 //! lua escolhida no menu termina de carregar. O carregamento em si é disparado pelo `eigc_menu`.
 
-use bevy::prelude::{Assets, NextState, Res, ResMut, State};
+use bevy::asset::LoadState;
+use bevy::prelude::{AssetServer, Assets, Commands, NextState, Res, ResMut, State, error};
 use eigc_moons::profile::MoonProfile;
 use eigc_moons::state::{ActiveMoonProfileHandle, AppState};
 
@@ -25,12 +26,29 @@ pub fn transition_when_moon_profile_loaded(
     }
 }
 
+/// Volta ao menu quando o `.ron` da lua escolhida falha ao carregar, em vez de deixar a
+/// aplicação presa em `LoadingMoonProfile` com a tela de carregamento.
+///
+/// Deve ser registrado com `run_if(resource_exists::<ActiveMoonProfileHandle>)`.
+pub fn return_to_menu_when_moon_profile_fails(
+    mut commands: Commands,
+    active_handle: Res<ActiveMoonProfileHandle>,
+    asset_server: Res<AssetServer>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    if let LoadState::Failed(load_error) = asset_server.load_state(&active_handle.0) {
+        error!("Falha ao carregar o perfil da lua escolhida: {load_error}");
+        commands.remove_resource::<ActiveMoonProfileHandle>();
+        next_state.set(AppState::MainMenu);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use bevy::prelude::*;
     use bevy::state::app::StatesPlugin;
-    use eigc_moons::{MoonId, SkyCalibration, TerrainCalibration};
+    use eigc_moons::{MoonId, MoonPlugin, SkyCalibration, TerrainCalibration};
 
     /// Conta quantas vezes `OnEnter(AppState::Running)` disparou.
     /// Esse teste vem da correção de um bug em que o sistema `transition_when_moon_profile_loaded`
@@ -52,13 +70,12 @@ mod tests {
                 seed: 1,
                 base_frequency: 0.001,
                 feature_direction: [1.0, 0.0],
-                vertical_amplitude_meters: 10.0,
                 warp_amplitude_meters: 20.0,
                 perceptual_roughness: 0.5,
                 reflectance: 0.3,
             },
             terrain_base_color: [1.0, 1.0, 1.0, 1.0],
-            terrain_valley_color: [0.0, 0.0, 0.0, 1.0],
+            terrain_steep_color: [0.0, 0.0, 0.0, 1.0],
             walkable: true,
             sky: SkyCalibration {
                 orbital_period_seconds: 1000.0,
@@ -105,5 +122,49 @@ mod tests {
 
         let state = app.world().resource::<State<AppState>>();
         assert_eq!(*state.get(), AppState::Running);
+    }
+
+    /// Testa que, se o `.ron` da lua escolhida não existe, a aplicação volta para `MainMenu` e
+    /// descarta o handle, em vez de ficar presa em `LoadingMoonProfile`.
+    #[test]
+    fn failed_moon_profile_returns_to_menu() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_plugins(AssetPlugin {
+                file_path: "../../assets".to_string(),
+                ..default()
+            })
+            .add_plugins(StatesPlugin)
+            .add_plugins(MoonPlugin)
+            .init_state::<AppState>()
+            .add_systems(
+                Update,
+                return_to_menu_when_moon_profile_fails
+                    .run_if(resource_exists::<ActiveMoonProfileHandle>),
+            );
+
+        let handle = app
+            .world()
+            .resource::<AssetServer>()
+            .load::<MoonProfile>("moons/perfil_que_nao_existe.ron");
+        app.insert_resource(ActiveMoonProfileHandle(handle));
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::LoadingMoonProfile);
+
+        for _ in 0..500 {
+            app.update();
+            if !app.world().contains_resource::<ActiveMoonProfileHandle>() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        app.update();
+
+        assert!(!app.world().contains_resource::<ActiveMoonProfileHandle>());
+        assert_eq!(
+            *app.world().resource::<State<AppState>>().get(),
+            AppState::MainMenu
+        );
     }
 }
