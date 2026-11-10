@@ -4,14 +4,13 @@ use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamp
 use bevy::prelude::{AssetServer, Handle, Image, Resource};
 use eigc_moons::profile::MoonId;
 
-/// Caminho (relativo à raiz de assets) do diffuse/albedo de `snow_02`, com as marcas grandes
-/// atenuadas por `tools/attenuate_surface_marks.py`.
-const SNOW_02_DIFFUSE_PATH: &str = "terrain/materials/snow_02/snow_02_diff_attenuated_2k.png";
-/// Caminho do normal map de `snow_02` (convenção OpenGL, a que o Bevy espera), com as marcas
-/// grandes atenuadas por `tools/attenuate_surface_marks.py --kind normal`.
-const SNOW_02_NORMAL_PATH: &str = "terrain/materials/snow_02/snow_02_nor_gl_attenuated_2k.png";
-/// Caminho do mapa ARM de `snow_02` (AO no canal R, roughness no G, metallic no B).
-const SNOW_02_ARM_PATH: &str = "terrain/materials/snow_02/snow_02_arm_2k.jpg";
+/// Caminho (relativo à raiz de assets) do albedo do gelo de Europa, gerado por
+/// `tools/generate_europa_ice.py`.
+const EUROPA_ICE_DIFFUSE_PATH: &str = "terrain/materials/europa_ice/europa_ice_diff_2k.png";
+/// Caminho do normal map do gelo de Europa (convenção OpenGL, a que o Bevy espera).
+const EUROPA_ICE_NORMAL_PATH: &str = "terrain/materials/europa_ice/europa_ice_nor_gl_2k.png";
+/// Caminho do mapa ARM do gelo de Europa (AO no canal R, roughness no G, metallic no B).
+const EUROPA_ICE_ARM_PATH: &str = "terrain/materials/europa_ice/europa_ice_arm_2k.png";
 
 /// Anisotropia máxima do sampler.
 const ANISOTROPY_CLAMP: u16 = 16;
@@ -34,18 +33,18 @@ pub fn surface_textures_for(
     asset_server: &AssetServer,
 ) -> Option<TerrainSurfaceTextures> {
     match moon_id {
-        MoonId::Europa => Some(load_snow_02(asset_server)),
+        MoonId::Europa => Some(load_europa_ice(asset_server)),
         MoonId::Io | MoonId::Ganymede | MoonId::Callisto => None,
     }
 }
 
-/// Carrega o material derivado do `snow_02` do Poly Haven (CC0, tile físico de 2,0 m): albedo e
-/// normal map com as marcas grandes atenuadas, ARM original.
-fn load_snow_02(asset_server: &AssetServer) -> TerrainSurfaceTextures {
+/// Carrega o material de gelo de Europa (tile físico de 2,0 m), gerado por script a partir de um
+/// relevo sintético (`tools/generate_europa_ice.py`).
+fn load_europa_ice(asset_server: &AssetServer) -> TerrainSurfaceTextures {
     TerrainSurfaceTextures {
-        diffuse: load_repeating(asset_server, SNOW_02_DIFFUSE_PATH, true),
-        normal: load_repeating(asset_server, SNOW_02_NORMAL_PATH, false),
-        arm: load_repeating(asset_server, SNOW_02_ARM_PATH, false),
+        diffuse: load_repeating(asset_server, EUROPA_ICE_DIFFUSE_PATH, true),
+        normal: load_repeating(asset_server, EUROPA_ICE_NORMAL_PATH, false),
+        arm: load_repeating(asset_server, EUROPA_ICE_ARM_PATH, false),
     }
 }
 

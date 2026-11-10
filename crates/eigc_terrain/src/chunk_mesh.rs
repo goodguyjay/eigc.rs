@@ -8,7 +8,8 @@ use crate::height::{ColorSource, HeightSource};
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::{Mesh, Vec2, Vec3, default};
 
-/// Lado, em metros, de uma repetição da textura de superfície (tile real de `snow_02`: 2,0 m).
+/// Lado, em metros, de uma repetição da textura de superfície (o gelo de Europa é gerado com
+/// 1 mm por pixel em 2048 px, cerca de 2,0 m).
 const TILE_SIZE_M: f32 = 2.0;
 
 /// Região quadrada do plano XZ coberta por um chunk.
