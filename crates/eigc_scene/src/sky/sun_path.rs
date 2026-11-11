@@ -1,20 +1,8 @@
 //! Caminho diário do sol no céu de uma lua em rotação síncrona com Júpiter.
-//!
-//! Júpiter e o Sol estão (aproximadamente) no plano orbital da lua, então o caminho aparente do
-//! sol é um grande círculo que passa pela direção de Júpiter. Todo grande círculo corta o
-//! horizonte em dois pontos opostos, o que dá metade do período de dia e metade de noite, e o
-//! sol passa atrás de Júpiter uma vez por órbita (eclipse). Aproximação assumida: obliquidade
-//! zero, ou seja, plano orbital da lua igual ao plano do Sol (erro real de ~3°).
 
 use bevy::prelude::{Quat, Vec3};
 
 /// Direção normalizada do sol no instante `t` (segundos de simulação).
-///
-/// Em `t = 0` o sol está no ponto mais alto do círculo (meio-dia, elevação `noon_elevation`),
-/// e o ciclo se repete a cada `period` segundos. `noon_elevation` está em radianos.
-///
-/// O círculo precisa passar por Júpiter, então a elevação de meio-dia não pode ser menor que a
-/// elevação de Júpiter. Se for, ela é limitada à elevação de Júpiter (Júpiter vira o meio-dia).
 pub fn sun_direction(
     t: f32,
     period: f32,
@@ -25,7 +13,6 @@ pub fn sun_direction(
     let jupiter = jupiter_dir.normalize();
     let up = up.normalize();
 
-    // Base do plano perpendicular a Júpiter: b1 é a vertical projetada nesse plano, b2 completa.
     let up_in_plane = up.reject_from(jupiter);
     let cos_jupiter_elevation = up_in_plane.length();
     let b1 = up_in_plane
@@ -33,8 +20,6 @@ pub fn sun_direction(
         .unwrap_or_else(|| jupiter.any_orthonormal_vector());
     let b2 = jupiter.cross(b1);
 
-    // O eixo do círculo faz com a vertical um ângulo igual à elevação de meio-dia:
-    // eixo·up = cos(alpha)·cos(elev_júpiter) = cos(noon_elevation).
     let cos_alpha = if cos_jupiter_elevation > f32::EPSILON {
         (noon_elevation.cos() / cos_jupiter_elevation).clamp(-1.0, 1.0)
     } else {
@@ -43,7 +28,6 @@ pub fn sun_direction(
     let sin_alpha = (1.0 - cos_alpha * cos_alpha).max(0.0).sqrt();
     let axis = (b1 * cos_alpha + b2 * sin_alpha).normalize();
 
-    // Meio-dia: o ponto do círculo mais próximo da vertical.
     let noon = up.reject_from(axis).try_normalize().unwrap_or(jupiter);
 
     let phase = (t / period) * std::f32::consts::TAU;
@@ -67,19 +51,14 @@ mod tests {
     use bevy::prelude::Vec3;
     use rstest::rstest;
 
-    /// Período de Europa em segundos, só para ter um número realista.
     const PERIOD: f32 = 306_822.0;
-    /// Direção base de Júpiter calibrada em europa.ron (~14.5° de elevação).
     const JUPITER: Vec3 = Vec3::new(0.35, 0.25, -0.90);
-    /// Elevação de meio-dia calibrada em europa.ron.
     const NOON_DEG: f32 = 25.0;
 
-    /// Elevação em graus de uma direção em relação a `Vec3::Y`.
     fn elevation_deg(dir: Vec3) -> f32 {
         dir.normalize().dot(Vec3::Y).asin().to_degrees()
     }
 
-    /// Direção do sol numa fração do dia de europa (0.0 = meio-dia, 0.5 = meia-noite).
     fn sun_at(fraction_of_day: f32) -> Vec3 {
         sun_direction(
             fraction_of_day * PERIOD,
@@ -90,8 +69,6 @@ mod tests {
         )
     }
 
-    /// Meio-dia, nascer/pôr e meia-noite: o sol tem que passar por baixo do horizonte, que é
-    /// exatamente o que a versão antiga (rotação em torno da vertical) não fazia.
     #[rstest]
     #[case::noon(0.0, NOON_DEG)]
     #[case::sunset_or_sunrise(0.25, 0.0)]
@@ -105,7 +82,6 @@ mod tests {
         );
     }
 
-    /// O círculo do sol passa por Júpiter, então em algum momento do dia há eclipse.
     #[test]
     fn sun_path_crosses_jupiter_once_per_day() {
         let samples = 3600;
@@ -122,7 +98,6 @@ mod tests {
         );
     }
 
-    /// Depois de um período inteiro o sol volta à mesma direção.
     #[test]
     fn sun_path_closes_after_one_period() {
         let start = sun_at(0.0);
@@ -130,8 +105,6 @@ mod tests {
         assert!((start - end).length() < 1e-3, "início {start}, fim {end}");
     }
 
-    /// Elevação de meio-dia abaixo da elevação de Júpiter não tem solução exata: não pode dar
-    /// panic nem NaN.
     #[test]
     fn noon_below_jupiter_elevation_stays_finite_and_normalized() {
         for i in 0..8 {
@@ -147,7 +120,6 @@ mod tests {
         }
     }
 
-    /// A luz é total de dia e nula à noite.
     #[rstest]
     #[case::day(0.0, 1.0)]
     #[case::night(0.5, 0.0)]
@@ -162,7 +134,6 @@ mod tests {
         );
     }
 
-    /// No horizonte exato (dentro da faixa de crepúsculo) o fator fica entre 0 e 1.
     #[test]
     fn horizon_factor_is_partial_at_twilight() {
         let factor = horizon_factor(Vec3::X, Vec3::Y);

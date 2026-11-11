@@ -6,7 +6,7 @@
 - [ ] Calibrar receita de terreno de calisto (`recipe.rs`, hoje unimplemented!)
 - [ ] `io.ron`, `ganymede.ron` e `callisto.ron` têm bloco `terrain` placeholder (copiado de
   europa) e `walkable: false`, só para o perfil desserializar e validar o tamanho angular
-  de Júpiter (issue #8). Direções base de sol/Júpiter, libração e `sun_elevation_deg` também
+  de Júpiter. Direções base de sol/Júpiter, libração e `sun_elevation_deg` também
   foram copiadas de europa, sem calibração própria. Substituir ao calibrar cada lua.
 - [X] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa
   documentada de motivo geológico ou estético

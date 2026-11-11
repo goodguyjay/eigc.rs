@@ -1,5 +1,5 @@
 //! Valida os quatro perfis reais em `assets/moons/`: desserializam, têm o `MoonId` certo e o
-//! tamanho angular de Júpiter bate com o critério de aceite da issue #8.
+//! tamanho angular de Júpiter bate com o valor esperado.
 
 use eigc_moons::profile::{MoonId, MoonProfile};
 use rstest::rstest;
@@ -16,7 +16,7 @@ fn load_profile(file_name: &str) -> MoonProfile {
         .unwrap_or_else(|err| panic!("{} não desserializa: {err}", path.display()))
 }
 
-/// Cada perfil desserializa, aponta para a lua certa e tem o diâmetro angular da issue #8.
+/// Cada perfil desserializa, aponta para a lua certa e tem o diâmetro angular esperado.
 #[rstest]
 #[case::io("io.ron", MoonId::Io, 18.8)]
 #[case::europa("europa.ron", MoonId::Europa, 11.9)]

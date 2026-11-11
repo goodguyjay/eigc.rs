@@ -49,9 +49,6 @@ mod tests {
         assert!(scale_large > scale_small);
     }
 
-    /// Critério de aceite da issue #8: o disco subtende exatamente o diâmetro angular pedido,
-    /// para as quatro luas. Os valores da issue vêm de `2·atan(R_júpiter / distância)`, então a
-    /// medida inversa correta aqui também é `2·atan(raio / sky_r)`.
     #[rstest::rstest]
     #[case::io(18.8)]
     #[case::europa(11.9)]
@@ -73,8 +70,6 @@ mod tests {
         );
     }
 
-    /// Critério de aceite da issue #8: a proporção de tamanho entre Europa e as outras luas
-    /// segue `tan(θ_lua/2) / tan(θ_europa/2)`, independente do raio do céu.
     #[rstest::rstest]
     #[case::io(18.8)]
     #[case::ganymede(7.5)]
