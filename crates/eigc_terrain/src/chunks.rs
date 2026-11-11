@@ -121,6 +121,7 @@ pub fn spawn_terrain_chunks(
                 Mesh3d(meshes.add(mesh)),
                 MeshMaterial3d(material.clone()),
                 Transform::from_xyz(center.x, 0.0, center.y),
+                bevy::prelude::DespawnOnExit(eigc_moons::AppState::Running),
             ));
         }
     }

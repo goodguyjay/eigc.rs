@@ -6,12 +6,12 @@ use bevy::app::App;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::camera::{Camera3d, CameraProjection};
 use bevy::prelude::{
-    AlphaMode, Assets, Color, Commands, Component, IntoScheduleConfigs, Mesh, Mesh3d,
+    AlphaMode, Assets, Color, Commands, Component, DespawnOnExit, IntoScheduleConfigs, Mesh, Mesh3d,
     MeshMaterial3d, Meshable, Name, Plugin, Projection, Quat, Query, Res, ResMut, Sphere,
     StandardMaterial, Transform, Update, Vec3, With, Without, any_with_component, default,
     on_message,
 };
-use eigc_moons::{ActiveMoonProfileHandle, MoonProfile};
+use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonProfile};
 
 /// Plugin das propriedades de Júpiter no céu.
 pub struct JupiterPlugin;
@@ -23,7 +23,7 @@ struct Jupiter;
 /// Plugin que registra os sistemas para criar e posicionar Júpiter.
 impl Plugin for JupiterPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, spawn_jupiter.run_if(on_message::<SkyAssetsLoaded>))
+        app.add_systems(Update, spawn_jupiter.run_if(on_message::<SkyAssetsLoaded>).run_if(bevy::prelude::in_state(AppState::Running)))
             .add_systems(
                 Update,
                 place_and_scale_jupiter.run_if(any_with_component::<Jupiter>),
@@ -57,6 +57,7 @@ fn spawn_jupiter(
         Jupiter,
         NoFrustumCulling,
         Name::new("Jupiter"),
+        DespawnOnExit(AppState::Running),
     ));
 }
 

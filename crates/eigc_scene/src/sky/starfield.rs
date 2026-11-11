@@ -1,10 +1,11 @@
 //! Domo de estrelas de fundo, com escurecimento perto do sol.
 
 use crate::sky::{SkyAssets, SkyAssetsLoaded, SkyState};
+use eigc_moons::AppState;
 use bevy::app::App;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::prelude::{
-    AlphaMode, Assets, Camera3d, Color, Commands, Component, IntoScheduleConfigs, Mesh, Mesh3d,
+    AlphaMode, Assets, Camera3d, Color, Commands, Component, DespawnOnExit, IntoScheduleConfigs, Mesh, Mesh3d,
     MeshMaterial3d, Meshable, Name, Plugin, Projection, Query, Res, ResMut, Sphere,
     StandardMaterial, Transform, Update, Vec3, With, Without, any_with_component, default,
     on_message,
@@ -22,7 +23,7 @@ impl Plugin for StarfieldPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            spawn_starfield.run_if(on_message::<SkyAssetsLoaded>),
+            spawn_starfield.run_if(on_message::<SkyAssetsLoaded>).run_if(bevy::prelude::in_state(AppState::Running)),
         )
         .add_systems(
             Update,
@@ -54,6 +55,7 @@ fn spawn_starfield(
         StarDome,
         NoFrustumCulling,
         Name::new("Domo de Estrelas"),
+        DespawnOnExit(AppState::Running),
     ));
 }
 

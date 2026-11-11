@@ -1,9 +1,10 @@
 //! Brilho refletido de Júpiter sobre a lua ativa, com base na posição do sol e de Júpiter.
 
 use crate::sky::{SkySettings, SkyState};
+use eigc_moons::AppState;
 use bevy::app::App;
 use bevy::prelude::{
-    Commands, Component, DirectionalLight, IntoScheduleConfigs, Name, Plugin, Query, Res, Startup,
+    Commands, Component, DespawnOnExit, DirectionalLight, IntoScheduleConfigs, Name, OnEnter, Plugin, Query, Res,
     Transform, Update, Vec3, With, default, resource_exists,
 };
 use eigc_sim::SimSet;
@@ -18,7 +19,7 @@ struct PlanetShineLight;
 ///  Plugin que registra os sistemas para criar e atualizar a luz do brilho de Júpiter.
 impl Plugin for PlanetShinePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_planet_shine).add_systems(
+        app.add_systems(OnEnter(AppState::Running), spawn_planet_shine).add_systems(
             Update,
             update_planet_shine
                 .in_set(SimSet::Animate)
@@ -38,6 +39,7 @@ fn spawn_planet_shine(mut commands: Commands) {
         Transform::IDENTITY,
         PlanetShineLight,
         Name::new("PlanetShine"),
+        DespawnOnExit(AppState::Running),
     ));
 }
 

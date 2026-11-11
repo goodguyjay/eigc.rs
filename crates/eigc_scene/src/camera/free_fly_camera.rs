@@ -4,7 +4,7 @@ use crate::sky::{SkySettings, SkyState};
 use bevy::app::App;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::{
-    ButtonInput, Camera, Camera3d, Commands, Component, EulerRot, IntoScheduleConfigs, KeyCode,
+    ButtonInput, Camera, Camera3d, Commands, Component, DespawnOnExit, EulerRot, IntoScheduleConfigs, KeyCode,
     MessageReader, MouseButton, OnEnter, PerspectiveProjection, Plugin, Projection, Quat, Query,
     Res, ResMut, Resource, Single, Time, Transform, Update, Vec3, With, default, in_state,
     resource_exists,
@@ -105,6 +105,7 @@ fn spawn_free_fly_camera(mut commands: Commands, mut cursor_options: Single<&mut
             pitch,
             ..default()
         },
+        DespawnOnExit(AppState::Running),
     ));
 
     cursor_options.visible = false;
