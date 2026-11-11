@@ -12,6 +12,8 @@ pub mod linea;
 pub mod noise;
 /// Cor por vértice derivada da inclinação de uma fonte de altura.
 pub mod slope;
+/// Cor por vértice por peso combinado de inclinação, altura relativa e manchas pela posição.
+pub mod tint;
 /// Distorção de domínio e projeção anisotrópica de `HeightSource`.
 pub mod warp;
 

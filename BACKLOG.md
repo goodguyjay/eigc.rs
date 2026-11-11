@@ -114,8 +114,8 @@
   efeito para Europa `warp_amplitude_meters`, `feature_direction` e (já era o caso)
   `vertical_amplitude_meters`, que só chega em `TerrainParams.amp`. Mantidos porque outra
   lua pode reaproveitar as lineae e remover campos de `TerrainCalibration` mexe no `.ron` e
-  nos testes de `eigc_moons`. O destaque das cristas reais é só por inclinação
-  (`SlopeColorField`), sem identificar cada crista individualmente.
+  nos testes de `eigc_moons`. O destaque das cristas reais vem de `TerrainTintField`
+  (inclinação, altura relativa e manchas), sem identificar cada crista individualmente.
 
 - [X] **Textura de superfície de Europa (`snow_02`) sem mipmaps.** O loader de JPEG do Bevy
   não gera mipmaps e o tile físico é de 2 m (`TILE_SIZE_M` em `chunk_mesh.rs`), o que deixava o
@@ -139,12 +139,28 @@
   bordas do recorte de 22 km; em `f32` isso dá ~0,0005 de passo, cerca de 1 texel num tile de
   2048 px. Aceito por ora (não observado como artefato). Se aparecer tremor de textura, passar a
   UV relativa à origem do chunk com offset por material.
-- [ ] **A máscara de cor das cristas de Europa é inclinação do DTM, não a máscara de linea.** As
-  lineae sintéticas não participam mais da altura (ver item acima), então o tingimento por
-  vértice reaproveita o `SlopeColorField` (mesma fonte de altura do relevo) com
-  `terrain_base_color` branco e `terrain_valley_color` acastanhado em `europa.ron`. O nome
-  `terrain_valley_color` ficou impreciso: hoje é a cor das encostas íngremes. Renomear mexe no
-  `.ron` e nos testes de `eigc_moons`.
+- [ ] **A máscara de cor de Europa vem do DTM, não de feições identificadas.** O tingimento por
+  vértice é `TerrainTintField` (`height/tint.rs`, montado em `europa_terrain_color`): peso de
+  inclinação do DTM somado ao peso de altura relativa ao entorno (DTM menos o DTM borrado),
+  modulado por manchas de baixa frequência pela posição, com uma única mistura entre
+  `terrain_base_color` (branco) e `terrain_valley_color` (acastanhado) de `europa.ron`. Não
+  identifica cristas, vales nem material escuro reais: é uma aproximação pela forma do relevo. O
+  nome `terrain_valley_color` voltou a ser parcialmente verdadeiro (vales e encostas íngremes);
+  renomear mexe no `.ron` e nos testes de `eigc_moons`.
+- [ ] **`SlopeColorField` ficou sem uso em Europa.** A cor de Europa passou a ser
+  `TerrainTintField`, que recalcula a inclinação com a mesma diferença central de
+  `SlopeColorField::slope_at` (duplicação consciente, para não alterar `SlopeColorField` nem os
+  testes de `slope_color_by_steepness.rs`). Mantido porque outra lua pode querer só a cor por
+  inclinação. Se não for reaproveitado, remover o tipo e os testes, ou extrair a inclinação para
+  uma função compartilhada pelos dois.
+- [ ] **Constantes da cor de Europa são valores de partida, sem calibração visual.**
+  `RELATIVE_HEIGHT_BLUR_SIGMA_M` (1 km), `RELATIVE_HEIGHT_TINT_START_M`/`_FULL_M` (10 e 45 m
+  abaixo do entorno, cerca dos percentis 30 e 5 do recorte), `RELATIVE_HEIGHT_TINT_SCALE` (0,9),
+  `MOTTLE_WAVELENGTH_M`/`MOTTLE_OCTAVES`/`MOTTLE_LACUNARITY` (manchas de 6 e 2 km) e
+  `MOTTLE_MIN`/`MOTTLE_MAX` (0,5 a 1,4) em `recipe.rs` foram escolhidos olhando um mapa da cor
+  por vértice gerado fora do jogo, não com o app rodando. Medido nesse mapa: o fator médio de
+  luminância caiu de 0,933 (só inclinação) para 0,885 e a área com tingimento de 27% para 41%.
+  Ajustar olhando o jogo, junto com a textura de superfície, que é multiplicada por essa cor.
 
 ## Cena / Visual
 - [X] Câmera e luz em eigc_app::scene_placeholder eram fixas e hardcoded, sem

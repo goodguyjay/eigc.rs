@@ -60,7 +60,7 @@ fn europa_recipe_produces_height_function_and_matching_params() {
 
     assert!(
         recipe.color.is_some(),
-        "Europa deveria produzir uma fonte de cor por vértice (inclinação do DTM)"
+        "Europa deveria produzir uma fonte de cor por vértice (inclinação e altura relativa do DTM)"
     );
 }
 
