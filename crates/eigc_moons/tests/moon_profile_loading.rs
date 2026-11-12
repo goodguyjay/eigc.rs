@@ -26,7 +26,6 @@ MoonProfile(
     walkable: true,
     sky: SkyCalibration(
       orbital_period_seconds: 306822.0, // 3.551181 dias * 86400
-      base_sun_dir: (-0.15, 0.35, -0.92),
       base_jupiter_dir: (0.35, 0.25, -0.90),
       jupiter_libration_lat_deg: 2.0,
       jupiter_libration_lon_deg: 2.0,

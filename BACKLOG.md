@@ -196,8 +196,23 @@
 - [ ] **Com a calibração atual de Europa, o eclipse por Júpiter nunca acontece.** Pela conta, a
   trajetória do sol (elevação fixa de 25 graus) passa a no mínimo ~10,5 graus do centro de
   Júpiter (elevação ~14,5 graus), mais que o raio de Júpiter mais a suavização (~7 graus).
-  Não conferido com o app rodando. O `io.ron` usa direções provisórias; a calibração do eclipse
-  de Io (que acontece em toda órbita) fica para a fase do céu.
+  Não conferido com o app rodando. Io já tem eclipse em toda órbita (Júpiter a 24 graus, 1 grau
+  abaixo do sol), travado por `eigc_scene/tests/io_eclipse_happens_every_orbit.rs`.
+- [ ] **O sol nunca se põe: não existe noite, só eclipse.** `sky_state_at` gira o sol num
+  círculo de elevação fixa (`sun_elevation_deg`) em torno do eixo Y. No hemisfério sub-joviano
+  real, o sol faz um grande círculo que passa perto de Júpiter, nasce e se põe, e o eclipse cai
+  no meio-dia local. Débito consciente: o modelo atual é simples e já dá eclipse com duração
+  realista em Io. Custo: lagos de lava com emissão no "lado noturno" (fase 5 de Io) só ficam
+  visíveis durante o eclipse. Revisar antes dessa fase.
+- [ ] **Diâmetro do sol em duas fontes.** O disco visual usa `SUN_ANGULAR_DIAMETER_DEG = 0.10`
+  (`eigc_common::constants`), e o eclipse usa `SkySettings::sun_ang_radius`, derivado à parte
+  em `from_profile` (`0.53 / 5.2` graus, metade). Hoje batem (0,102 contra 0,10), mas é a mesma
+  grandeza escrita duas vezes. Derivar uma da outra quando alguém mexer em qualquer uma.
+- [ ] **Esfera celeste ~1,5% maior que o raio angular nominal.** `place_celestial_disc` usa
+  `sky_r * tan(θ/2)` como raio de uma esfera, que subtende `asin(tan(θ/2))`: em Io, 9,76 graus
+  contra os 9,62 do eclipse. O sol some na tela um pouco antes de a luz chegar à metade. O
+  certo para esfera seria `sin(θ/2)`. Não corrigido: diferença pequena, ainda não conferida
+  no app. Corrigir se ficar visível.
 - [X] Câmera e luz em eigc_app::scene_placeholder eram fixas e hardcoded, sem
   calibração por lua. A luz placeholder (`spawn_placeholder_light`) foi
   removida — o céu real (`SkyPlugin`, com `SunLight` e `PlanetShine`) já
@@ -227,8 +242,8 @@ Essas funções concentram lógica matemática não trivial (libração orbital,
 smoothstep, orientação de disco celeste, glare de estrelas) direto em Bevy systems.
 
 `place_and_scale_jupiter` e `position_sun_disc` já usam `place_celestial_disc` para posição
-e escala; a orientação continua inline. `animate_sky_physical` e `dim_stars_near_sun` seguem
-sem extração.
+e escala; a orientação continua inline. `animate_sky_physical` já é um wrapper fino de
+`sky_state_at` (função pura), e `dim_stars_near_sun` de `star_brightness`.
 
 Motivo: extrair exigiria transformar os systems em wrappers finos, retrabalho grande em
 código recém-validado.
