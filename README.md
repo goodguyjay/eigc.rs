@@ -1,8 +1,8 @@
 # eigc-rs
 
 Simulação interativa das quatro luas galileanas de Júpiter (Europa, IO, Ganimedes e Calisto),
-construída em rust + bevy, com terreno procedural calibrado por características geológicas
-reais de cada lua e texturas públicas da NASA/USGS.
+construída em rust + bevy. O relevo de Europa vem de um DTM real (USGS/Galileo), com detalhe
+procedural por cima, e as texturas de superfície são CC0 do Poly Haven.
 
 Esse projeto toma proveito do timing do lançamento da missão Europa Clipper da NASA, 
 que foi lançada em 2024 e chegará a Europa em 2030. A missão JUICE da ESA, que também estudará as luas galileanas, 
