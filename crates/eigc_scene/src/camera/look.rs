@@ -87,19 +87,22 @@ fn clamp_pitch(pitch: f32) -> f32 {
     pitch.clamp(-PITCH_LIMIT, PITCH_LIMIT)
 }
 
-/// Libera o cursor ao pressionar ESC.
-pub(super) fn cursor_release(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut cursor_options: Single<&mut CursorOptions>,
-) {
-    if keys.just_pressed(KeyCode::Escape) {
-        cursor_options.visible = true;
-        cursor_options.grab_mode = CursorGrabMode::None;
-    }
+/// Libera e mostra o cursor. Roda ao abrir o menu de pausa e ao sair de `Running`, para os
+/// menus poderem ser usados com o mouse.
+pub(super) fn release_cursor(mut cursor_options: Single<&mut CursorOptions>) {
+    cursor_options.visible = true;
+    cursor_options.grab_mode = CursorGrabMode::None;
 }
 
-/// Recaptura o cursor ao clicar com o botão esquerdo, permitindo retomar o controle da câmera
-/// depois que o ESC libera o cursor, sem precisar fechar e reabrir a aplicação.
+/// Esconde e trava o cursor para o mouse look. Roda ao entrar (ou voltar) em
+/// `PauseState::Playing`.
+pub(super) fn capture_cursor(mut cursor_options: Single<&mut CursorOptions>) {
+    cursor_options.visible = false;
+    cursor_options.grab_mode = CursorGrabMode::Locked;
+}
+
+/// Recaptura o cursor ao clicar com o botão esquerdo, para o caso de o sistema operacional
+/// soltá-lo durante a exploração (ex.: alt-tab), sem precisar abrir e fechar a pausa.
 pub(super) fn recapture_cursor_on_click(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut cursor_options: Single<&mut CursorOptions>,

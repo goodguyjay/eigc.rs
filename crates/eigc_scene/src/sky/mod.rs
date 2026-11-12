@@ -2,8 +2,8 @@
 
 use bevy::app::App;
 use bevy::prelude::{
-    AssetServer, Assets, Commands, Handle, Image, IntoScheduleConfigs, Message, MessageWriter,
-    OnEnter, Plugin, Quat, Res, ResMut, Resource, Update, Vec3, error, in_state,
+    AssetServer, Assets, Commands, GlobalAmbientLight, Handle, Image, IntoScheduleConfigs,
+    Message, MessageWriter, OnEnter, OnExit, Plugin, Quat, Res, ResMut, Resource, Update, Vec3, error, in_state,
     resource_exists,
 };
 use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonProfile};
@@ -110,6 +110,7 @@ impl Plugin for SkyPlugin {
                 Update,
                 check_sky_assets_loaded.run_if(in_state(AppState::Running)),
             )
+            .add_systems(OnExit(AppState::Running), clear_sky_session)
             .init_resource::<SkyState>()
             .add_plugins((
                 sun::SunPlugin,
@@ -138,6 +139,16 @@ fn build_sky_settings(
     };
 
     commands.insert_resource(SkySettings::from_profile(profile));
+}
+
+/// Desfaz o que a entrada em `Running` montou para o céu: calibração, texturas e luz ambiente.
+/// As entidades (sol, Júpiter, domo) saem sozinhas por `DespawnOnExit`. Sem isso, entrar de novo
+/// numa lua reaproveitaria `SkyAssets` com `all_loaded` já verdadeiro e o céu nunca respawnaria.
+fn clear_sky_session(mut commands: Commands) {
+    commands.remove_resource::<SkySettings>();
+    commands.remove_resource::<SkyAssets>();
+    commands.insert_resource(SkyState::default());
+    commands.insert_resource(GlobalAmbientLight::default());
 }
 
 /// Carrega as texturas de céu e adiciona `SkyAssets` como recurso.

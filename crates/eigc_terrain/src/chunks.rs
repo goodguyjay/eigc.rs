@@ -23,8 +23,10 @@ use bevy::prelude::{
     Assets, Commands, Component, Entity, Handle, Mesh, Mesh3d, MeshMaterial3d, Query, Res, ResMut,
     Resource, Transform,
 };
+use bevy::state::state_scoped::DespawnOnExit;
 use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, poll_once};
 use eigc_common::lod_focus::LodFocus;
+use eigc_moons::AppState;
 use std::collections::HashMap;
 
 /// Marca uma entidade de chunk do terreno e guarda sua posição na grade e o nível de LOD atual.
@@ -99,6 +101,8 @@ impl ChunkErrorTable {
 /// Spawna todos os chunks do terreno com a malha do nível mais grosso.
 ///
 /// O `material` é compartilhado por todos os chunks e pode ser de qualquer tipo de `Material`.
+/// Os chunks são despawnados ao sair de `AppState::Running`, o que solta as malhas, o material e
+/// cancela as construções de malha ainda pendentes (`PendingChunkMesh`).
 pub fn spawn_terrain_chunks<M: Material>(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -122,6 +126,7 @@ pub fn spawn_terrain_chunks<M: Material>(
                 Mesh3d(meshes.add(mesh)),
                 MeshMaterial3d(material.clone()),
                 Transform::from_xyz(center.x, 0.0, center.y),
+                DespawnOnExit(AppState::Running),
             ));
         }
     }

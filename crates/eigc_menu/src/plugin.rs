@@ -4,30 +4,36 @@
 use crate::explore::{ExploreRequested, NotImplementedNotice, handle_explore_requests};
 use crate::interaction::{
     MenuSelection, animate_menu_camera, animate_moon_scale, exit_focus_on_escape,
-    restrict_mesh_picking_to_marked_cameras,
+    release_mesh_picking_restriction, restrict_mesh_picking_to_marked_cameras,
 };
+use crate::pause::{prepare_menu_return, toggle_pause_on_escape};
 use crate::scene::{spawn_menu_scene, spin_menu_moons};
 use crate::settings::{SettingsState, close_settings_panel_on_escape};
 use crate::ui::{
     ToastState, animate_settings_panel_open, highlight_labels, position_moon_labels,
-    refresh_panel_content, slide_detail_panel, spawn_loading_overlay, spawn_menu_ui, style_buttons,
-    style_configure_controls_row, style_settings_gear, sync_fullscreen_selector,
-    toggle_settings_panel_visibility, update_overview_visibility, update_toast,
+    refresh_panel_content, slide_detail_panel, spawn_loading_overlay, spawn_menu_ui,
+    spawn_pause_menu, style_buttons, style_configure_controls_row, style_settings_gear,
+    sync_fullscreen_selector, toggle_settings_panel_visibility, update_overview_visibility,
+    update_toast,
 };
 use bevy::picking::mesh_picking::MeshPickingPlugin;
 use bevy::prelude::{
-    App, IntoScheduleConfigs, Message, OnEnter, Plugin, Update, in_state, on_message,
+    App, IntoScheduleConfigs, Message, OnEnter, OnExit, Plugin, State, Update, in_state,
+    on_message, resource_exists,
 };
-use eigc_moons::AppState;
+use eigc_moons::{AppState, PauseState};
 
 /// Sinal para o menu spawnar sua cena e UI. Emitido pelo binário da aplicação, depois que a
-/// abertura termina ou é pulada.
+/// abertura termina ou é pulada, e pelo próprio menu ao voltar da exploração.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct ShowMenu;
 
 /// Registra o menu de seleção de lua. A cena e a UI nascem quando `ShowMenu` é recebido, e os
 /// sistemas de interação ficam ativos enquanto a aplicação está em `AppState::MainMenu`. Em
 /// `LoadingMoonProfile`, mantém a cena do menu e exibe a tela de carregamento por cima.
+///
+/// Em `Running`, ESC abre o menu de pausa (`PauseState`, que o binário registra com
+/// `add_sub_state`); "Voltar à seleção de lua" sai de `Running` e o menu nasce de novo.
 pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
@@ -48,6 +54,18 @@ impl Plugin for MenuPlugin {
                 OnEnter(AppState::Running),
                 restrict_mesh_picking_to_marked_cameras,
             )
+            .add_systems(
+                OnExit(AppState::Running),
+                (release_mesh_picking_restriction, prepare_menu_return),
+            )
+            .add_systems(OnEnter(PauseState::Paused), spawn_pause_menu)
+            .add_systems(
+                Update,
+                toggle_pause_on_escape
+                    .run_if(in_state(AppState::Running))
+                    .run_if(resource_exists::<State<PauseState>>),
+            )
+            .add_systems(Update, style_buttons.run_if(in_state(PauseState::Paused)))
             .add_systems(
                 Update,
                 (

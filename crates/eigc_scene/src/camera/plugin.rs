@@ -4,8 +4,8 @@
 use crate::camera::first_person::{FirstPersonCamera, follow_ground, walk_movement};
 use crate::camera::free_fly_camera::{FreeFlyCamera, free_fly_movement};
 use crate::camera::look::{
-    CamLock, CameraLook, cursor_release, lock_aim_update, mouse_look, recapture_cursor_on_click,
-    toggle_lock,
+    CamLock, CameraLook, capture_cursor, lock_aim_update, mouse_look, recapture_cursor_on_click,
+    release_cursor, toggle_lock,
 };
 #[cfg(feature = "dev")]
 use crate::camera::mode::toggle_movement_mode;
@@ -13,19 +13,21 @@ use crate::camera::mode::{MovementMode, in_mode};
 use crate::sky::SkySettings;
 use bevy::app::App;
 use bevy::prelude::{
-    Camera, Camera3d, Commands, EulerRot, IntoScheduleConfigs, OnEnter, PerspectiveProjection,
-    Plugin, Projection, ResMut, Single, Transform, Update, Vec3, With, default, in_state,
-    resource_exists,
+    Camera, Camera3d, Commands, EulerRot, IntoScheduleConfigs, OnEnter, OnExit,
+    PerspectiveProjection, Plugin, Projection, ResMut, Single, Transform, Update, Vec3, With,
+    default, in_state, not, resource_exists,
 };
+use bevy::state::state_scoped::DespawnOnExit;
 #[cfg(feature = "dev")]
 use bevy::prelude::{Res, Resource};
 use bevy::window::{CursorGrabMode, CursorOptions};
 use eigc_common::lod_focus::{LodFocus, screen_scale_from_fov};
-use eigc_moons::AppState;
+use eigc_moons::{AppState, PauseState};
 use eigc_terrain::pipeline::HeightResource;
 
 /// Registra a câmera: primeira pessoa por padrão e, com a feature `dev`, voo livre alternável
-/// com Tab.
+/// com Tab. Com `PauseState::Paused` os sistemas de câmera ficam parados e o cursor livre; ao sair
+/// de `Running` a câmera é despawnada e o estado da sessão volta ao padrão.
 pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
@@ -34,6 +36,12 @@ impl Plugin for CameraPlugin {
             .init_resource::<MovementMode>()
             .init_resource::<LodFocus>()
             .add_systems(OnEnter(AppState::Running), spawn_camera)
+            .add_systems(OnEnter(PauseState::Playing), capture_cursor)
+            .add_systems(OnEnter(PauseState::Paused), release_cursor)
+            .add_systems(
+                OnExit(AppState::Running),
+                (reset_camera_session, release_cursor),
+            )
             .add_systems(
                 Update,
                 (
@@ -45,12 +53,12 @@ impl Plugin for CameraPlugin {
                         .run_if(in_mode(MovementMode::Walk))
                         .run_if(resource_exists::<HeightResource>),
                     lock_aim_update.run_if(resource_exists::<SkySettings>),
-                    cursor_release,
                     publish_lod_focus,
                     recapture_cursor_on_click,
                 )
                     .chain()
-                    .run_if(in_state(AppState::Running)),
+                    .run_if(in_state(AppState::Running))
+                    .run_if(not(in_state(PauseState::Paused))),
             );
 
         #[cfg(feature = "dev")]
@@ -58,7 +66,8 @@ impl Plugin for CameraPlugin {
             Update,
             toggle_movement_mode
                 .before(mouse_look)
-                .run_if(in_state(AppState::Running)),
+                .run_if(in_state(AppState::Running))
+                .run_if(not(in_state(PauseState::Paused))),
         );
     }
 }
@@ -119,10 +128,19 @@ fn spawn_camera(
             pitch,
             ..default()
         },
+        DespawnOnExit(AppState::Running),
     ));
 
     cursor_options.visible = false;
     cursor_options.grab_mode = CursorGrabMode::Locked;
+}
+
+/// Devolve trava de mira, modo de movimento e foco de LOD aos valores iniciais ao sair de
+/// `Running`, para a próxima exploração começar do zero em vez de herdar a sessão anterior.
+fn reset_camera_session(mut commands: Commands) {
+    commands.insert_resource(CamLock::default());
+    commands.insert_resource(MovementMode::default());
+    commands.insert_resource(LodFocus::default());
 }
 
 /// Publica em `LodFocus` a posição da câmera e a escala de tela (FOV e altura da janela), para o
