@@ -6,7 +6,7 @@ use crate::height::comb::{Add2, Bias, FlattenColorNearOrigin, FlattenNearOrigin,
 use crate::height::heightmap::HeightmapHeight;
 use crate::height::linea::{LineaField, LineaScale, generate_linea_specs};
 use crate::height::noise::PerlinFbm;
-use crate::height::slope::SlopeColorField;
+use crate::height::tint::TerrainTintField;
 use crate::height::{ColorFn, HeightFn, HeightSource, arc, arc_color};
 use crate::lod::TerrainLodConfig;
 use crate::params::TerrainParams;
@@ -118,6 +118,39 @@ const SLOPE_COLOR_START: f32 = 0.06;
 /// Inclinação do DTM (subida/avanço) a partir da qual o terreno recebe totalmente a cor de vale.
 const SLOPE_COLOR_END: f32 = 0.20;
 
+/// Desvio, em metros, do borrão do DTM que define o "entorno" na altura relativa (altura do DTM
+/// menos o DTM borrado). Com 1 km, a altura relativa do recorte tem desvio de ~25 m (percentis
+/// 5 e 95 em -47 e +42 m).
+const RELATIVE_HEIGHT_BLUR_SIGMA_M: f32 = 1000.0;
+
+/// Quantos metros abaixo do entorno o tingimento por altura começa (~percentil 30 do recorte).
+const RELATIVE_HEIGHT_TINT_START_M: f32 = 10.0;
+
+/// Quantos metros abaixo do entorno o tingimento por altura chega ao máximo (~percentil 5).
+const RELATIVE_HEIGHT_TINT_FULL_M: f32 = 45.0;
+
+/// Peso máximo que a altura relativa sozinha dá ao tingimento: com 0,9 um vale fundo e plano fica
+/// quase com `terrain_valley_color` (e chega a ela onde a mancha passa de 1,1).
+const RELATIVE_HEIGHT_TINT_SCALE: f32 = 0.9;
+
+/// Comprimento de onda da primeira oitava das manchas pela posição, em metros.
+const MOTTLE_WAVELENGTH_M: f32 = 6000.0;
+
+/// Oitavas das manchas: com `MOTTLE_LACUNARITY` 3, comprimentos de onda de 6 km e 2 km.
+const MOTTLE_OCTAVES: u32 = 2;
+
+/// Multiplicador de frequência entre as oitavas das manchas.
+const MOTTLE_LACUNARITY: f32 = 3.0;
+
+/// Fator de mancha mínimo aplicado ao peso de tingimento (manchas mais claras).
+const MOTTLE_MIN: f32 = 0.5;
+
+/// Fator de mancha máximo aplicado ao peso de tingimento (manchas mais tingidas).
+const MOTTLE_MAX: f32 = 1.4;
+
+/// Misturado à semente da lua para o ruído das manchas não repetir o do detalhe fino.
+const MOTTLE_SEED_SALT: u32 = 0x5EED_C010;
+
 /// Raio da clareira plana ao redor da origem (diâmetro ~300m), onde o jogador/câmera aparece.
 const SPAWN_CLEARING_RADIUS_M: f32 = 150.0;
 
@@ -136,8 +169,9 @@ pub struct TerrainRecipe {
     pub appearance: TerrainAppearance,
     /// Propriedades do material do terreno
     pub material_properties: TerrainMaterialProperties,
-    /// Fonte de cor por vértice, quando a receita pinta feições distintas (ex.: cor por
-    /// inclinação). `None` significa que o terreno usa só a cor flat de `appearance.base_color`.
+    /// Fonte de cor por vértice, quando a receita tinge o terreno (em Europa, por inclinação,
+    /// altura relativa ao entorno e manchas pela posição). `None`
+    /// significa que o terreno usa só a cor flat de `appearance.base_color`.
     pub color: Option<ColorFn>,
     /// Configuração do LOD por chunks do terreno.
     pub lod: TerrainLodConfig,
@@ -156,7 +190,8 @@ pub fn build_recipe(profile: &MoonProfile) -> TerrainRecipe {
 /// Monta a receita de geração de terreno para Europa.
 /// A forma macro vem de um DTM real (USGS/Galileo) recentrado em zero e exagerado
 /// verticalmente, por cima entram lineae de centenas de metros e uma rugosidade fina procedural.
-/// Cor por inclinação do DTM (as lineae não entram na cor).
+/// Cor por inclinação e altura relativa do DTM, com manchas pela posição
+/// (`europa_terrain_color`); as lineae não entram na cor.
 fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
     // Resolução da malha monolítica legada (vértices por lado). O terreno em jogo usa chunks
     // com LOD (ver `lod` abaixo), então isto só alimenta `TerrainParams.res` (ver BACKLOG.md).
@@ -188,7 +223,12 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         vertical_exaggeration: VERTICAL_EXAGGERATION,
     };
 
-    let slope_source = heightmap.clone();
+    let terrain_color = europa_terrain_color(
+        &heightmap,
+        seed,
+        profile.terrain_base_color,
+        profile.terrain_valley_color,
+    );
 
     let real_relief = Scale {
         s: Bias {
@@ -218,24 +258,6 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         SPAWN_CLEARING_RADIUS_M,
         SPAWN_CLEARING_BLEND_M,
     );
-
-    let slope_color = SlopeColorField {
-        source: slope_source,
-        sample_step_m: SLOPE_SAMPLE_STEP_M,
-        flat_color: profile.terrain_base_color,
-        steep_color: profile.terrain_valley_color,
-        slope_start: SLOPE_COLOR_START,
-        slope_end: SLOPE_COLOR_END,
-    };
-
-    // cor da clareira acompanha o mesmo raio/blend da altura: gelo claro e uniforme, não a cor
-    // de vale que uma encosta próxima da origem poderia produzir.
-    let color_with_clearing = FlattenColorNearOrigin {
-        source: slope_color,
-        flat_color: profile.terrain_base_color,
-        flat_radius_m: SPAWN_CLEARING_RADIUS_M,
-        blend_radius_m: SPAWN_CLEARING_BLEND_M,
-    };
 
     let terrain_appearance = TerrainAppearance {
         base_color: color_from_linear_rgba(profile.terrain_base_color),
@@ -270,7 +292,7 @@ fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         params: terrain_params,
         appearance: terrain_appearance,
         material_properties,
-        color: Some(arc_color(color_with_clearing)),
+        color: Some(arc_color(terrain_color)),
         lod,
     }
 }
@@ -286,6 +308,52 @@ fn europa_fine_detail(seed: u32) -> PerlinFbm {
         lacunarity: 2.0,
         gain: 2.0_f32.powf(-DTM_HURST_EXPONENT),
         amplitude: DETAIL_AMPLITUDE_M,
+    }
+}
+
+/// Ruído de baixa frequência, em `[-1, 1]`, das manchas de tingimento de Europa pela posição.
+fn europa_mottle_noise(seed: u32) -> PerlinFbm {
+    PerlinFbm {
+        perlin: Perlin::new(seed ^ MOTTLE_SEED_SALT),
+        freq: 1.0 / MOTTLE_WAVELENGTH_M,
+        octaves: MOTTLE_OCTAVES,
+        lacunarity: MOTTLE_LACUNARITY,
+        gain: 0.5,
+        amplitude: 1.0,
+    }
+}
+
+/// Cor por vértice de Europa: tingimento por inclinação e por altura relativa ao entorno (DTM
+/// menos o DTM borrado uma vez aqui), modulado por manchas pela posição, com a clareira de spawn
+/// em `flat_color` (gelo claro e uniforme, não a cor de vale que uma encosta próxima da origem
+/// poderia produzir).
+fn europa_terrain_color(
+    heightmap: &HeightmapHeight,
+    seed: u32,
+    flat_color: [f32; 4],
+    tinted_color: [f32; 4],
+) -> FlattenColorNearOrigin<TerrainTintField<HeightmapHeight, HeightmapHeight, PerlinFbm>> {
+    let tint = TerrainTintField {
+        source: heightmap.clone(),
+        smoothed_source: heightmap.blurred(RELATIVE_HEIGHT_BLUR_SIGMA_M),
+        mottle_noise: europa_mottle_noise(seed),
+        sample_step_m: SLOPE_SAMPLE_STEP_M,
+        slope_start: SLOPE_COLOR_START,
+        slope_end: SLOPE_COLOR_END,
+        depth_start_m: RELATIVE_HEIGHT_TINT_START_M,
+        depth_full_m: RELATIVE_HEIGHT_TINT_FULL_M,
+        height_weight_scale: RELATIVE_HEIGHT_TINT_SCALE,
+        mottle_min: MOTTLE_MIN,
+        mottle_max: MOTTLE_MAX,
+        flat_color,
+        tinted_color,
+    };
+
+    FlattenColorNearOrigin {
+        source: tint,
+        flat_color,
+        flat_radius_m: SPAWN_CLEARING_RADIUS_M,
+        blend_radius_m: SPAWN_CLEARING_BLEND_M,
     }
 }
 
@@ -312,6 +380,7 @@ fn color_from_linear_rgba(components: [f32; 4]) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::height::ColorSource;
 
     fn dtm() -> HeightmapHeight {
         HeightmapHeight::from_png_and_ron(EUROPA_HEIGHTMAP_PNG, EUROPA_HEIGHTMAP_RON)
@@ -375,6 +444,88 @@ mod tests {
         }
 
         assert!(rms_difference(&dtm_only, 24.0) < 0.85 * rms_difference(&hybrid, 24.0));
+    }
+
+    const ICE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+    const VALLEY: [f32; 4] = [0.55, 0.48, 0.42, 1.0];
+
+    /// Pontos de uma grade que cobre o recorte de Europa sem a borda.
+    fn map_grid(steps: usize) -> impl Iterator<Item = (f32, f32)> {
+        let half = 10_000.0;
+        (0..steps).flat_map(move |i| {
+            (0..steps).map(move |j| {
+                let span = 2.0 * half / (steps - 1) as f32;
+                (-half + i as f32 * span, -half + j as f32 * span)
+            })
+        })
+    }
+
+    /// Testa que o ruído das manchas é o mesmo para a mesma semente, muda com a semente, fica em
+    /// `[-1, 1]` e varia de verdade pelo mapa (a conversão para `[MOTTLE_MIN, MOTTLE_MAX]` é
+    /// testada em `height::tint`).
+    #[test]
+    fn mottle_noise_is_deterministic_per_seed_and_stays_in_range() {
+        let noise = europa_mottle_noise(204);
+        let same = europa_mottle_noise(204);
+        let other = europa_mottle_noise(205);
+
+        let values: Vec<f32> = map_grid(60).map(|(x, z)| noise.height_at(x, z)).collect();
+        let repeated: Vec<f32> = map_grid(60).map(|(x, z)| same.height_at(x, z)).collect();
+        let other_values: Vec<f32> = map_grid(60).map(|(x, z)| other.height_at(x, z)).collect();
+
+        assert_eq!(values, repeated);
+        assert_ne!(values, other_values);
+        assert!(values.iter().all(|value| (-1.0..=1.0).contains(value)));
+
+        let mean = values.iter().sum::<f32>() / values.len() as f32;
+        let deviation =
+            (values.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / values.len() as f32).sqrt();
+        assert!(
+            deviation > 0.1,
+            "manchas quase constantes: desvio {deviation}"
+        );
+    }
+
+    /// Testa que a clareira de spawn continua branca com a cor nova.
+    #[test]
+    fn europa_terrain_color_keeps_the_spawn_clearing_white() {
+        let color = europa_terrain_color(&dtm(), 204, ICE, VALLEY);
+        for (x, z) in [(0.0, 0.0), (100.0, 0.0), (0.0, -140.0), (-90.0, 90.0)] {
+            assert_eq!(color.color_at(x, z), ICE, "({x}, {z}) deveria ser branco");
+        }
+    }
+
+    /// Testa, no DTM real, que os pontos bem abaixo do entorno ficam em média mais tingidos que
+    /// os pontos bem acima dele, e que nenhum ponto fica mais escuro que `terrain_valley_color`.
+    #[test]
+    fn europa_terrain_color_tints_low_ground_more_than_high_ground() {
+        let dtm = dtm();
+        let surroundings = dtm.blurred(RELATIVE_HEIGHT_BLUR_SIGMA_M);
+        let color = europa_terrain_color(&dtm, 204, ICE, VALLEY);
+
+        let (mut low, mut high) = (Vec::new(), Vec::new());
+        for (x, z) in map_grid(80) {
+            let red = color.color_at(x, z)[0];
+            assert!(
+                red >= VALLEY[0] - 1e-5,
+                "mais escuro que a cor de vale em ({x}, {z})"
+            );
+            let relative = dtm.height_at(x, z) - surroundings.height_at(x, z);
+            if relative < -RELATIVE_HEIGHT_TINT_FULL_M {
+                low.push(red);
+            } else if relative > RELATIVE_HEIGHT_TINT_FULL_M {
+                high.push(red);
+            }
+        }
+
+        let mean = |values: &[f32]| values.iter().sum::<f32>() / values.len() as f32;
+        assert!(!low.is_empty() && !high.is_empty());
+        assert!(
+            mean(&low) < mean(&high) - 0.05,
+            "vales {} deveriam ser mais escuros que cristas {}",
+            mean(&low),
+            mean(&high)
+        );
     }
 
     /// Testa que as lineae não mexem na clareira de spawn: valem exatamente zero em todo o

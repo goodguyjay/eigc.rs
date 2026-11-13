@@ -122,12 +122,66 @@ impl HeightmapHeight {
 }
 
 impl HeightmapHeight {
+    /// Cópia do heightmap borrada por uma gaussiana de desvio `sigma_m` (em metros), aplicada uma
+    /// vez sobre a grade de pixels. Fora da grade repete a borda, como `height_at`.
+    pub fn blurred(&self, sigma_m: f32) -> Self {
+        let sigma_col_px = sigma_m * (self.width - 1) as f32 / self.patch_width_m;
+        let sigma_row_px = sigma_m * (self.height - 1) as f32 / self.patch_height_m;
+
+        let mut horizontal = vec![0.0; self.data.len()];
+        let kernel = gaussian_kernel(sigma_col_px);
+        let radius = (kernel.len() / 2) as isize;
+        for row in 0..self.height {
+            for col in 0..self.width {
+                horizontal[row * self.width + col] = kernel
+                    .iter()
+                    .enumerate()
+                    .map(|(index, weight)| {
+                        weight * self.texel(col as isize + index as isize - radius, row as isize)
+                    })
+                    .sum();
+            }
+        }
+
+        let horizontal = Self {
+            data: horizontal,
+            ..self.clone()
+        };
+        let kernel = gaussian_kernel(sigma_row_px);
+        let radius = (kernel.len() / 2) as isize;
+        let mut data = vec![0.0; self.data.len()];
+        for row in 0..self.height {
+            for col in 0..self.width {
+                data[row * self.width + col] = kernel
+                    .iter()
+                    .enumerate()
+                    .map(|(index, weight)| {
+                        weight
+                            * horizontal.texel(col as isize, row as isize + index as isize - radius)
+                    })
+                    .sum();
+            }
+        }
+
+        Self { data, ..horizontal }
+    }
+
     /// Elevação do pixel (`col`, `row`), repetindo a borda para índices fora da grade.
     fn texel(&self, col: isize, row: isize) -> f32 {
         let col = col.clamp(0, self.width as isize - 1) as usize;
         let row = row.clamp(0, self.height as isize - 1) as usize;
         self.data[row * self.width + col]
     }
+}
+
+/// Pesos normalizados de uma gaussiana discreta de desvio `sigma_px`, com raio de 3 desvios.
+fn gaussian_kernel(sigma_px: f32) -> Vec<f32> {
+    let radius = (3.0 * sigma_px).ceil().max(0.0) as isize;
+    let weights: Vec<f32> = (-radius..=radius)
+        .map(|offset| (-0.5 * (offset as f32 / sigma_px.max(f32::EPSILON)).powi(2)).exp())
+        .collect();
+    let total: f32 = weights.iter().sum();
+    weights.into_iter().map(|weight| weight / total).collect()
 }
 
 /// Interpolação Catmull-Rom entre `p1` e `p2` (com `t` em `[0, 1]`), usando `p0` e `p3` para a
