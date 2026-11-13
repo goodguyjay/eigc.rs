@@ -45,15 +45,15 @@ fn shader_normal_map_mean() -> [f64; 2] {
     [values[0], values[1]]
 }
 
-/// Lê o caminho do normal map que o jogo carrega (`SNOW_02_NORMAL_PATH`, privado em
+/// Lê o caminho do normal map que o jogo carrega (`EUROPA_ICE_NORMAL_PATH`, privado em
 /// `surface_textures.rs`), para o teste acompanhar uma troca de textura.
 fn loaded_normal_map_path() -> String {
     let source = read_text("crates/eigc_terrain/src/surface_textures.rs");
-    let line = declaration_line(&source, "SNOW_02_NORMAL_PATH");
+    let line = declaration_line(&source, "EUROPA_ICE_NORMAL_PATH");
     let path = line
         .split('"')
         .nth(1)
-        .unwrap_or_else(|| panic!("SNOW_02_NORMAL_PATH deveria ser uma string: {line}"));
+        .unwrap_or_else(|| panic!("EUROPA_ICE_NORMAL_PATH deveria ser uma string: {line}"));
     format!("assets/{path}")
 }
 
@@ -88,7 +88,7 @@ fn shader_normal_map_mean_matches_the_loaded_normal_map() {
         assert!(
             (shader_mean[axis] - measured_mean[axis]).abs() <= MEAN_TOLERANCE,
             "NORMAL_MAP_MEAN_XY {shader_mean:?} não bate com a média medida {measured_mean:?} \
-             de {normal_map_path}; remedir com tools/attenuate_surface_marks.py"
+             de {normal_map_path}; usar o valor que tools/generate_europa_ice.py imprime"
         );
     }
 }
