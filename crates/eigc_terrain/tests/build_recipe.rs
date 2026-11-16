@@ -15,17 +15,15 @@ fn minimal_profile_for(moon_id: MoonId) -> MoonProfile {
             seed: 99,
             base_frequency: 0.001,
             feature_direction: [1.0, 0.0],
-            vertical_amplitude_meters: 10.0,
             warp_amplitude_meters: 20.0,
             perceptual_roughness: 0.5,
             reflectance: 0.3,
         },
         terrain_base_color: [1.0, 1.0, 1.0, 1.0],
-        terrain_valley_color: [0.3, 0.2, 0.1, 1.0],
+        terrain_steep_color: [0.3, 0.2, 0.1, 1.0],
         walkable: true,
         sky: SkyCalibration {
             base_jupiter_dir: [0.0, 0.0, -1.0],
-            base_sun_dir: [0.0, 1.0, 0.0],
             planet_shine_max: 0.01,
             jupiter_ang_radius: 0.10384709,
             orbital_period_seconds: 3.551181 * 86_400.0,
@@ -44,7 +42,6 @@ fn europa_recipe_produces_height_function_and_matching_params() {
     let recipe = build_recipe(&profile);
 
     assert_eq!(recipe.params.seed, profile.terrain.seed);
-    assert_eq!(recipe.params.amp, profile.terrain.vertical_amplitude_meters);
     assert_eq!(recipe.appearance.display_name, profile.display_name);
 
     assert_eq!(
@@ -60,7 +57,7 @@ fn europa_recipe_produces_height_function_and_matching_params() {
 
     assert!(
         recipe.color.is_some(),
-        "Europa deveria produzir uma fonte de cor por vértice (inclinação do DTM)"
+        "Europa deveria produzir uma fonte de cor por vértice (inclinação e altura relativa do DTM)"
     );
 }
 
@@ -152,10 +149,57 @@ fn europa_recipe_relief_follows_the_real_dtm_recentered_around_zero() {
     );
 }
 
-/// Testa se a receita para luas não calibradas (Io, Ganymede, Callisto) causa pânico ao invés de
+/// Testa se a receita de Io produz altura finita, cor por vértice e mantém a clareira de spawn
+/// plana em volta da origem.
+#[test]
+fn io_recipe_produces_color_and_keeps_spawn_clearing_flat() {
+    let profile = minimal_profile_for(MoonId::Io);
+    let recipe = build_recipe(&profile);
+
+    assert_eq!(recipe.params.seed, profile.terrain.seed);
+    assert_eq!(recipe.appearance.display_name, profile.display_name);
+    assert!(recipe.color.is_some(), "Io deveria produzir cor por vértice (inclinação)");
+
+    let origin_height = recipe.height.height_at(0.0, 0.0);
+    for (x, z) in [(100.0, 0.0), (0.0, -140.0), (-90.0, 90.0)] {
+        assert_eq!(
+            recipe.height.height_at(x, z),
+            origin_height,
+            "ponto ({x}, {z}) dentro da clareira deveria ter a altura plana da origem"
+        );
+    }
+}
+
+/// Testa se o relevo procedural de Io é uma planície centrada em zero, sem montanhas (nada sobe
+/// mais que dezenas de metros), com paterae que afundam o piso em pelo menos cerca de 100 m.
+#[test]
+fn io_recipe_relief_is_a_plain_around_zero_with_patera_depressions() {
+    let profile = minimal_profile_for(MoonId::Io);
+    let recipe = build_recipe(&profile);
+
+    let half_size = recipe.params.size * 0.5;
+    let steps = 40;
+    let mut heights = Vec::new();
+    for i in 0..=steps {
+        for j in 0..=steps {
+            let x = -half_size + recipe.params.size * i as f32 / steps as f32;
+            let z = -half_size + recipe.params.size * j as f32 / steps as f32;
+            let height = recipe.height.height_at(x, z);
+            assert!(height.is_finite(), "altura não finita em ({x}, {z})");
+            heights.push(height);
+        }
+    }
+    heights.sort_by(f32::total_cmp);
+    let (lowest, median, highest) = (heights[0], heights[heights.len() / 2], heights[heights.len() - 1]);
+
+    assert!(highest < 75.0, "Io não deveria ter montanhas: máximo {highest}");
+    assert!(median.abs() < 40.0, "a planície deveria ficar em torno de zero: mediana {median}");
+    assert!(lowest < -100.0, "as paterae deveriam afundar o piso: mínimo {lowest}");
+}
+
+/// Testa se a receita para luas não calibradas (Ganymede, Callisto) causa pânico ao invés de
 /// reutilizar silenciosamente a receita de Europa.
 #[rstest]
-#[case(MoonId::Io)]
 #[case(MoonId::Ganymede)]
 #[case(MoonId::Callisto)]
 #[should_panic(expected = "ainda não calibrada")]

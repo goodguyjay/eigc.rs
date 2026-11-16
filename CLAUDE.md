@@ -37,6 +37,14 @@ cargo build -p eigc_app --features dev
 
 Use os aliases já configurados em `.cargo/config.toml` quando existirem, em vez de escrever o comando cru.
 
+## Análise estática do RustRover (se disponível)
+
+Se o servidor MCP `rustrover` estiver conectado (ferramentas `mcp__rustrover__*`), use `lint_files` para pegar erros e warnings sem compilar. Rode uma vez só, ao final das modificações, passando todos os arquivos `.rs` alterados de uma vez, não depois de cada edição. Ele recebe caminhos relativos à raiz do repo, funciona com o arquivo fechado no editor e não troca a aba do Jay. Passe `projectPath` com a raiz do repo.
+
+Não use `mcp__ide__getDiagnostics` (plugin Claude Code da JetBrains) para isso: ele só responde para o arquivo que está como aba ativa no RustRover e dá timeout nos outros (limitação da API da JetBrains, issue anthropics/claude-code#3085).
+
+Se o servidor não estiver disponível, siga sem ele. Não é obrigatório e não substitui rodar os testes do crate.
+
 ## Pular a abertura (config/environment.ron)
 
 A animação de abertura pode ser pulada definindo `skip_intro: true` em `config/environment.ron`. Esse arquivo não existe por padrão: crie copiando `config/environment.example.ron`, que fica versionado como modelo. `config/environment.ron` está no `.gitignore`, é configuração local, não arquivo do repositório.
@@ -45,11 +53,11 @@ O caminho é lido relativo ao diretório de onde o binário é executado, não a
 
 ## Pular o menu para debug (só debug)
 
-`cargo run-eigc-europa` (alias de `run --package eigc_app --features dev -- --europa`) sobe o app e entra direto em Europa, sem clicar no menu. **É um recurso exclusivamente de debug**, atrás da feature `dev`, e nunca deve ser usado como fluxo de usuário nem estar presente em build de release. Prefira essa opção quando o menu não está sendo modificado nem testado; ao mexer no menu, use `cargo run-eigc-app`. Funciona só para Europa: o pedido `ExploreRequested(MoonId::Europa)` só é enviado quando a abertura chega em `IntroState::Done` (ou já no `Startup`, se `skip_intro` estiver `true`), e o `MenuPlugin` o consome. Com `cargo run-eigc-europa` a abertura toca normalmente antes de pular pro menu, a não ser que `skip_intro: true` esteja configurado. Não generalize para outras luas sem decisão do desenvolvedor.
+`cargo run-eigc-europa` (alias de `run --package eigc_app --features dev -- --europa`) sobe o app e entra direto em Europa, sem clicar no menu. `cargo run-eigc-io` (`--io`) faz o mesmo para Io; as duas flags juntas encerram o app com mensagem de uso. **É um recurso exclusivamente de debug**, atrás da feature `dev`, e nunca deve ser usado como fluxo de usuário nem estar presente em build de release. Prefira essa opção quando o menu não está sendo modificado nem testado; ao mexer no menu, use `cargo run-eigc-app`. Funciona só para Europa e Io: o pedido `ExploreRequested` só é enviado quando a abertura chega em `IntroState::Done` (ou já no `Startup`, se `skip_intro` estiver `true`), e o `MenuPlugin` o consome. Com `cargo run-eigc-europa` a abertura toca normalmente antes de pular pro menu, a não ser que `skip_intro: true` esteja configurado. Não generalize para Ganimedes e Calisto sem decisão do desenvolvedor.
 
 ## Spawn em posição arbitrária (só debug)
 
-`cargo run-eigc-europa-at <x> <y> <z>` (alias de `run --package eigc_app --features dev -- --europa --spawn`) entra em Europa com a câmera na posição mundial dada, em metros. O terreno é centrado em `(0, 0)` e tem ~22 km de lado. A câmera nasce em **voo livre** (Tab alterna para primeira pessoa, que cola no chão), porque em primeira pessoa o `y` seria sobrescrito por `follow_ground` no primeiro quadro. O recurso é o resource `DebugSpawnPosition`, só existe com a feature `dev`. Coordenada faltando ou inválida encerra o app com mensagem de uso. Mesmas ressalvas do `--europa`: só debug, nunca fluxo de usuário nem release.
+`cargo run-eigc-europa-at <x> <y> <z>` (alias de `run --package eigc_app --features dev -- --europa --spawn`), ou `cargo run-eigc-io-at`, entra na lua com a câmera na posição mundial dada, em metros. O terreno é centrado em `(0, 0)` e tem ~22 km de lado. A câmera nasce em **voo livre** (Tab alterna para primeira pessoa, que cola no chão), porque em primeira pessoa o `y` seria sobrescrito por `follow_ground` no primeiro quadro. O recurso é o resource `DebugSpawnPosition`, só existe com a feature `dev`. Coordenada faltando ou inválida encerra o app com mensagem de uso. Mesmas ressalvas do `--europa`/`--io`: só debug, nunca fluxo de usuário nem release.
 
 ## Convenções de código (resumo — ver `CONTRIBUTING.md` para o texto completo)
 

@@ -21,12 +21,12 @@ use bevy::prelude::{
     Name, Node, Overflow, Pickable, PositionType, Res, Text, TextColor, UiRect, UiTransform, Val,
     Visibility, default,
 };
-use bevy::state::state_scoped::DespawnOnEnter;
+use bevy::state::state_scoped::{DespawnOnEnter, DespawnOnExit};
 use bevy::text::{Font, Justify, TextFont, TextLayout};
 use eigc_moons::{AppState, MOON_DISPLAY_ORDER, MoonId, moon_info};
 
 /// Texto não interativo: nunca bloqueia o picking dos elementos abaixo dele.
-fn text_bundle(
+pub(super) fn text_bundle(
     text: impl Into<String>,
     font: &Handle<Font>,
     size: f32,
@@ -45,7 +45,7 @@ fn text_bundle(
 }
 
 /// Nó que cobre a janela inteira, posicionado de forma absoluta.
-fn fullscreen_node() -> Node {
+pub(super) fn fullscreen_node() -> Node {
     Node {
         position_type: PositionType::Absolute,
         width: Val::Percent(100.0),
@@ -332,7 +332,7 @@ fn spawn_buttons(panel: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
 }
 
 /// Geometria compartilhada pelos botões do painel.
-fn button_node(width: Val, flex_grow: f32) -> Node {
+pub(super) fn button_node(width: Val, flex_grow: f32) -> Node {
     Node {
         width,
         height: Val::Px(52.0),
@@ -779,7 +779,7 @@ pub(crate) fn spawn_loading_overlay(
             },
             BackgroundColor(theme::LOADING_VEIL),
             GlobalZIndex(100),
-            DespawnOnEnter(AppState::Running),
+            DespawnOnExit(AppState::LoadingMoonProfile),
         ))
         .with_children(|overlay| {
             overlay.spawn(text_bundle(

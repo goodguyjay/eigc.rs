@@ -17,17 +17,15 @@ MoonProfile(
         seed: 1,
         base_frequency: 0.001,
         feature_direction: (1.0, 0.0),
-        vertical_amplitude_meters: 5.0,
         warp_amplitude_meters: 10.0,
         perceptual_roughness: 0.7,
         reflectance: 0.5,
     ),
     terrain_base_color: (1.0, 1.0, 1.0, 1.0),
-    terrain_valley_color: (0.3, 0.2, 0.1, 1.0),
+    terrain_steep_color: (0.3, 0.2, 0.1, 1.0),
     walkable: true,
     sky: SkyCalibration(
       orbital_period_seconds: 306822.0, // 3.551181 dias * 86400
-      base_sun_dir: (-0.15, 0.35, -0.92),
       base_jupiter_dir: (0.35, 0.25, -0.90),
       jupiter_libration_lat_deg: 2.0,
       jupiter_libration_lon_deg: 2.0,

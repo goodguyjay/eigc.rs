@@ -9,9 +9,10 @@ use bevy::prelude::{
     AlphaMode, Assets, Color, Commands, Component, IntoScheduleConfigs, Mesh, Mesh3d,
     MeshMaterial3d, Meshable, Name, Plugin, Projection, Quat, Query, Res, ResMut, Sphere,
     StandardMaterial, Transform, Update, Vec3, With, Without, any_with_component, default,
-    on_message, resource_exists,
+    in_state, on_message, resource_exists,
 };
-use eigc_moons::{ActiveMoonProfileHandle, MoonProfile};
+use bevy::state::state_scoped::DespawnOnExit;
+use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonProfile};
 
 /// Plugin das propriedades de Júpiter no céu.
 pub struct JupiterPlugin;
@@ -23,7 +24,12 @@ struct Jupiter;
 /// Plugin que registra os sistemas para criar e posicionar Júpiter.
 impl Plugin for JupiterPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, spawn_jupiter.run_if(on_message::<SkyAssetsLoaded>))
+        app.add_systems(
+            Update,
+            spawn_jupiter
+                .run_if(on_message::<SkyAssetsLoaded>)
+                .run_if(in_state(AppState::Running)),
+        )
             .add_systems(
                 Update,
                 place_and_scale_jupiter
@@ -59,6 +65,7 @@ fn spawn_jupiter(
         Jupiter,
         NoFrustumCulling,
         Name::new("Jupiter"),
+        DespawnOnExit(AppState::Running),
     ));
 }
 
@@ -129,17 +136,15 @@ mod tests {
                 seed: 1,
                 base_frequency: 0.001,
                 feature_direction: [1.0, 0.0],
-                vertical_amplitude_meters: 10.0,
                 warp_amplitude_meters: 20.0,
                 perceptual_roughness: 0.5,
                 reflectance: 0.3,
             },
             terrain_base_color: [1.0, 1.0, 1.0, 1.0],
-            terrain_valley_color: [0.0, 0.0, 0.0, 1.0],
+            terrain_steep_color: [0.0, 0.0, 0.0, 1.0],
             walkable: true,
             sky: SkyCalibration {
                 orbital_period_seconds: 1000.0,
-                base_sun_dir: [0.0, 0.3, -1.0],
                 base_jupiter_dir: [1.0, 0.2, 0.0],
                 jupiter_libration_lat_deg: 0.0,
                 jupiter_libration_lon_deg: 0.0,

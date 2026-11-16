@@ -1,28 +1,48 @@
 # Débito técnico e pendências conhecidas
 
 ## Terreno
-- [ ] Calibrar receita de terreno de io (`recipe.rs`, hoje unimplemented!)
-- [ ] Calibrar receita de terreno de ganimedes (`recipe.rs`, hoje unimplemented!)
-- [ ] Calibrar receita de terreno de calisto (`recipe.rs`, hoje unimplemented!)
+- [ ] **Receita de Io é procedural e não foi calibrada com o app rodando.** `io_recipe`
+  (`recipe/io.rs`) é planície procedural (fbm de grande escala + rugosidade fina + clareira de
+  spawn) com 3 paterae escavadas (`height::patera`) e cor por inclinação, geada de SO2
+  (`height::patches`), piso escuro e halo avermelhado. Não há DTM público de Io utilizável para
+  um recorte de ~22 km: o único DEM baixável é o de Tvashtar Paterae (USGS, 900 m/px, sem
+  controle), ~24 pixels no recorte inteiro; os DEMs de White et al. (2014, ~1 km/px global) e de
+  fotoclinometria de paterae (White & Schenk 2015, até 270 m/px) não estão públicos. Por isso o
+  relevo é todo procedural, por decisão do desenvolvedor. `IO_PLAINS_AMPLITUDE_M`,
+  `IO_DETAIL_AMPLITUDE_M`, `IO_PATERA_SCALE`, `IO_HALO_WIDTH_FRACTION` e as cores de piso, halo e
+  geada são valores de partida, não ajustados visualmente. `IO_SLOPE_COLOR_START/END` seguem a
+  inclinação medida das planícies (teste
+  `io_slope_color_thresholds_follow_the_measured_plains_slope`) e a geada cobre ~8% do recorte
+  (teste `io_frost_covers_a_minority_of_the_plains`); se a amplitude ou a máscara mudarem, os
+  testes apontam quando refazer os limiares. Falta textura de superfície (fase 4).
+- [ ] **Paterae de Io são menores que as reais.** As paterae reais têm em média ~40 km de
+  diâmetro e 0,5 a 2,5 km de profundidade (Radebaugh et al. 2001), maiores que o recorte
+  inteiro. `IO_PATERA_SCALE` usa 2,4 a 6 km de diâmetro e 150 a 400 m de profundidade para caber
+  mais de uma. O halo também é estilizado: os anéis vermelhos reais (ex.: Pele) são depósitos de
+  pluma de centenas de km. Trade-off consciente: variedade de feições no recorte em troca de
+  escala fiel. Não há mesa nem montanha na borda do recorte (era opcional na fase 2).
+- [ ] **Escarpa das paterae chega a ~39 graus (inclinação 0,8) e a câmera não tem limite de
+  inclinação.** A primeira pessoa sobe e desce a escarpa direto (ver o item "Primeira pessoa
+  segue a função de altura"). Também não foi conferido com o app rodando se o skirt do LOD
+  esconde a emenda nos chunks que cortam a escarpa, onde a diferença de altura entre níveis é a
+  maior do terreno de Io.
+- [ ] Calibrar receita de terreno de ganimedes (`recipe/mod.rs`, hoje unimplemented!)
+- [ ] Calibrar receita de terreno de calisto (`recipe/mod.rs`, hoje unimplemented!)
 - [X] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa
   documentada de motivo geológico ou estético
-- [ ] `TerrainParams.amp` não é mais a fonte de verdade da escala vertical do terreno.
-  Ao implementar lineae (issue de terreno reconhecível de Europa), descobrimos que
-  `Scale { scale: 1.0 }` em `europa_recipe` ignorava `vertical_amplitude_meters`, foi
-  corrigido usando `calibration.vertical_amplitude_meters` diretamente dentro da receita,
-  não via `TerrainParams.amp` (que segue sem uso real no pipeline, só testado). Duplicação
-  de estado consciente, não resolvida agora. `amp` deveria ser removido ou passar a ser
-  a única fonte de verdade quando outra lua for calibrada.
-- [ ] **Ainda não totalmente resolvido**: a exclusão acima impede uma linea de nascer
-  *ancorada* dentro do raio, mas não impede que o **segmento** de uma linea vizinha ainda
-  alcance a zona de blend. Como a orientação de toda linea é ~paralela a `feature_direction`
-  (mesmo eixo usado pra alinhar a grade), uma linea na célula logo ao lado da excluída, com
-  comprimento longo o bastante (protagonistas chegam a ~5600m, metade = ~2800m de cada lado
-  do centro), ainda pode ultrapassar a origem. Quando isso acontece, `FlattenNearOrigin`
-  ainda atenua a altura dessa crista de forma radialmente simétrica em torno da origem (`d =
-  sqrt(x²+z²)`, não a distância à própria linea), o que pode ler como a crista "convergindo"
-  pro centro. Resolver de vez exigiria testar interseção do traçado inteiro (segmento/arco)
-  contra o disco de exclusão, não só a distância do centro. Não fizemos isso ainda.
+- [X] `TerrainParams.amp` não era mais a fonte de verdade da escala vertical do terreno.
+  Resolvido ao calibrar Io: `amp` e `TerrainCalibration::vertical_amplitude_meters` foram
+  removidos, e cada receita define a própria amplitude em constantes do próprio submódulo em `recipe/`.
+- [X] **Lineae alcançando a clareira de spawn.** A exclusão antiga só impedia o *centro* de uma
+  linea de nascer dentro do raio; o traçado de uma linea vizinha ainda podia alcançar a zona de
+  blend, e `FlattenNearOrigin` atenuava a crista de forma radial em torno da origem (lia como a
+  crista "convergindo" pro centro). Resolvido em `generate_linea_specs`: a distância do
+  **traçado** à origem (`distance_to_path` em (0, 0)) precisa ser pelo menos o alcance da
+  clareira (platô mais transição, 350 m) mais a meia largura externa da linea. Quem invade é
+  re-sorteada até 8 vezes e, se continuar invadindo, afastada por translação. Testado por
+  proptest sobre sementes e pela altura do platô, idêntica com e sem lineae. Trade-off: a
+  translação pode levar a linea para longe da sua célula da grade; não foi contado quantas
+  lineae caem nesse caso.
 - [ ] A câmera spawna em posição mundial fixa
   (`SPAWN_POSITION` em `eigc_scene::camera::plugin`, hoje `(0.0, 0.3, 0.0)`, no centro
   da clareira de spawn), sem nenhuma leitura do `HeightResource` do terreno. O `y = 0.3` vem de
@@ -33,27 +53,26 @@
   `x`/`z` de spawn, que seguem fixos. Não resolvido de propósito: o spawn em si não lê o terreno.
 - [ ] **Primeira pessoa segue a função de altura, não a malha visível.** `follow_ground` usa
   `HeightResource::height_at`, que é contínua, enquanto a malha do nível 0 interpola linearmente
-  entre vértices (~5 m de espaçamento, a conferir) e o detalhe tem 1,5 m de amplitude. O olho pode
-  ficar alguns decímetros acima ou abaixo do chão desenhado. Não verificado com o app rodando. Se
-  incomodar, amostrar a mesma grade do nível 0 (função pura em `eigc_terrain`) em vez da função.
+  entre vértices (~5,4 m de espaçamento) e o detalhe soma o fractal de 10 m e as lineae de até
+  ~21 m. O olho pode ficar alguns decímetros acima ou abaixo do chão desenhado. Não verificado
+  com o app rodando. Se incomodar, amostrar a mesma grade do nível 0 (função pura em
+  `eigc_terrain`) em vez da função.
   Também não há colisão nem limite de inclinação: a câmera sobe qualquer ladeira (máx. 21,6 graus
   no DTM de Europa).
 - [ ] **Segunda câmera (viewmodel de mãos/traje) quebra o céu em silêncio.** `track_camera`,
   `dim_stars_near_sun`, `position_sun_disc` e `place_and_scale_jupiter` usam
   `Query<..., With<Camera3d>>.single()` e saem sem erro quando há mais de um `Camera3d`. Antes da
-  issue de primeira pessoa com animação, introduzir um marcador `MainCamera` e usá-lo nessas
+  tarefa de primeira pessoa com animação, introduzir um marcador `MainCamera` e usá-lo nessas
   queries, e definir `RenderLayers` das luzes para a câmera do viewmodel.
 - [X] **Crateras desligadas (feedback visual: terreno "artificial", alturas
   empilhadas, crateras em lugares estranhos).** Não existe um sistema de "cratera" dedicado
   no projeto, o que lia como cratera era o ruído `PerlinRidged`/`Oriented` (`ridged_noise`/
   `oriented_ridges`/`subtle_ridges`) somado ao relevo base em `europa_recipe`, mesmo rebaixado
-  a `scale: 0.15` na iteração anterior. Comentado (não removido) em `recipe.rs`. Para religar,
-  descomentar o bloco, voltar a importar `PerlinRidged` (`height::noise`) e `Oriented`
-  (`height::warp`), e trocar `combined_features` de volta pra
-  `Add2 { a: base_noise, b: subtle_ridges }`.
-- [ ] Traçado em arco de linea (`LineaPath::Arc`, `height/linea.rs`) é uma aproximação
-  geométrica estilizada e deliberadamente exagerada, não um modelo físico da tensão de
-  maré real. Meramente estético/artístico.
+  a `scale: 0.15` na iteração anterior. O bloco comentado foi removido na troca para o DTM;
+  `PerlinRidged` e `Oriented` seguem em `height::noise` e `height::warp`.
+- [ ] Traçado em arco de linea (`LineaPath::Arc`, `height/linea.rs`; 20% das lineae de Europa,
+  de 1,5 a 6 km, com o mesmo afinamento nas pontas da reta) é uma aproximação geométrica
+  estilizada, não um modelo físico da tensão de maré real. Meramente estético/artístico.
 - [ ] **LOD do terreno usa skirts, não stitching.** Chunks vizinhos de níveis diferentes têm
   vértices de borda diferentes (o grosso é subconjunto do fino), então a emenda é escondida por
   um anel de skirt (`chunk_mesh.rs`, `skirt_depth_factor` em `TerrainLodConfig`) e não por
@@ -83,13 +102,13 @@
   vértices que relaxa a tolerância.
 - [ ] `TerrainParams.res` só vale para a malha monolítica legada (`build_terrain_mesh`,
   `spawn_terrain`, usadas em testes). O pipeline com chunks usa `TerrainLodConfig`. Mesma
-  família da duplicação de `amp` acima: não removido agora porque quebraria os literais de
+  família da antiga duplicação de `amp` (já removido): não removido agora porque quebraria os literais de
   `TerrainParams` em vários testes de integração.
 - [ ] LOD não considera se o chunk está dentro do frustum (chunks atrás da câmera são
   refinados igual aos da frente, para a câmera poder girar sem ver terreno grosso), não há
-  culling por oclusão, e não existe colisão (qualquer modo de caminhada futuro deve ler
+  culling por oclusão, e não existe colisão (a primeira pessoa, `follow_ground`, já lê
   `HeightResource::height_at` direto, não a malha visível).
-- [ ] **Heightmap de Europa embutido no binário (`include_bytes!` em `recipe.rs`).** Os
+- [ ] **Heightmap de Europa embutido no binário (`include_bytes!` em `recipe/europa.rs`).** Os
   arquivos continuam em `assets/terrain/europa/` (uma única cópia dos dados), mas são lidos
   em tempo de compilação. Motivo: `build_recipe` é síncrona e pura, chamada em testes sem
   nenhum caminho de assets configurado, e o caminho de assets em runtime é relativo ao
@@ -97,8 +116,8 @@
   do heightmap (ao contrário do `MoonProfile`) e ~40 KB a mais no binário por lua. Se mais
   luas ganharem heightmap ou o tamanho crescer, migrar para carregar via `AssetServer`.
 - [ ] **Constantes visuais do relevo híbrido de Europa não foram calibradas com o app
-  rodando.** `DETAIL_AMPLITUDE_M`, `DETAIL_FREQUENCY_FACTOR` e
-  os limiares `SLOPE_COLOR_START/END` em `recipe.rs` são valores de partida, não resultado de
+  rodando.** `DETAIL_AMPLITUDE_M`, `DETAIL_BASE_WAVELENGTH_M`, `DETAIL_OCTAVES` e
+  os limiares `SLOPE_COLOR_START/END` em `recipe/europa.rs` são valores de partida, não resultado de
   inspeção visual sistemática. A interpolação já é bicúbica (Catmull-Rom) em
   `HeightmapHeight::height_at`: a bilinear inicial deixava o terreno em tabuleiro (gradiente
   descontínuo a cada pixel de 227,65 m, visível nas normais e na cor por inclinação). A
@@ -108,14 +127,27 @@
   feições identificáveis de ~450 a 700 m e declive mediano de 2,5 graus (máximo 21,6). Subir o
   exagero é uma escolha visual, não uma correção física, e exigiria rever o `y` de spawn da câmera contra o relevo
   da clareira.
-- [ ] **Código de lineae sintéticas ficou sem uso em Europa.** `height::linea`
-  (`LineaField`, `LineaColorField`, `generate_linea_specs`) e `height::warp` não são mais
-  chamados por `europa_recipe`, já que as cristas agora vêm do DTM. Também ficaram sem
-  efeito para Europa `warp_amplitude_meters`, `feature_direction` e (já era o caso)
-  `vertical_amplitude_meters`, que só chega em `TerrainParams.amp`. Mantidos porque outra
-  lua pode reaproveitar as lineae e remover campos de `TerrainCalibration` mexe no `.ron` e
-  nos testes de `eigc_moons`. O destaque das cristas reais é só por inclinação
-  (`SlopeColorField`), sem identificar cada crista individualmente.
+- [ ] **Parte do código de lineae e da calibração segue sem uso em Europa.** As lineae voltaram
+  ao relevo como detalhe de centenas de metros (`europa_lineae` em `recipe/europa.rs`, com
+  `LineaField` e `generate_linea_specs`), mas `LineaColorField` e `height::warp` continuam sem
+  uso. Também ficam sem efeito para Europa `warp_amplitude_meters`, `feature_direction` (as
+  lineae usam a direção medida no DTM, ver o item abaixo) e `base_frequency`, que em Europa só
+  chega em `TerrainParams.freq`, que nada lê. Io também não usa `warp_amplitude_meters` nem
+  `feature_direction` (usa `base_frequency` nas planícies). Mantidos porque outra lua
+  pode reaproveitá-los e remover campos de `TerrainCalibration` mexe no `.ron` e nos testes de
+  `eigc_moons`. O destaque das cristas na cor vem de `TerrainTintField` (inclinação, altura
+  relativa e manchas), sem as lineae.
+- [ ] **Direção das lineae de Europa medida no DTM, com incerteza alta.**
+  `EUROPA_MEASURED_RIDGE_DIRECTION` em `recipe/europa.rs` (~(0.91, -0.41), -24 graus a partir de +x
+  girando para +z) substitui a `feature_direction` (0.8, 0.2) do perfil, +14 graus, que nunca
+  foi conferida contra o DTM. Medida por tensor de estrutura do gradiente, com coerência de 0,27
+  a 0,46 numa amostra de 97x97 pixels: incerteza alta. Também vira `TerrainParams.line_dir`, para
+  não haver duas direções. Decisão da autora, a recalibrar após inspeção visual. O `europa.ron`
+  não foi alterado: se a direção se mantiver depois da inspeção, mover para o `.ron` (fonte
+  única) e apagar a constante; se não, voltar a usar `feature_direction`. As famílias de
+  orientação 1 e 2 seguem a ±50 graus (`family_offset_rad` em `EUROPA_LINEA_SCALE`), embora o
+  DTM tenha só ~5% do peso do gradiente em cada uma dessas direções; o ângulo também fica para
+  a recalibração visual.
 
 - [X] **Textura de superfície de Europa (`snow_02`) sem mipmaps.** O loader de JPEG do Bevy
   não gera mipmaps e o tile físico é de 2 m (`TILE_SIZE_M` em `chunk_mesh.rs`), o que deixava o
@@ -139,14 +171,64 @@
   bordas do recorte de 22 km; em `f32` isso dá ~0,0005 de passo, cerca de 1 texel num tile de
   2048 px. Aceito por ora (não observado como artefato). Se aparecer tremor de textura, passar a
   UV relativa à origem do chunk com offset por material.
-- [ ] **A máscara de cor das cristas de Europa é inclinação do DTM, não a máscara de linea.** As
-  lineae sintéticas não participam mais da altura (ver item acima), então o tingimento por
-  vértice reaproveita o `SlopeColorField` (mesma fonte de altura do relevo) com
-  `terrain_base_color` branco e `terrain_valley_color` acastanhado em `europa.ron`. O nome
-  `terrain_valley_color` ficou impreciso: hoje é a cor das encostas íngremes. Renomear mexe no
-  `.ron` e nos testes de `eigc_moons`.
+- [ ] **A máscara de cor de Europa vem do DTM, não de feições identificadas.** O tingimento por
+  vértice é `TerrainTintField` (`height/tint.rs`, montado em `europa_terrain_color`): peso de
+  inclinação do DTM somado ao peso de altura relativa ao entorno (DTM menos o DTM borrado),
+  modulado por manchas de baixa frequência pela posição, com uma única mistura entre
+  `terrain_base_color` (branco) e `terrain_steep_color` (acastanhado) de `europa.ron`. Não
+  identifica cristas, vales nem material escuro reais: é uma aproximação pela forma do relevo. As lineae entram só na altura, não na cor. O
+  campo se chamava `terrain_valley_color` e foi renomeado para `terrain_steep_color` ao calibrar
+  Io; em Europa ele tinge vales e encostas íngremes, não só encostas.
+- [ ] **`SlopeColorField` ficou sem uso em Europa.** A cor de Europa passou a ser
+  `TerrainTintField`, que recalcula a inclinação com a mesma diferença central de
+  `SlopeColorField::slope_at` (duplicação consciente, para não alterar `SlopeColorField` nem os
+  testes de `slope_color_by_steepness.rs`). Io usa só a cor por
+  inclinação (`SlopeColorField` em `recipe/io.rs`). Se a duplicação incomodar, extrair a inclinação
+  para uma função compartilhada pelos dois.
+- [ ] **Constantes da cor de Europa são valores de partida, sem calibração visual.**
+  `RELATIVE_HEIGHT_BLUR_SIGMA_M` (1 km), `RELATIVE_HEIGHT_TINT_START_M`/`_FULL_M` (10 e 45 m
+  abaixo do entorno, cerca dos percentis 30 e 5 do recorte), `RELATIVE_HEIGHT_TINT_SCALE` (0,9),
+  `MOTTLE_WAVELENGTH_M`/`MOTTLE_OCTAVES`/`MOTTLE_LACUNARITY` (manchas de 6 e 2 km) e
+  `MOTTLE_MIN`/`MOTTLE_MAX` (0,5 a 1,4) em `recipe/europa.rs` foram escolhidos olhando um mapa da cor
+  por vértice gerado fora do jogo, não com o app rodando. Medido nesse mapa: o fator médio de
+  luminância caiu de 0,933 (só inclinação) para 0,885 e a área com tingimento de 27% para 41%.
+  Ajustar olhando o jogo, junto com a textura de superfície, que é multiplicada por essa cor.
+- [ ] **As medidas das lineae de Europa não foram calibradas visualmente.** `LINEA_COUNT` (60) e
+  `EUROPA_LINEA_SCALE` em `recipe/europa.rs` (crista de 100 a 400 m, altura pela rugosidade rms do DTM,
+  de ~5 a ~21 m, vale de 0,5 a 1 vez a crista, traçado de 1,5 a 6 km) saíram de medição no DTM,
+  sem inspeção visual sistemática. Decisão da autora, a recalibrar após inspeção visual. O teste
+  `fine_detail_continues_the_dtm_roughness_power_law` vai até 900 m com pouca folga nas
+  distâncias longas (+11% contra 15% de tolerância), e quase toda essa diferença é do próprio DTM
+  (+10,9% sem lineae).
+- [ ] **As lineae de Europa não têm índice espacial.** `LineaField::height_at` percorre as 60
+  lineae a cada ponto. Medido com a seed 204: o relevo com lineae custa ~3,8 vezes o anterior
+  (713 ns contra 187 ns por chamada; as lineae sozinhas, ~530 ns), mas o FPS ficou equivalente
+  (117 a 120 contra 118 na mesma sessão). O custo extra fica só em CPU de fundo (medição de erro
+  do LOD e malha dos chunks). Débito consciente: a latência de refinamento dos chunks não foi
+  medida. Se aparecer lentidão para os chunks ficarem nítidos, implementar uma grade uniforme de
+  ~1 km montada em `LineaField::new`, com teste de que dá a mesma altura que a busca bruta.
 
 ## Cena / Visual
+- [ ] **Com a calibração atual de Europa, o eclipse por Júpiter nunca acontece.** Pela conta, a
+  trajetória do sol (elevação fixa de 25 graus) passa a no mínimo ~10,5 graus do centro de
+  Júpiter (elevação ~14,5 graus), mais que o raio de Júpiter mais a suavização (~7 graus).
+  Não conferido com o app rodando. Io já tem eclipse em toda órbita (Júpiter a 24 graus, 1 grau
+  abaixo do sol), travado por `eigc_scene/tests/io_eclipse_happens_every_orbit.rs`.
+- [ ] **O sol nunca se põe: não existe noite, só eclipse.** `sky_state_at` gira o sol num
+  círculo de elevação fixa (`sun_elevation_deg`) em torno do eixo Y. No hemisfério sub-joviano
+  real, o sol faz um grande círculo que passa perto de Júpiter, nasce e se põe, e o eclipse cai
+  no meio-dia local. Débito consciente: o modelo atual é simples e já dá eclipse com duração
+  realista em Io. Custo: lagos de lava com emissão no "lado noturno" (fase 5 de Io) só ficam
+  visíveis durante o eclipse. Revisar antes dessa fase.
+- [ ] **Diâmetro do sol em duas fontes.** O disco visual usa `SUN_ANGULAR_DIAMETER_DEG = 0.10`
+  (`eigc_common::constants`), e o eclipse usa `SkySettings::sun_ang_radius`, derivado à parte
+  em `from_profile` (`0.53 / 5.2` graus, metade). Hoje batem (0,102 contra 0,10), mas é a mesma
+  grandeza escrita duas vezes. Derivar uma da outra quando alguém mexer em qualquer uma.
+- [ ] **Esfera celeste ~1,5% maior que o raio angular nominal.** `place_celestial_disc` usa
+  `sky_r * tan(θ/2)` como raio de uma esfera, que subtende `asin(tan(θ/2))`: em Io, 9,76 graus
+  contra os 9,62 do eclipse. O sol some na tela um pouco antes de a luz chegar à metade. O
+  certo para esfera seria `sin(θ/2)`. Não corrigido: diferença pequena, ainda não conferida
+  no app. Corrigir se ficar visível.
 - [X] Câmera e luz em eigc_app::scene_placeholder eram fixas e hardcoded, sem
   calibração por lua. A luz placeholder (`spawn_placeholder_light`) foi
   removida — o céu real (`SkyPlugin`, com `SunLight` e `PlanetShine`) já
@@ -155,7 +237,8 @@
   (`MAX_DIRECTIONAL_LIGHTS = 10`). Guarda de regressão adicionada em
   `crates/eigc_scene/tests/directional_light_budget.rs`. A parte de câmera
   dupla andar/órbita continua pendente, não fazia parte desse fix.
-- [ ] Jupiter está com orientação incorreta no céu
+- [X] Jupiter está com orientação incorreta no céu. Corrigido: a rotação de correção usava
+  `FRAC_2_PI` (cerca de 36,5 graus) no lugar de `FRAC_PI_2` (90 graus).
 - [ ] falta damping/smoothing na transição, e não desabilitar mouse_look completamente durante o lock
 - [ ] `place_and_scale_jupiter`, `track_camera` e `dim_stars_near_sun` leem `SkyState` sem
   ordem garantida em relação a `animate_sky_physical`, que o escreve todo frame. Nenhum dos
@@ -175,8 +258,8 @@ Essas funções concentram lógica matemática não trivial (libração orbital,
 smoothstep, orientação de disco celeste, glare de estrelas) direto em Bevy systems.
 
 `place_and_scale_jupiter` e `position_sun_disc` já usam `place_celestial_disc` para posição
-e escala; a orientação continua inline. `animate_sky_physical` e `dim_stars_near_sun` seguem
-sem extração.
+e escala; a orientação continua inline. `animate_sky_physical` já é um wrapper fino de
+`sky_state_at` (função pura), e `dim_stars_near_sun` de `star_brightness`.
 
 Motivo: extrair exigiria transformar os systems em wrappers finos, retrabalho grande em
 código recém-validado.
@@ -193,16 +276,18 @@ não por teste unitário de função pura.
   `OnEnter(Running)`. Sem isso, reentrar em `Running` duplicaria Sol, Júpiter e estrelas e
   estouraria o teste de orçamento de `DirectionalLight`. Trade-off: troca de lua exige reiniciar
   o app.
-- [ ] `transition_when_moon_profile_loaded` (`eigc_app::moon_loading`) não trata
-  `LoadState::Failed`. Se o `.ron` da lua escolhida falhar ao carregar, o app fica preso em
-  `LoadingMoonProfile` com a tela de carregamento. Hoje só Europa é selecionável e o RON dela é
-  válido, então não dispara. Passa a importar quando as outras luas forem liberadas.
+- [X] `transition_when_moon_profile_loaded` não tratava `LoadState::Failed`. Resolvido com
+  `return_to_menu_when_moon_profile_fails` (`eigc_app::moon_loading`), que registra o erro e
+  volta para `MainMenu`. A tela de carregamento agora some em `DespawnOnExit(LoadingMoonProfile)`.
+- [ ] Ao voltar ao menu por falha no `.ron`, o jogador não recebe aviso na tela (só `error!` no
+  log). Um toast exigiria expor uma mensagem do `eigc_menu` para o `eigc_app` ou mover o sistema
+  para o menu. Não testado com o app rodando.
 - [ ] **`MoonInfo` (`eigc_moons::moon_info`) duplica três dados do `MoonProfile`.** São eles o
   nome (`display_name`), a disponibilidade (`available` vs `walkable`) e o período orbital
   (`orbital_period_days` vs `sky.orbital_period_seconds`, o segundo com o valor exato, o primeiro
   arredondado). Diâmetro, gravidade, distância de Júpiter e textos existem só no `MoonInfo`, então
   não duplicam. É duplicação consciente, aceita por três motivos:
-  1. Os `.ron` de Io, Ganimedes e Calisto estão vazios (0 bytes), e o menu precisa mostrar as
+  1. Os `.ron` de Ganimedes e Calisto estão vazios (0 bytes), e o menu precisa mostrar as
      quatro luas na partida, sem esperar o carregamento assíncrono de perfis que falhariam no
      parse.
   2. O `MoonProfile` não tem campos de apresentação (descrição, estatísticas). Acrescentá-los
@@ -231,17 +316,19 @@ não por teste unitário de função pura.
 - [ ] A tela de carregamento é estática. O terreno é construído em `OnEnter(Running)`, então a
   tela provavelmente congela por um instante na transição. Não medido; confirmar em teste
   visual antes de investir num indicador animado.
-- [ ] **Anti-tiling do terreno (`terrain_detail.wgsl`) não tem teste e depende da textura.**
+- [ ] **Anti-tiling do terreno (`terrain_detail.wgsl`) só tem teste da média do normal map e
+  depende da textura.**
   As duas escalas são amostradas no shader por hex tiling (3 amostras por textura, offset e rotação
-  aleatórios por vértice de grade triangular). Só deslocar não bastava: o `snow_02` tem fileiras de
-  marcas dentro do tile, que apareciam alinhadas entre as cópias; a rotação por vértice resolveu. Pontos
-  conscientes: (1) o normal map original do `snow_02` tem inclinação média de ~9 graus por eixo
-  (xy médio 0,152 / 0,154, cerca de 12,8 graus combinados), que girada por célula virava manchas
-  grandes e chiado no horizonte; o shader subtrai essa média (`NORMAL_MAP_MEAN_XY`) antes de girar,
-  e a inclinação do terreno passa a vir só da malha. O normal map atenuado
-  (`tools/attenuate_surface_marks.py --kind normal`) já vem sem a inclinação média, então a
-  constante vale perto de zero. Trocar a textura exige remedir a constante, e o teste
-  `surface_normal_map_mean_matches_shader` falha se ela ficar desatualizada; (2) nas zonas de transição há mistura
+  aleatórios por vértice de grade triangular). Só deslocar não bastava: o `snow_02` (textura
+  anterior) tinha fileiras de marcas dentro do tile, que apareciam alinhadas entre as cópias; a
+  rotação por vértice resolveu. Pontos conscientes: (1) o normal map original do `snow_02` tinha
+  inclinação média de ~9 graus por eixo (xy médio 0,152 / 0,154), que girada por célula virava
+  manchas grandes e chiado no horizonte; o shader subtrai a média do normal map
+  (`NORMAL_MAP_MEAN_XY`) antes de girar, e a inclinação do terreno vem só da malha. O normal map
+  atual (`europa_ice`, gerado por `tools/generate_europa_ice.py`) não tem inclinação média, então
+  a constante vale zero. Trocar a textura exige remedir a constante, e o teste
+  `surface_normal_map_mean_matches_shader` falha se ela ficar desatualizada; (2) nas zonas de
+  transição há mistura
   fantasma, controlada por `HEX_BLEND_SHARPNESS` (3 e 6 ficaram indistinguíveis nos testes); (3) o
   custo é de até 6 amostras por textura onde as duas escalas se misturam (entre 4 m e 30 m); (4) a
   lógica de grade/hash/rotação vive só no WGSL e foi validada só a olho, com o app rodando; (5) o
@@ -249,18 +336,38 @@ não por teste unitário de função pura.
   teste. `HEX_CELL_SCALE` e `HEX_BLEND_SHARPNESS` são chutes calibráveis. As duas escalas usam as
   imagens da extensão (`macro_*`) e não as do `StandardMaterial`, então dependem dos escalares
   neutros do material.
-- [ ] **As bordas finas das pegadas continuam no albedo atenuado do `snow_02`.** A atenuação
-  (`tools/attenuate_surface_marks.py`, sigma de 16 px) só reduz as manchas acima de ~1,6 cm; o
-  traço escuro da borda tem poucos milímetros e passa intacto junto com o grão fino. Um segundo
-  passe que comprima o contraste dos traços escuros fica para depois.
-- [ ] **O AO do ARM do `snow_02` ainda carrega as pegadas.** Só o albedo e o normal map foram
-  atenuados; `snow_02_arm_2k.jpg` é o original, então a oclusão das pegadas pode continuar
-  aparecendo como sombra.
-- [ ] **Os dois PNGs atenuados do `snow_02` somam cerca de 14 MB no repositório** (albedo 4,7 MB,
-  normal map 9,4 MB), contra 6 MB dos JPEGs originais, que ficam como fonte. PNG evita uma segunda
-  perda de compressão; se o tamanho pesar, trocar por JPEG de qualidade alta ou KTX2.
+- [X] **As bordas finas das pegadas continuam no albedo atenuado do `snow_02`.** Deixou de valer:
+  o jogo passou a usar a textura gerada `europa_ice`, sem pegadas.
+- [X] **O AO do ARM do `snow_02` ainda carrega as pegadas.** Deixou de valer pelo mesmo motivo; o
+  ARM do `europa_ice` tira o AO do próprio relevo gerado.
+- [X] **Os dois PNGs atenuados do `snow_02` somam cerca de 14 MB no repositório.** Deixou de valer
+  para o jogo, que não carrega mais o `snow_02` (ver o item da pasta sem uso abaixo).
+- [ ] **A textura de gelo de Europa (`europa_ice`) é procedural e não foi comparada com dados
+  reais.** Gerada por `tools/generate_europa_ice.py` (ruído fractal com o Hurst do DTM, fraturas de
+  Voronoi em quatro escalas e degraus entre placas). Não há imagem de Europa nessa escala de
+  centímetros para comparar: albedo (linear ~0,8, quase branco), aspereza (média 0,60, mais lisa
+  nas fraturas) e o tamanho das fraturas são escolhas visuais, não medidas. As escalas de 2 m e de
+  16 m (`TILE_SIZE_M`, `MACRO_SCALE_RATIO`) não foram ajustadas para a textura nova; no mip
+  equivalente ao tile de 16 m a inclinação rms cai de 11,2 para 6,9 graus, então de longe o chão
+  pode parecer mais liso. Os três PNGs somam 11 MB (normal map 7,0 MB, ARM 2,7 MB, albedo
+  1,4 MB); PNG evita perda de compressão, e se o tamanho pesar dá para trocar por KTX2. Todos os
+  parâmetros são constantes no topo do script.
+- [ ] **A pasta `assets/terrain/materials/snow_02` (20,6 MB) ficou sem uso pelo jogo.** O
+  terreno carrega o `europa_ice`. A pasta segue no repositório como referência (README com a
+  origem e a licença CC0), e `tools/attenuate_surface_marks.py` continua em uso como biblioteca do
+  gerador novo. Remover a pasta reduz o repositório, mas perde a comparação com uma textura real.
+- [ ] **O seletor de tela cheia do painel de configurações é só visual.** O valor fica em
+  `SettingsState::fullscreen_enabled` (`crates/eigc_menu/src/settings.rs`), mas só muda a cor das
+  opções "Não"/"Sim" (`sync_fullscreen_selector`, `ui/update.rs`): nenhum sistema troca o
+  `WindowMode` da janela, e nada é salvo em disco. Falta aplicar o modo na janela e decidir se a
+  escolha persiste entre execuções.
+- [ ] **A linha "Configurar controles" do painel de configurações não faz nada.**
+  `ConfigureControlsRow` (`crates/eigc_menu/src/ui/components.rs`, criada em
+  `spawn_configure_controls_row`, `ui/spawn.rs`) é um `Button` que destaca o fundo em hover, mas
+  não tem observer de clique. Falta a tela de configuração de teclado e mouse; até lá, o card
+  promete uma ação que não existe.
 
 ## Plataformas
-- Em `camera.rs` o comportamento de `CursorGrabMode::Locked´ não é garantido em todas as plataformas. macOS
-e X11 não possuem suporte completo e o bevy pode recair silenciosamente para `CursorGrabMode::Confined`.
-**todo (jay): vê isso depois Rodger**
+- [ ] Em `camera/look.rs` e `camera/plugin.rs` o comportamento de `CursorGrabMode::Locked` não é
+  garantido em todas as plataformas. macOS e X11 não possuem suporte completo e o bevy pode
+  recair silenciosamente para `CursorGrabMode::Confined`. Não testado em macOS nem em X11.

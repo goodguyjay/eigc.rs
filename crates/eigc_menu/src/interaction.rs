@@ -118,6 +118,12 @@ pub(crate) fn restrict_mesh_picking_to_marked_cameras(mut settings: ResMut<MeshP
     settings.require_markers = true;
 }
 
+/// Desfaz `restrict_mesh_picking_to_marked_cameras` ao sair de `Running`, para as luas do menu
+/// voltarem a responder a hover e clique (a câmera do menu não tem `MeshPickingCamera`).
+pub(crate) fn release_mesh_picking_restriction(mut settings: ResMut<MeshPickingSettings>) {
+    settings.require_markers = false;
+}
+
 /// ESC tira o foco da lua e devolve a câmera à visão geral.
 pub(crate) fn exit_focus_on_escape(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -198,8 +204,8 @@ mod tests {
             focused: Some(MoonId::Europa),
         };
         assert_eq!(
-            resolve_click(moon_info(MoonId::Io), &selection),
-            ClickOutcome::NotImplemented(MoonId::Io)
+            resolve_click(moon_info(MoonId::Ganymede), &selection),
+            ClickOutcome::NotImplemented(MoonId::Ganymede)
         );
     }
 

@@ -1,8 +1,8 @@
 # eigc-rs
 
 Simulação interativa das quatro luas galileanas de Júpiter (Europa, IO, Ganimedes e Calisto),
-construída em rust + bevy, com terreno procedural calibrado por características geológicas
-reais de cada lua e texturas públicas da NASA/USGS.
+construída em rust + bevy. O relevo de Europa vem de um DTM real (USGS/Galileo), com detalhe
+procedural por cima, e as texturas de superfície são CC0 do Poly Haven.
 
 Esse projeto toma proveito do timing do lançamento da missão Europa Clipper da NASA, 
 que foi lançada em 2024 e chegará a Europa em 2030. A missão JUICE da ESA, que também estudará as luas galileanas, 
@@ -27,7 +27,7 @@ ainda não estão implementadas e mostram apenas um aviso.
   tela de carregamento)
 - `eigc_terrain`: geração procedural de terreno, composta por um kit de
   peças genérico (`height/`, `mesh.rs`) e receitas específicas por lua
-  (`recipe.rs`)
+  (`recipe/`, um submódulo por lua)
 - `eigc_scene`: câmera de voo livre e céu (sol, Júpiter, estrelas, eclipse e luz refletida de
   Júpiter)
 - `eigc_app`: binário principal, amarra os plugins e o estado da aplicação (menu, carregamento

@@ -10,8 +10,10 @@ use bevy::prelude::{
     AlphaMode, Assets, Camera3d, Color, Commands, Component, DirectionalLight, GlobalAmbientLight,
     IntoScheduleConfigs, Mesh, Mesh3d, MeshMaterial3d, Meshable, Name, Plugin, Projection, Query,
     Res, ResMut, Sphere, StandardMaterial, Transform, Update, Vec3, With, Without,
-    any_with_component, default, on_message, resource_exists,
+    any_with_component, default, in_state, on_message, resource_exists,
 };
+use bevy::state::state_scoped::DespawnOnExit;
+use eigc_moons::AppState;
 use eigc_sim::SimSet;
 
 /// Plugin que gerencia a luz do sol e o disco visual no céu.
@@ -25,7 +27,12 @@ struct SunDisc;
 /// Plugin que registra os sistemas para criar e atualizar a luz do sol e o disco visual.
 impl Plugin for SunPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, spawn_sun.run_if(on_message::<SkyAssetsLoaded>))
+        app.add_systems(
+            Update,
+            spawn_sun
+                .run_if(on_message::<SkyAssetsLoaded>)
+                .run_if(in_state(AppState::Running)),
+        )
             .add_systems(
                 Update,
                 (position_sun_disc, update_sun_light)
@@ -53,6 +60,7 @@ fn spawn_sun(
         Transform::IDENTITY.looking_to(-settings.base_jupiter_dir.normalize(), Vec3::Y),
         SunLight,
         Name::new("SunLight"),
+        DespawnOnExit(AppState::Running),
     ));
 
     commands.insert_resource(GlobalAmbientLight {
@@ -77,6 +85,7 @@ fn spawn_sun(
         Transform::default(),
         SunDisc,
         Name::new("SunDisc"),
+        DespawnOnExit(AppState::Running),
         NoFrustumCulling,
         NotShadowCaster,
         NotShadowReceiver,
