@@ -45,15 +45,19 @@ fn shader_normal_map_mean() -> [f64; 2] {
     [values[0], values[1]]
 }
 
-/// Lê o caminho do normal map que o jogo carrega (`EUROPA_ICE_NORMAL_PATH`, privado em
-/// `surface_textures.rs`), para o teste acompanhar uma troca de textura.
-fn loaded_normal_map_path() -> String {
+/// Nomes das constantes (privadas em `surface_textures.rs`) com o caminho de cada normal map que
+/// o jogo carrega. `NORMAL_MAP_MEAN_XY` é uma só no shader, então vale para todas.
+const NORMAL_MAP_PATH_CONSTANTS: [&str; 2] = ["EUROPA_ICE_NORMAL_PATH", "IO_REGOLITH_NORMAL_PATH"];
+
+/// Lê o caminho de um normal map que o jogo carrega, para o teste acompanhar uma troca de
+/// textura.
+fn loaded_normal_map_path(constant: &str) -> String {
     let source = read_text("crates/eigc_terrain/src/surface_textures.rs");
-    let line = declaration_line(&source, "EUROPA_ICE_NORMAL_PATH");
+    let line = declaration_line(&source, constant);
     let path = line
         .split('"')
         .nth(1)
-        .unwrap_or_else(|| panic!("EUROPA_ICE_NORMAL_PATH deveria ser uma string: {line}"));
+        .unwrap_or_else(|| panic!("{constant} deveria ser uma string: {line}"));
     format!("assets/{path}")
 }
 
@@ -76,19 +80,22 @@ fn measured_normal_map_mean(relative_path: &str) -> [f64; 2] {
     [sum[0] / count, sum[1] / count]
 }
 
-/// A constante que o shader subtrai antes de girar a normal bate com a média do normal map que o
-/// jogo de fato carrega. Trocar ou regerar a textura sem remedir `NORMAL_MAP_MEAN_XY` falha aqui.
+/// A constante que o shader subtrai antes de girar a normal bate com a média de cada normal map
+/// que o jogo de fato carrega (o shader é o mesmo para todas as luas). Trocar ou regerar uma
+/// textura sem remedir `NORMAL_MAP_MEAN_XY` falha aqui.
 #[test]
 fn shader_normal_map_mean_matches_the_loaded_normal_map() {
-    let normal_map_path = loaded_normal_map_path();
     let shader_mean = shader_normal_map_mean();
-    let measured_mean = measured_normal_map_mean(&normal_map_path);
+    for constant in NORMAL_MAP_PATH_CONSTANTS {
+        let normal_map_path = loaded_normal_map_path(constant);
+        let measured_mean = measured_normal_map_mean(&normal_map_path);
 
-    for axis in 0..2 {
-        assert!(
-            (shader_mean[axis] - measured_mean[axis]).abs() <= MEAN_TOLERANCE,
-            "NORMAL_MAP_MEAN_XY {shader_mean:?} não bate com a média medida {measured_mean:?} \
-             de {normal_map_path}; usar o valor que tools/generate_europa_ice.py imprime"
-        );
+        for axis in 0..2 {
+            assert!(
+                (shader_mean[axis] - measured_mean[axis]).abs() <= MEAN_TOLERANCE,
+                "NORMAL_MAP_MEAN_XY {shader_mean:?} não bate com a média medida {measured_mean:?} \
+                 de {normal_map_path}; usar o valor que o script gerador imprime"
+            );
+        }
     }
 }

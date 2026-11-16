@@ -18,7 +18,9 @@
   de potência com Hurst 0,5 (perfil áspero de derrame de lava, escolhido sem dado de Io) e foi
   calibrada para ~2 m de diferença rms a 29 m, a mesma ordem de Europa (teste
   `io_plains_roughness_reaches_the_target_at_small_scale`); o alvo é decisão de calibração, não
-  medida. Falta textura de superfície (fase 4).
+  medida. A textura de superfície (`io_regolith`, `tools/generate_io_regolith.py`) é sintética:
+  pó neutro com clastos de 1 a 10 cm, parâmetros escolhidos a olho, sem dado de Io nessa escala.
+  O albedo cinza (média ~0,88) escurece a cor por vértice em ~3% na tela.
 - [ ] **Paterae de Io são menores que as reais.** As paterae reais têm em média ~40 km de
   diâmetro e 0,5 a 2,5 km de profundidade (Radebaugh et al. 2001), maiores que o recorte
   inteiro. `IO_PATERA_SCALE` usa 2,4 a 6 km de diâmetro e 150 a 400 m de profundidade para caber

@@ -12,6 +12,14 @@ const EUROPA_ICE_NORMAL_PATH: &str = "terrain/materials/europa_ice/europa_ice_no
 /// Caminho do mapa ARM do gelo de Europa (AO no canal R, roughness no G, metallic no B).
 const EUROPA_ICE_ARM_PATH: &str = "terrain/materials/europa_ice/europa_ice_arm_2k.png";
 
+/// Caminho do albedo do regolito de Io, gerado por `tools/generate_io_regolith.py`. Cinza neutro:
+/// o shader multiplica pela cor por vértice da receita, que dá a cor de Io.
+const IO_REGOLITH_DIFFUSE_PATH: &str = "terrain/materials/io_regolith/io_regolith_diff_2k.png";
+/// Caminho do normal map do regolito de Io (convenção OpenGL).
+const IO_REGOLITH_NORMAL_PATH: &str = "terrain/materials/io_regolith/io_regolith_nor_gl_2k.png";
+/// Caminho do mapa ARM do regolito de Io (AO no canal R, roughness no G, metallic no B).
+const IO_REGOLITH_ARM_PATH: &str = "terrain/materials/io_regolith/io_regolith_arm_2k.png";
+
 /// Anisotropia máxima do sampler.
 const ANISOTROPY_CLAMP: u16 = 16;
 
@@ -34,7 +42,8 @@ pub fn surface_textures_for(
 ) -> Option<TerrainSurfaceTextures> {
     match moon_id {
         MoonId::Europa => Some(load_europa_ice(asset_server)),
-        MoonId::Io | MoonId::Ganymede | MoonId::Callisto => None,
+        MoonId::Io => Some(load_io_regolith(asset_server)),
+        MoonId::Ganymede | MoonId::Callisto => None,
     }
 }
 
@@ -45,6 +54,16 @@ fn load_europa_ice(asset_server: &AssetServer) -> TerrainSurfaceTextures {
         diffuse: load_repeating(asset_server, EUROPA_ICE_DIFFUSE_PATH, true),
         normal: load_repeating(asset_server, EUROPA_ICE_NORMAL_PATH, false),
         arm: load_repeating(asset_server, EUROPA_ICE_ARM_PATH, false),
+    }
+}
+
+/// Carrega o material de regolito de Io (tile físico de 2,0 m, como o de Europa), gerado por
+/// script a partir de um relevo sintético (`tools/generate_io_regolith.py`).
+fn load_io_regolith(asset_server: &AssetServer) -> TerrainSurfaceTextures {
+    TerrainSurfaceTextures {
+        diffuse: load_repeating(asset_server, IO_REGOLITH_DIFFUSE_PATH, true),
+        normal: load_repeating(asset_server, IO_REGOLITH_NORMAL_PATH, false),
+        arm: load_repeating(asset_server, IO_REGOLITH_ARM_PATH, false),
     }
 }
 
