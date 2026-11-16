@@ -26,6 +26,19 @@
   segue a função de altura"). Também não foi conferido com o app rodando se o skirt do LOD
   esconde a emenda nos chunks que cortam a escarpa, onde a diferença de altura entre níveis é a
   maior do terreno de Io.
+- [ ] **Anel de extensão de Io (`far_field.rs`) cobre só 22 km além da borda e não tem
+  paterae.** `IO_FAR_FIELD` usa 1 anel de blocos de 22 km (até 33 km do centro), para caber no
+  `far` de 50 km da câmera visto do centro. Com a altitude livre do voo livre, a borda externa do
+  anel volta a aparecer lá do alto: o horizonte real de Io a 2500 m de altitude fica a ~95 km.
+  Aumentar `rings` exige subir o `far` da câmera, que também posiciona o sol e Júpiter
+  (`sky/sun.rs`, `sky/jupiter.rs`). As paterae só são sorteadas dentro do recorte
+  (`CENTER_EXTENT_FRACTION`), então o anel é só planície com geada. A malha do anel (~172 m entre
+  vértices) é bem mais grossa que a dos chunks e sub-amostra a rugosidade fina; não apareceu
+  emenda na validação visual, mas os valores são calibráveis.
+- [ ] **Europa não tem anel de extensão.** `europa_recipe` usa `far_field: None` porque o DTM
+  (`height::heightmap`) repete o pixel da borda fora do recorte, o que esticaria faixas no anel.
+  Precisa de uma fonte de altura própria para fora do DTM (ex.: só o detalhe sintético e as
+  lineae) antes de ligar o anel.
 - [ ] Calibrar receita de terreno de ganimedes (`recipe/mod.rs`, hoje unimplemented!)
 - [ ] Calibrar receita de terreno de calisto (`recipe/mod.rs`, hoje unimplemented!)
 - [X] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa

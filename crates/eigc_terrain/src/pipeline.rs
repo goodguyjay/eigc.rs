@@ -6,6 +6,7 @@ use crate::chunks::{
     ChunkErrorTable, TerrainLodStats, finish_chunk_builds, measure_chunk_errors,
     spawn_terrain_chunks, update_terrain_lod,
 };
+use crate::far_field::spawn_far_field;
 use crate::height::{ColorFn, HeightFn};
 use crate::lod::TerrainLodConfig;
 use crate::params::TerrainParams;
@@ -138,12 +139,23 @@ fn build_terrain_from_loaded_profile(
     spawn_terrain_chunks(
         &mut commands,
         &mut meshes,
-        material,
+        material.clone(),
         &recipe.params,
         &recipe.lod,
         recipe.height.as_ref(),
         recipe.color.as_deref(),
     );
+    if let Some(far_field) = &recipe.far_field {
+        spawn_far_field(
+            &mut commands,
+            &mut meshes,
+            material,
+            recipe.params.size,
+            far_field,
+            &recipe.height,
+            recipe.color.as_deref(),
+        );
+    }
 
     if let Some(surface) = surface {
         commands.insert_resource(surface);

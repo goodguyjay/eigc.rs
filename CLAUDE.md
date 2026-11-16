@@ -57,7 +57,7 @@ O caminho é lido relativo ao diretório de onde o binário é executado, não a
 
 ## Spawn em posição arbitrária (só debug)
 
-`cargo run-eigc-europa-at <x> <y> <z>` (alias de `run --package eigc_app --features dev -- --europa --spawn`), ou `cargo run-eigc-io-at`, entra na lua com a câmera na posição mundial dada, em metros. O terreno é centrado em `(0, 0)` e tem ~22 km de lado. A câmera nasce em **voo livre** (Tab alterna para primeira pessoa, que cola no chão), porque em primeira pessoa o `y` seria sobrescrito por `follow_ground` no primeiro quadro. O recurso é o resource `DebugSpawnPosition`, só existe com a feature `dev`. Coordenada faltando ou inválida encerra o app com mensagem de uso. Mesmas ressalvas do `--europa`/`--io`: só debug, nunca fluxo de usuário nem release.
+`cargo run-eigc-europa-at <x> <y> <z>` (alias de `run --package eigc_app --features dev -- --europa --spawn`), ou `cargo run-eigc-io-at`, entra na lua com a câmera na posição mundial dada, em metros. O terreno é centrado em `(0, 0)` e tem ~22 km de lado. A câmera nasce em **voo livre** (Tab alterna para primeira pessoa, que cola no chão), porque em primeira pessoa o `y` seria sobrescrito por `follow_ground` no primeiro quadro. O recurso é o resource `DebugSpawnPosition`, só existe com a feature `dev`. Coordenada faltando ou inválida encerra o app com mensagem de uso. `x` e `z` fora do recorte são trazidos para dentro dele no primeiro quadro (`keep_inside_play_area`); `y` é livre. Mesmas ressalvas do `--europa`/`--io`: só debug, nunca fluxo de usuário nem release.
 
 ## Convenções de código (resumo — ver `CONTRIBUTING.md` para o texto completo)
 

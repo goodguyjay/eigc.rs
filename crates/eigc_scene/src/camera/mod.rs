@@ -9,5 +9,7 @@ pub mod free_fly_camera;
 pub mod look;
 /// Modo de movimento ativo (primeira pessoa ou voo livre).
 pub mod mode;
+/// Limite horizontal da câmera dentro do recorte do terreno.
+pub mod play_area;
 /// Plugin que registra a câmera e ordena seus sistemas.
 pub mod plugin;

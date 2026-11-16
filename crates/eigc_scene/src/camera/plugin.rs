@@ -10,6 +10,7 @@ use crate::camera::look::{
 #[cfg(feature = "dev")]
 use crate::camera::mode::toggle_movement_mode;
 use crate::camera::mode::{MovementMode, in_mode};
+use crate::camera::play_area::keep_inside_play_area;
 use crate::sky::SkySettings;
 use bevy::app::App;
 use bevy::prelude::{
@@ -23,6 +24,7 @@ use bevy::prelude::{Res, Resource};
 use bevy::window::{CursorGrabMode, CursorOptions};
 use eigc_common::lod_focus::{LodFocus, screen_scale_from_fov};
 use eigc_moons::{AppState, PauseState};
+use eigc_terrain::params::TerrainParams;
 use eigc_terrain::pipeline::HeightResource;
 
 /// Registra a câmera: primeira pessoa por padrão e, com a feature `dev`, voo livre alternável
@@ -49,6 +51,7 @@ impl Plugin for CameraPlugin {
                     mouse_look,
                     free_fly_movement.run_if(in_mode(MovementMode::FreeFly)),
                     walk_movement.run_if(in_mode(MovementMode::Walk)),
+                    keep_inside_play_area.run_if(resource_exists::<TerrainParams>),
                     follow_ground
                         .run_if(in_mode(MovementMode::Walk))
                         .run_if(resource_exists::<HeightResource>),

@@ -4,6 +4,7 @@ use super::{
     SPAWN_CLEARING_BLEND_M, SPAWN_CLEARING_RADIUS_M, TERRAIN_RES, TERRAIN_SIZE_M, TerrainRecipe,
     VERTICAL_EXAGGERATION, appearance_and_material, chunked_lod_config,
 };
+use crate::far_field::FarFieldConfig;
 use crate::height::comb::{Add2, FlattenColorNearOrigin, FlattenNearOrigin};
 use crate::height::noise::PerlinFbm;
 use crate::height::patches::ColorPatches;
@@ -89,6 +90,20 @@ const IO_FROST_MASK_START: f32 = 0.30;
 /// Valor da máscara de geada a partir do qual a mancha fica com a cor plena.
 const IO_FROST_MASK_END: f32 = 0.45;
 
+/// Raio médio de Io, em metros, usado na queda da curvatura do anel de extensão.
+const IO_RADIUS_M: f32 = 1_821_600.0;
+
+/// Anel de extensão de Io: um bloco de 22 km em cada direção (até 33 km do centro, o que cabe no
+/// `far` de 50 km da câmera vista do centro). 128 quads por bloco dá ~172 m entre vértices, o
+/// bastante para a ondulação das planícies (comprimento de onda de ~4 km). Calibrável com o app
+/// rodando.
+const IO_FAR_FIELD: FarFieldConfig = FarFieldConfig {
+    rings: 1,
+    quads_per_tile: 128,
+    moon_radius_m: IO_RADIUS_M,
+    skirt_depth_factor: 0.35,
+};
+
 /// Monta a receita de geração de terreno para Io.
 ///
 /// Não existe DTM público de Io com resolução útil para um recorte local, então o relevo é todo
@@ -161,6 +176,7 @@ pub(super) fn io_recipe(profile: &MoonProfile) -> TerrainRecipe {
         material_properties,
         color: Some(arc_color(color_with_clearing)),
         lod: chunked_lod_config(),
+        far_field: Some(IO_FAR_FIELD),
     }
 }
 

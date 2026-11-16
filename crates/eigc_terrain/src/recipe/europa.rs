@@ -218,6 +218,7 @@ pub(super) fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         material_properties,
         color: Some(arc_color(terrain_color)),
         lod: chunked_lod_config(),
+        far_field: None,
     }
 }
 
