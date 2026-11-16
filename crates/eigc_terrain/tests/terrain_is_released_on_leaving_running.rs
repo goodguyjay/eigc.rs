@@ -41,7 +41,6 @@ fn small_params() -> TerrainParams {
     TerrainParams {
         size: 800.0,
         res: 4,
-        amp: 1.0,
         freq: 1.0,
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,

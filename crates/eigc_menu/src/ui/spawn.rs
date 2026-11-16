@@ -21,7 +21,7 @@ use bevy::prelude::{
     Name, Node, Overflow, Pickable, PositionType, Res, Text, TextColor, UiRect, UiTransform, Val,
     Visibility, default,
 };
-use bevy::state::state_scoped::DespawnOnEnter;
+use bevy::state::state_scoped::{DespawnOnEnter, DespawnOnExit};
 use bevy::text::{Font, Justify, TextFont, TextLayout};
 use eigc_moons::{AppState, MOON_DISPLAY_ORDER, MoonId, moon_info};
 
@@ -779,7 +779,7 @@ pub(crate) fn spawn_loading_overlay(
             },
             BackgroundColor(theme::LOADING_VEIL),
             GlobalZIndex(100),
-            DespawnOnEnter(AppState::Running),
+            DespawnOnExit(AppState::LoadingMoonProfile),
         ))
         .with_children(|overlay| {
             overlay.spawn(text_bundle(

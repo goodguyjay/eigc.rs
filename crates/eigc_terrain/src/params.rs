@@ -7,8 +7,6 @@ pub struct TerrainParams {
     pub size: f32,
     /// Resolução da grade (N x N vértices)
     pub res: u32,
-    /// Escala vertical (metros)
-    pub amp: f32,
     /// Frequência base (menor → características mais amplas)
     pub freq: f32,
     /// Direção das "lineae" (normalizada)

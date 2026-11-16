@@ -9,7 +9,7 @@ O porte de `CamLock`/`LockMode` (módulo `camera::look`, antes em `camera::free_
 - **`CamLock` nunca era inserido como resource** — causava panic silencioso até ser rastreado.
 - **`base_sun_dir` e `base_jupiter_dir` trocados** dentro de `resolve_lock_direction` — sintoma era Júpiter parecendo funcionar (libração pequena, erro pouco visível) enquanto o sol travava errado.
 - **Yaw/pitch dessincronizavam ao sair do lock.** Corrigido extraindo o ângulo via `to_euler(EulerRot::YXZ)` — não improvise outra ordem de euler aqui sem entender por que essa foi a que funcionou.
-- **`CamLock` lia de `SkySettings.base_sun_dir` (valor estático calibrado uma vez) em vez de `SkyState.sun_dir` (direção animada por frame).** Esse é o caso canônico de duplicação de estado do projeto: `SkySettings` e `SkyState` representam a mesma grandeza física em momentos diferentes do pipeline, e é fácil ler a fonte errada sem erro de compilação nem panic — só o comportamento fica sutilmente errado.
+- **`CamLock` lia de `SkySettings.base_sun_dir` (valor estático calibrado uma vez) em vez de `SkyState.sun_dir` (direção animada por frame).** Esse é o caso canônico de duplicação de estado do projeto: `SkySettings` e `SkyState` representam a mesma grandeza física em momentos diferentes do pipeline, e é fácil ler a fonte errada sem erro de compilação nem panic — só o comportamento fica sutilmente errado. `base_sun_dir` foi removido depois (a direção do sol sempre foi derivada de `base_jupiter_dir` e `sun_elevation`), mas o mesmo risco vale para `SkySettings.base_jupiter_dir` contra `SkyState.jupiter_dir`.
 
 Se você for tocar em qualquer sistema que leia direção de sol, Júpiter, ou orientação de câmera, primeiro identifique se a fonte é `SkySettings` (estático, calibração) ou `SkyState` (dinâmico, atualizado por `animate_sky_physical`). Ler a errada não quebra a build.
 
@@ -38,7 +38,6 @@ Além da convenção geral (nome de arquivo por comportamento observável), este
 
 - Damping/smoothing na transição de lock — ainda não implementado, aceito conscientemente por ora.
 - `mouse_look` não é totalmente desabilitado durante o lock.
-- ~~ESC não pausa `mouse_look` depois do cursor ser liberado.~~ Resolvido: ESC abre o menu de pausa (`PauseState::Paused`), que para toda a cadeia de `CameraPlugin`.
 - Markers de componente privados (`Jupiter`, `SunDisc`, `StarDome`) ainda sem teste de integração.
 
 ## Limite de DirectionalLight (risco monitorado, não mais implícito)

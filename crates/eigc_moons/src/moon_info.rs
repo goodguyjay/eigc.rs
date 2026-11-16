@@ -1,7 +1,7 @@
 //! Dados descritivos estáticos de cada lua galileana, usados para apresentação (menu, fichas).
 //!
 //! Esta tabela é independente do `MoonProfile` (calibração carregada de `.ron`): os `.ron` de
-//! Io, Ganimedes e Calisto ainda não existem, e a apresentação não deve depender deles.
+//! Ganimedes e Calisto ainda não existem, e a apresentação não deve depender deles.
 
 use crate::MoonId;
 
@@ -76,7 +76,7 @@ const IO: MoonInfo = MoonInfo {
     orbital_period_days: 1.77,
     jupiter_distance_km: 421_800,
     surface: "Planícies de enxofre e lava",
-    available: false,
+    available: true,
 };
 
 const GANYMEDE: MoonInfo = MoonInfo {
@@ -145,12 +145,15 @@ mod tests {
         assert_eq!(MOON_DISPLAY_ORDER.len(), 4);
     }
 
-    /// Testa que, por enquanto, só Europa está marcada como disponível para
-    /// exploração.
+    /// Testa que, por enquanto, só Europa e Io estão marcadas como disponíveis
+    /// para exploração.
     #[test]
-    fn only_europa_is_available_for_now() {
+    fn only_europa_and_io_are_available_for_now() {
         for moon_id in MOON_DISPLAY_ORDER {
-            assert_eq!(moon_info(moon_id).available, moon_id == MoonId::Europa);
+            assert_eq!(
+                moon_info(moon_id).available,
+                matches!(moon_id, MoonId::Europa | MoonId::Io)
+            );
         }
     }
 

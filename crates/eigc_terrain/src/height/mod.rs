@@ -10,8 +10,14 @@ pub mod heightmap;
 pub mod linea;
 /// Fontes de altura baseadas em ruído Perlin (fbm e ridged).
 pub mod noise;
+/// Paterae de Io: depressões de piso plano com escarpa, e a cor do piso e do halo.
+pub mod patera;
+/// Manchas de cor por máscara de ruído (ex.: geada de SO2 em Io).
+pub mod patches;
 /// Cor por vértice derivada da inclinação de uma fonte de altura.
 pub mod slope;
+/// Cor por vértice por peso combinado de inclinação, altura relativa e manchas pela posição.
+pub mod tint;
 /// Distorção de domínio e projeção anisotrópica de `HeightSource`.
 pub mod warp;
 

@@ -30,7 +30,7 @@ use eigc_moons::{ActiveMoonProfileHandle, AppState};
 pub struct HeightResource(pub HeightFn);
 
 /// Encapsula a fonte de cor por vértice para poder ser usada como recurso no Bevy. Só é inserido
-/// quando a receita da lua produz uma cor (ex.: lineae de Europa).
+/// quando a receita da lua produz uma cor (ex.: o tingimento do terreno de Europa).
 #[derive(Resource, Clone)]
 pub struct ColorResource(pub ColorFn);
 
