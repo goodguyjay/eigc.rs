@@ -9,12 +9,16 @@
   controle), ~24 pixels no recorte inteiro; os DEMs de White et al. (2014, ~1 km/px global) e de
   fotoclinometria de paterae (White & Schenk 2015, até 270 m/px) não estão públicos. Por isso o
   relevo é todo procedural, por decisão do desenvolvedor. `IO_PLAINS_AMPLITUDE_M`,
-  `IO_DETAIL_AMPLITUDE_M`, `IO_PATERA_SCALE`, `IO_HALO_WIDTH_FRACTION` e as cores de piso, halo e
+  `IO_PATERA_SCALE`, `IO_HALO_WIDTH_FRACTION` e as cores de piso, halo e
   geada são valores de partida, não ajustados visualmente. `IO_SLOPE_COLOR_START/END` seguem a
   inclinação medida das planícies (teste
   `io_slope_color_thresholds_follow_the_measured_plains_slope`) e a geada cobre ~8% do recorte
   (teste `io_frost_covers_a_minority_of_the_plains`); se a amplitude ou a máscara mudarem, os
-  testes apontam quando refazer os limiares. Falta textura de superfície (fase 4).
+  testes apontam quando refazer os limiares. A rugosidade fina (`IO_DETAIL_*`) segue uma lei
+  de potência com Hurst 0,5 (perfil áspero de derrame de lava, escolhido sem dado de Io) e foi
+  calibrada para ~2 m de diferença rms a 29 m, a mesma ordem de Europa (teste
+  `io_plains_roughness_reaches_the_target_at_small_scale`); o alvo é decisão de calibração, não
+  medida. Falta textura de superfície (fase 4).
 - [ ] **Paterae de Io são menores que as reais.** As paterae reais têm em média ~40 km de
   diâmetro e 0,5 a 2,5 km de profundidade (Radebaugh et al. 2001), maiores que o recorte
   inteiro. `IO_PATERA_SCALE` usa 2,4 a 6 km de diâmetro e 150 a 400 m de profundidade para caber
@@ -93,6 +97,17 @@
   face vertical visível se a diferença de altura entre níveis passar da profundidade do skirt
   (mais provável em silhueta contra o horizonte). Revisitar se aparecer rachadura em teste
   visual, ou trocar por stitching.
+- [ ] **Pontos escuros em fila nas planícies de Io, vistos rente ao chão.** Em captura a
+  1280x720 da câmera a 12 m de altura (`--io --spawn 2500 12 2500`) aparecem pixels isolados
+  um pouco mais escuros que o chão (não pretos), alinhados em segmentos retos a centenas de
+  metros, com cara de borda de chunk. Já existiam com a rugosidade antiga (~25 pixels na
+  região do chão) e passaram a ~160 depois que a rugosidade fina de Io ficou mais áspera
+  (Hurst 0,5, 5 oitavas). Testado e descartado: aprofundar o skirt só em Io
+  (`skirt_depth_factor` 1,0) não mudou nenhum pixel, então não parece fresta de skirt. Causa
+  não confirmada; suspeitas a conferir: T-junction entre níveis (vértice do nível fino fora da
+  aresta do grosso, com pinhole de rasterização) ou a descontinuidade de normal entre níveis
+  (item abaixo). Pouco visível em movimento; não corrigido para não mexer no LOD compartilhado
+  com Europa sem diagnóstico.
 - [ ] **Iluminação levemente descontínua entre níveis de LOD.** As normais de cada chunk vêm de
   diferenças centrais no espaçamento do próprio nível, então a normal de um vértice de borda
   difere um pouco entre o chunk fino e o grosso. Dentro do mesmo nível não há costura (o

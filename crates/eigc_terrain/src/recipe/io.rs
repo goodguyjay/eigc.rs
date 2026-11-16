@@ -28,12 +28,21 @@ const IO_PLAINS_OCTAVES: u32 = 5;
 /// Comprimento de onda da primeira oitava da rugosidade fina de Io, em metros.
 const IO_DETAIL_BASE_WAVELENGTH_M: f32 = 230.0;
 
-/// Oitavas da rugosidade fina de Io: de ~230 m a ~29 m, mesmo limite do detalhe de Europa (o
-/// nível 0 da malha, ~5,4 m entre vértices, teria poucos vértices por comprimento de onda).
-const IO_DETAIL_OCTAVES: u32 = 4;
+/// Oitavas da rugosidade fina de Io: de ~230 m a ~14 m. A última oitava tem ~2,7 vértices por
+/// comprimento de onda no nível 0 da malha (~5,4 m entre vértices), perto do limite que a malha
+/// consegue mostrar; abaixo dela a rugosidade fica para a textura de superfície.
+const IO_DETAIL_OCTAVES: u32 = 5;
 
-/// Amplitude da rugosidade fina de Io, em metros. Valor de partida, não medido.
-const IO_DETAIL_AMPLITUDE_M: f32 = 4.0;
+/// Expoente de Hurst da rugosidade fina de Io: cada oitava tem `2^-H` da amplitude da anterior.
+/// Não há DTM de Io para medir; 0,5 é um perfil áspero, como o de derrames de lava, e deixa
+/// energia nas oitavas pequenas (com o `gain` de 0,5, a oitava de ~14 m pesava 1/31 e não
+/// aparecia). Valor de partida, a calibrar com o app rodando.
+const IO_DETAIL_HURST_EXPONENT: f32 = 0.5;
+
+/// Amplitude da rugosidade fina de Io (soma normalizada das oitavas), em metros. Calibrada para a
+/// diferença rms de altura das planícies entre pontos a 29 m ficar perto de 2 m, a mesma ordem do
+/// relevo de Europa nessa escala (ver `io_plains_roughness_reaches_the_target_at_small_scale`).
+const IO_DETAIL_AMPLITUDE_M: f32 = 12.0;
 
 /// Distância entre as amostras usadas para estimar a inclinação na cor de Io, em metros.
 const IO_SLOPE_SAMPLE_STEP_M: f32 = 100.0;
@@ -236,7 +245,7 @@ fn io_fine_detail(seed: u32) -> PerlinFbm {
         freq: 1.0 / IO_DETAIL_BASE_WAVELENGTH_M,
         octaves: IO_DETAIL_OCTAVES,
         lacunarity: 2.0,
-        gain: 0.5,
+        gain: 2.0_f32.powf(-IO_DETAIL_HURST_EXPONENT),
         amplitude: IO_DETAIL_AMPLITUDE_M,
     }
 }
@@ -359,6 +368,48 @@ mod tests {
             }
         }
         assert!(highest - lowest > 0.1, "clareira lisa demais: {lowest} a {highest}");
+    }
+
+    /// Diferença rms de altura entre pontos a `lag_m` de distância (nos dois eixos), numa grade
+    /// que cobre o recorte.
+    fn rms_height_difference(height: &dyn HeightSource, lag_m: f32) -> f32 {
+        let mut sum = 0.0_f64;
+        let mut count = 0;
+        for i in 0..150 {
+            for j in 0..150 {
+                let x = -10_500.0 + i as f32 * 140.3;
+                let z = -10_500.0 + j as f32 * 139.7;
+                let base = height.height_at(x, z);
+                for (dx, dz) in [(lag_m, 0.0), (0.0, lag_m)] {
+                    let difference = height.height_at(x + dx, z + dz) - base;
+                    sum += f64::from(difference * difference);
+                    count += 1;
+                }
+            }
+        }
+        (sum / f64::from(count)).sqrt() as f32
+    }
+
+    /// Testa que as planícies de Io (ondulação mais rugosidade fina, sem paterae) têm rugosidade
+    /// visível na escala de quem anda: diferença rms de ~2 m entre pontos a 29 m, a mesma ordem
+    /// do relevo de Europa, e inclinação rms acima de 0,08 (~4,6 graus) entre vértices do nível 0
+    /// da malha. Antes eram 0,7 m e 0,027 (~1,5 grau), e o chão parecia liso de perto.
+    #[test]
+    fn io_plains_roughness_reaches_the_target_at_small_scale() {
+        let profile = io_profile();
+        let seed = profile.terrain.seed;
+        let plains = Add2 {
+            a: io_plains(seed, profile.terrain.base_frequency),
+            b: io_fine_detail(seed),
+        };
+
+        let at_29_m = rms_height_difference(&plains, 29.0);
+        let mesh_spacing_m = 5.4;
+        let slope_at_mesh = rms_height_difference(&plains, mesh_spacing_m) / mesh_spacing_m;
+        println!("rugosidade de Io: rms a 29 m {at_29_m}, inclinação rms na malha {slope_at_mesh}");
+
+        assert!((1.5..2.5).contains(&at_29_m), "rms a 29 m: {at_29_m}");
+        assert!(slope_at_mesh > 0.08, "inclinação rms na malha: {slope_at_mesh}");
     }
 
     /// Testa que a geada de SO2 cobre uma minoria das planícies (entre 5% e 25% do recorte com
