@@ -126,14 +126,7 @@ pub(super) fn io_recipe(profile: &MoonProfile) -> TerrainRecipe {
 
     let paterae = io_paterae(seed);
 
-    // a rugosidade fina entra depois da escavação para o piso de lava não ficar liso demais
-    let terrain = Add2 {
-        a: CarvePaterae::new(io_plains(seed, calibration.base_frequency), paterae.clone()),
-        b: io_fine_detail(seed),
-    };
-
-    let terrain_with_clearing =
-        FlattenNearOrigin::new(terrain, SPAWN_CLEARING_RADIUS_M, SPAWN_CLEARING_BLEND_M);
+    let terrain_with_clearing = io_relief(seed, calibration.base_frequency, paterae.clone());
 
     // a inclinação vem só das planícies: a escarpa das paterae já tem a cor própria
     let slope_color = SlopeColorField {
@@ -178,6 +171,24 @@ pub(super) fn io_recipe(profile: &MoonProfile) -> TerrainRecipe {
         color: Some(arc_color(color_with_clearing)),
         lod: chunked_lod_config(),
         far_field: Some(IO_FAR_FIELD),
+    }
+}
+
+/// Relevo completo de Io: planície com paterae escavadas, achatada na clareira de spawn, mais a
+/// rugosidade fina por cima.
+///
+/// A rugosidade entra depois da escavação, para o piso de lava não ficar liso, e depois do
+/// achatamento, para a clareira ser um platô no nível da planície ao redor e não um plano
+/// perfeito: é a primeira coisa que se vê ao chegar em Io.
+fn io_relief(
+    seed: u32,
+    base_frequency: f32,
+    paterae: Vec<PateraSpec>,
+) -> Add2<FlattenNearOrigin<CarvePaterae<PerlinFbm>>, PerlinFbm> {
+    let carved = CarvePaterae::new(io_plains(seed, base_frequency), paterae);
+    Add2 {
+        a: FlattenNearOrigin::new(carved, SPAWN_CLEARING_RADIUS_M, SPAWN_CLEARING_BLEND_M),
+        b: io_fine_detail(seed),
     }
 }
 
@@ -316,6 +327,38 @@ mod tests {
                 FlattenNearOrigin::new(plains, SPAWN_CLEARING_RADIUS_M, SPAWN_CLEARING_BLEND_M);
             assert_eq!(with_paterae.flat_height, without_paterae.flat_height);
         }
+    }
+
+    /// Testa que a clareira de spawn de Io é um platô com rugosidade fina, e não um plano
+    /// perfeito: dentro do raio plano, a altura é exatamente o platô mais a rugosidade, e varia
+    /// de um ponto a outro.
+    #[test]
+    fn io_spawn_clearing_keeps_the_fine_roughness_over_the_plateau() {
+        let profile = io_profile();
+        let seed = profile.terrain.seed;
+        let recipe = io_recipe(&profile);
+        let plateau = FlattenNearOrigin::new(
+            CarvePaterae::new(io_plains(seed, profile.terrain.base_frequency), io_paterae(seed)),
+            SPAWN_CLEARING_RADIUS_M,
+            SPAWN_CLEARING_BLEND_M,
+        )
+        .flat_height;
+        let detail = io_fine_detail(seed);
+
+        let mut lowest = f32::INFINITY;
+        let mut highest = f32::NEG_INFINITY;
+        for ring in 0..=10 {
+            let radius = SPAWN_CLEARING_RADIUS_M * ring as f32 / 10.0;
+            for step in 0..32 {
+                let angle = step as f32 / 32.0 * std::f32::consts::TAU;
+                let (x, z) = (angle.cos() * radius, angle.sin() * radius);
+                let height = recipe.height.height_at(x, z);
+                assert_eq!(height, plateau + detail.height_at(x, z), "({x}, {z})");
+                lowest = lowest.min(height);
+                highest = highest.max(height);
+            }
+        }
+        assert!(highest - lowest > 0.1, "clareira lisa demais: {lowest} a {highest}");
     }
 
     /// Testa que a geada de SO2 cobre uma minoria das planícies (entre 5% e 25% do recorte com

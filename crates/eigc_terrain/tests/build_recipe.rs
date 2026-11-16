@@ -150,10 +150,10 @@ fn europa_recipe_relief_follows_the_real_dtm_recentered_around_zero() {
     );
 }
 
-/// Testa se a receita de Io produz altura finita, cor por vértice e mantém a clareira de spawn
-/// plana em volta da origem.
+/// Testa se a receita de Io produz cor por vértice e mantém a clareira de spawn nivelada em volta
+/// da origem: sem o relevo de grande escala, só com a rugosidade fina (poucos metros) por cima.
 #[test]
-fn io_recipe_produces_color_and_keeps_spawn_clearing_flat() {
+fn io_recipe_produces_color_and_keeps_spawn_clearing_level() {
     let profile = minimal_profile_for(MoonId::Io);
     let recipe = build_recipe(&profile);
 
@@ -161,12 +161,15 @@ fn io_recipe_produces_color_and_keeps_spawn_clearing_flat() {
     assert_eq!(recipe.appearance.display_name, profile.display_name);
     assert!(recipe.color.is_some(), "Io deveria produzir cor por vértice (inclinação)");
 
+    // limite folgado para a rugosidade fina, bem abaixo das dezenas de metros da planície
+    const ROUGHNESS_TOLERANCE_M: f32 = 5.0;
     let origin_height = recipe.height.height_at(0.0, 0.0);
     for (x, z) in [(100.0, 0.0), (0.0, -140.0), (-90.0, 90.0)] {
-        assert_eq!(
-            recipe.height.height_at(x, z),
-            origin_height,
-            "ponto ({x}, {z}) dentro da clareira deveria ter a altura plana da origem"
+        let height = recipe.height.height_at(x, z);
+        assert!(
+            (height - origin_height).abs() < ROUGHNESS_TOLERANCE_M,
+            "ponto ({x}, {z}) dentro da clareira deveria ficar perto do platô: {height} contra \
+             {origin_height}"
         );
     }
 }
