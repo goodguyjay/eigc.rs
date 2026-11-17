@@ -98,6 +98,38 @@ impl<S: HeightSource> HeightSource for FlattenNearOrigin<S> {
     }
 }
 
+/// Faz a altura descer até um piso plano perto da borda de um disco centrado na origem. Dentro de
+/// `fade_start_radius_m` devolve a fonte intacta, entre `fade_start_radius_m` e
+/// `fade_end_radius_m` desce suavemente (smoothstep) até `floor_height` e, de `fade_end_radius_m`
+/// para fora, devolve o piso sem consultar a fonte. Deixa o terreno com cara de disco.
+///
+/// O piso deve ficar abaixo do ponto mais baixo da fonte dentro de `fade_start_radius_m`; se
+/// ficar acima, a rampa sobe em vez de descer.
+pub struct FadeToFloorBeyondRadius<S: HeightSource> {
+    /// Fonte de altura completa, usada dentro do raio interno.
+    pub source: S,
+    /// Altura constante fora do raio externo, em metros.
+    pub floor_height: f32,
+    /// Raio, em metros, até onde a fonte vale intacta.
+    pub fade_start_radius_m: f32,
+    /// Raio, em metros, a partir do qual a altura é o piso.
+    pub fade_end_radius_m: f32,
+}
+impl<S: HeightSource> HeightSource for FadeToFloorBeyondRadius<S> {
+    fn height_at(&self, x: f32, z: f32) -> f32 {
+        let d = (x * x + z * z).sqrt();
+        if d >= self.fade_end_radius_m {
+            return self.floor_height;
+        }
+        let full = self.source.height_at(x, z);
+        if d <= self.fade_start_radius_m {
+            return full;
+        }
+        let t = smoothstep(self.fade_start_radius_m, self.fade_end_radius_m, d);
+        full + (self.floor_height - full) * t
+    }
+}
+
 /// Equivalente a `FlattenNearOrigin`, mas para `ColorSource`: substitui a cor por uma cor fixa
 /// dentro da clareira, com a mesma transição suave até a cor original da fonte.
 pub struct FlattenColorNearOrigin<S: ColorSource> {
@@ -193,6 +225,73 @@ mod tests {
         };
 
         assert_eq!(flatten.height_at(400.0, 0.0), 500.0);
+    }
+
+    /// Fonte constante em 500 m com rampa de 1000 m a 2000 m de raio até o piso em -300 m.
+    fn edge_fade() -> FadeToFloorBeyondRadius<ConstHeight> {
+        FadeToFloorBeyondRadius {
+            source: ConstHeight(500.0),
+            floor_height: -300.0,
+            fade_start_radius_m: 1000.0,
+            fade_end_radius_m: 2000.0,
+        }
+    }
+
+    #[test]
+    fn fade_to_floor_keeps_the_source_inside_the_start_radius() {
+        let fade = edge_fade();
+
+        assert_eq!(fade.height_at(0.0, 0.0), 500.0);
+        assert_eq!(fade.height_at(999.0, 0.0), 500.0);
+        assert_eq!(fade.height_at(0.0, -1000.0), 500.0);
+    }
+
+    #[test]
+    fn fade_to_floor_is_the_floor_at_and_beyond_the_end_radius() {
+        let fade = edge_fade();
+
+        assert_eq!(fade.height_at(2000.0, 0.0), -300.0);
+        assert_eq!(fade.height_at(0.0, 5000.0), -300.0);
+        assert_eq!(fade.height_at(9000.0, -9000.0), -300.0);
+    }
+
+    #[test]
+    fn fade_to_floor_is_continuous_at_both_radii() {
+        let fade = edge_fade();
+
+        assert!((fade.height_at(1000.01, 0.0) - 500.0).abs() < 0.01);
+        assert!((fade.height_at(1999.99, 0.0) - -300.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn fade_to_floor_descends_monotonically_without_leaving_the_range() {
+        let fade = edge_fade();
+
+        let mut previous = fade.height_at(1000.0, 0.0);
+        for radius in 1001..=2000 {
+            let height = fade.height_at(radius as f32, 0.0);
+            assert!(
+                height <= previous,
+                "a rampa subiu em {radius} m: {previous} -> {height}"
+            );
+            assert!((-300.0..=500.0).contains(&height));
+            previous = height;
+        }
+    }
+
+    #[test]
+    fn fade_to_floor_depends_only_on_the_distance_to_the_origin() {
+        let fade = edge_fade();
+        let radius = 1500.0_f32;
+        let along_x = fade.height_at(radius, 0.0);
+
+        for angle in [0.4_f32, 1.1, 2.5, 4.0] {
+            let height = fade.height_at(angle.cos() * radius, angle.sin() * radius);
+            assert!(
+                (height - along_x).abs() < 0.05,
+                "ângulo {angle}: {height} contra {along_x}"
+            );
+        }
     }
 
     #[test]

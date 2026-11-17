@@ -1,6 +1,7 @@
 //! Plugin da câmera: spawn, ordem dos sistemas de orientação e movimento, e publicação do foco
 //! de LOD.
 
+use crate::camera::bounds::limit_to_playable_area;
 use crate::camera::first_person::{FirstPersonCamera, follow_ground, walk_movement};
 use crate::camera::free_fly_camera::{FreeFlyCamera, free_fly_movement};
 use crate::camera::look::{
@@ -41,6 +42,7 @@ impl Plugin for CameraPlugin {
                     mouse_look,
                     free_fly_movement.run_if(in_mode(MovementMode::FreeFly)),
                     walk_movement.run_if(in_mode(MovementMode::Walk)),
+                    limit_to_playable_area.run_if(in_mode(MovementMode::Walk)),
                     follow_ground
                         .run_if(in_mode(MovementMode::Walk))
                         .run_if(resource_exists::<HeightResource>),

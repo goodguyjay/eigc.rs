@@ -21,3 +21,11 @@ pub struct TerrainParams {
     /// `1.0` reproduz a elevação medida.
     pub vertical_exaggeration: f32,
 }
+
+impl TerrainParams {
+    /// Raio, em metros, do círculo inscrito no recorte quadrado. O terreno só tem malha dentro
+    /// dele: chunks totalmente fora do círculo não são criados.
+    pub fn disc_radius_m(&self) -> f32 {
+        self.size * 0.5
+    }
+}

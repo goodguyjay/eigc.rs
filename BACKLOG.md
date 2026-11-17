@@ -186,6 +186,37 @@
   do LOD e malha dos chunks). Débito consciente: a latência de refinamento dos chunks não foi
   medida. Se aparecer lentidão para os chunks ficarem nítidos, implementar uma grade uniforme de
   ~1 km montada em `LineaField::new`, com teste de que dá a mesma altura que a busca bruta.
+- [ ] **Os valores da borda redonda de Europa são de partida, sem calibração visual.**
+  `TERRAIN_DISC_RADIUS_M` (11 km, o círculo inscrito no recorte), `EDGE_FADE_WIDTH_M` (1,5 km: a
+  rampa começa a 9,5 km), `EDGE_FLOOR_HEIGHT_M` (-400 m) e `PLAYABLE_MARGIN_M` (1,7 km: raio
+  jogável de 9,3 km) em `recipe.rs` foram escolhidos por conta, sem olhar o jogo. O piso vem do
+  mínimo medido do relevo (~-311 m, com lineae e detalhe) mais folga, e o teste
+  `europa_edge_floor_is_below_the_whole_relief` guarda isso. A rampa desce até ~540 m em 1,5 km
+  (do ponto mais alto, +143 m, ao piso), o que dá cerca de 28 graus no pior ponto, mais íngreme
+  que o declive máximo do DTM (21,6 graus). Ajustar olhando o jogo: largura da rampa,
+  profundidade do piso e margem do raio jogável.
+- [ ] **O contorno em escada de 344 m dos chunks só fica escondido porque o raio jogável é menor
+  que o início da rampa.** Um chunk existe se tocar o círculo (`chunk_touches_disc`), então fora
+  dos 11 km o piso plano termina em degraus de um chunk (~250 a 490 m além do círculo), que de
+  1,5 a 1,9 km de distância aparecem como dentes de serra contra as estrelas. O ombro da rampa
+  (9,5 km) esconde esse contorno de quem está atrás dele, por isso `PLAYABLE_MARGIN_M` mantém o
+  raio jogável (9,3 km) antes da rampa, e o teste
+  `playable_radius_stays_before_the_edge_ramp_with_margin` exige 150 m de folga. Continua visível
+  no voo livre e se o raio jogável passar de 9,5 km. Para eliminar: recortar os vértices no
+  círculo exato, com uma função nova ao lado de `build_chunk_mesh` (vértices fora do raio
+  empurrados para a circunferência, triângulos totalmente fora descartados, skirt só nos
+  segmentos com os dois vértices dentro, UVs da posição já empurrada) e testes novos de emenda
+  em `chunk_mesh_seams.rs`. É trabalho comparável a refazer o recorte dos chunks, e as estrelas
+  abaixo da borda continuam aparecendo. Alternativa mais barata: escurecer a cor do vértice até
+  quase preto perto da borda (um combinador de cor novo), que disfarça o contorno mas pode
+  brilhar por reflexo com o Sol a 1 grau de elevação; não verificado no jogo.
+- [ ] **Estrelas abaixo do horizonte se algum dia o jogador chegar à borda.** A cúpula de
+  estrelas acompanha a câmera e depois do último chunk não há chão, então os raios de visão que
+  passam por cima da borda mostram estrelas abaixo do horizonte (de -3 a -12 graus a 9,5 km do
+  centro, por conta de geometria, sem medir no jogo). Fica escondido hoje porque o raio jogável
+  é menor que o início da rampa, e a câmera a pé agora é limitada por `playable_radius_m` (o voo livre não é). Se o
+  raio jogável mudar, ou se o voo livre virar fluxo de usuário: um plano plano e escuro no piso
+  até o horizonte (muda a ideia de ilha para a de planície) ou escurecer a borda.
 
 ## Cena / Visual
 - [X] Câmera e luz em eigc_app::scene_placeholder eram fixas e hardcoded, sem
@@ -327,4 +358,4 @@ não por teste unitário de função pura.
 ## Plataformas
 - [ ] Em `camera/look.rs` e `camera/plugin.rs` o comportamento de `CursorGrabMode::Locked` não é
   garantido em todas as plataformas. macOS e X11 não possuem suporte completo e o bevy pode
-  recair silenciosamente para `CursorGrabMode::Confined`. Não testado em macOS nem em X11.
+  recair silenciosamente para `CursorGrabMode::Confined`. Não testado em macOS nem em X11.
