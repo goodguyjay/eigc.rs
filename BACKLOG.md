@@ -99,18 +99,6 @@
   face vertical visível se a diferença de altura entre níveis passar da profundidade do skirt
   (mais provável em silhueta contra o horizonte). Revisitar se aparecer rachadura em teste
   visual, ou trocar por stitching.
-- [ ] **Acne de sombra do sol nas planícies de Io (pontos escuros em fila).** Rente ao chão
-  (`--io --spawn 2500 12 2500`, 1280x720) aparecem pixels ~10% mais escuros, alinhados em fileiras
-  a ~50 a 500 m. Ficaram mais visíveis depois que a rugosidade fina de Io ficou mais áspera
-  (Hurst 0,5, 5 oitavas). Diagnóstico por eliminação, contando os pontos na mesma captura sem a
-  textura de Io: sem sombra do sol, as fileiras somem (187 para 135, o resto é ruído do detector
-  perto do horizonte); sem skirt (204 a 198) e sem troca de nível de LOD até ~3,5 km (204), elas
-  continuam, então não é emenda de LOD. Com `shadow_normal_bias` da `SunLight` em 3,6 (o dobro do
-  padrão 1,8 do Bevy 0.18.1) caem para 151, quase o mesmo que sem sombra; com bias 0,2/6,0
-  somem por completo. Em Europa, no mesmo ponto, o bias 3,6 muda 0,17% dos pixels (diferença
-  média de 0,3 nível de cinza). Não corrigido porque a `SunLight` (`sky/sun.rs`) é compartilhada
-  com Europa: decisão do desenvolvedor. Trade-off do bias maior: sombras de contato pequenas
-  descolam um pouco do objeto (peter-panning).
 - [ ] **Iluminação levemente descontínua entre níveis de LOD.** As normais de cada chunk vêm de
   diferenças centrais no espaçamento do próprio nível, então a normal de um vértice de borda
   difere um pouco entre o chunk fino e o grosso. Dentro do mesmo nível não há costura (o

@@ -16,6 +16,10 @@ use bevy::state::state_scoped::DespawnOnExit;
 use eigc_moons::AppState;
 use eigc_sim::SimSet;
 
+// O dobro do padrão do Bevy 0.18.1 (1,8): com o padrão, a rugosidade fina de Io sob sol baixo
+// mostra acne de sombra (pontos escuros em fileiras). Em Europa muda 0,17% dos pixels.
+const SUN_SHADOW_NORMAL_BIAS: f32 = 3.6;
+
 /// Plugin que gerencia a luz do sol e o disco visual no céu.
 pub struct SunPlugin;
 
@@ -55,6 +59,7 @@ fn spawn_sun(
         DirectionalLight {
             illuminance: settings.sun_illuminance,
             shadows_enabled: true,
+            shadow_normal_bias: SUN_SHADOW_NORMAL_BIAS,
             ..default()
         },
         Transform::IDENTITY.looking_to(-settings.base_jupiter_dir.normalize(), Vec3::Y),
