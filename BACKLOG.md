@@ -10,7 +10,10 @@
   fotoclinometria de paterae (White & Schenk 2015, até 270 m/px) não estão públicos. Por isso o
   relevo é todo procedural, por decisão do desenvolvedor. `IO_PLAINS_AMPLITUDE_M`,
   `IO_PATERA_SCALE`, `IO_HALO_WIDTH_FRACTION` e as cores de piso, halo e
-  geada são valores de partida, não ajustados visualmente. `IO_SLOPE_COLOR_START/END` seguem a
+  geada são valores de partida, não ajustados visualmente. A forma da escarpa (paredão de ~60
+  graus sobre talude de ~35, em `height::patera`), a irregularidade da borda
+  (`IO_PATERA_JITTER_*`), as cristas de pressão do piso (`IO_FLOOR_RIDGE_*`) e a cor do paredão
+  foram ajustadas a olho no app, sem perfil medido de patera real. `IO_SLOPE_COLOR_START/END` seguem a
   inclinação medida das planícies (teste
   `io_slope_color_thresholds_follow_the_measured_plains_slope`) e a geada cobre ~8% do recorte
   (teste `io_frost_covers_a_minority_of_the_plains`); se a amplitude ou a máscara mudarem, os
@@ -27,11 +30,11 @@
   mais de uma. O halo também é estilizado: os anéis vermelhos reais (ex.: Pele) são depósitos de
   pluma de centenas de km. Trade-off consciente: variedade de feições no recorte em troca de
   escala fiel. Não há mesa nem montanha na borda do recorte (era opcional na fase 2).
-- [ ] **Escarpa das paterae chega a ~39 graus (inclinação 0,8) e a câmera não tem limite de
-  inclinação.** A primeira pessoa sobe e desce a escarpa direto (ver o item "Primeira pessoa
-  segue a função de altura"). Também não foi conferido com o app rodando se o skirt do LOD
-  esconde a emenda nos chunks que cortam a escarpa, onde a diferença de altura entre níveis é a
-  maior do terreno de Io.
+- [ ] **Paredão das paterae chega a ~60 graus (inclinação 1,7) e a câmera não tem limite de
+  inclinação.** A primeira pessoa sobe e desce o paredão direto (ver o item "Primeira pessoa
+  segue a função de altura"). Nas capturas de chão, da borda e aéreas não apareceu rachadura de
+  LOD no paredão, mas o skirt não foi conferido de propósito nos chunks que cortam o paredão,
+  onde a diferença de altura entre níveis é a maior do terreno de Io.
 - [ ] **Anel de extensão de Io (`far_field.rs`) cobre só 22 km além da borda e não tem
   paterae.** `IO_FAR_FIELD` usa 1 anel de blocos de 22 km (até 33 km do centro), para caber no
   `far` de 50 km da câmera visto do centro. Com a altitude livre do voo livre, a borda externa do

@@ -6,10 +6,10 @@ use super::{
 };
 use crate::far_field::FarFieldConfig;
 use crate::height::comb::{Add2, FlattenColorNearOrigin, FlattenNearOrigin};
-use crate::height::noise::PerlinFbm;
+use crate::height::noise::{PerlinFbm, PerlinRidged};
 use crate::height::patches::ColorPatches;
 use crate::height::patera::{
-    CarvePaterae, PateraColorField, PateraScale, PateraSpec, generate_patera_specs,
+    CarvePaterae, OutlineJitter, PateraColorField, PateraScale, PateraSpec, generate_patera_specs,
 };
 use crate::height::slope::SlopeColorField;
 use crate::height::{arc, arc_color};
@@ -65,20 +65,41 @@ const IO_HALO_WIDTH_FRACTION: f32 = 0.4;
 
 /// Medidas das paterae de Io. As reais têm em média ~40 km de diâmetro e 0,5 a 2,5 km de
 /// profundidade, maiores que o recorte de 22 km; aqui ficam paterae pequenas (2,4 a 6 km de
-/// diâmetro) com centenas de metros de profundidade, para caberem várias no recorte. A escarpa
-/// chega a 0,8 de inclinação (~39 graus). Valores de partida, a calibrar com o app rodando.
+/// diâmetro) com centenas de metros de profundidade, para caberem várias no recorte. O paredão
+/// chega a 1,7 de inclinação (~60 graus) e o talude ao pé dele começa em ~0,7 (~35 graus, perto
+/// do ângulo de repouso de detritos). Valores de partida, a calibrar com o app rodando.
 const IO_PATERA_SCALE: PateraScale = PateraScale {
     radius_min_m: 1200.0,
     radius_max_m: 3000.0,
     depth_min_m: 150.0,
     depth_max_m: 400.0,
-    max_scarp_slope: 0.8,
+    max_scarp_slope: 1.7,
     outline_amplitude_max: 0.08,
     outer_margin_fraction: IO_HALO_WIDTH_FRACTION,
 };
 
+/// Comprimento de onda da primeira oitava da irregularidade da borda das paterae, em metros.
+/// As oitavas seguintes descem até ~45 m: reentrâncias e esporões do paredão.
+const IO_PATERA_JITTER_WAVELENGTH_M: f32 = 360.0;
+
+/// Oitavas da irregularidade da borda das paterae.
+const IO_PATERA_JITTER_OCTAVES: u32 = 4;
+
+/// Deslocamento máximo da borda das paterae pela irregularidade, em metros. Menor que a margem
+/// do halo, então não muda o espaçamento entre paterae nem a distância à clareira de spawn.
+const IO_PATERA_JITTER_AMPLITUDE_M: f32 = 90.0;
+
+/// Comprimento de onda das cristas de pressão da crosta de lava no piso das paterae, em metros.
+const IO_FLOOR_RIDGE_WAVELENGTH_M: f32 = 220.0;
+
+/// Altura das cristas de pressão no piso das paterae, em metros.
+const IO_FLOOR_RIDGE_AMPLITUDE_M: f32 = 9.0;
+
 /// Piso da patera: lava silicática escura (RGBA linear).
 const IO_PATERA_FLOOR_COLOR: [f32; 4] = [0.09, 0.08, 0.07, 1.0];
+
+/// Paredão da patera: rocha exposta, mais escura e menos avermelhada que o halo (RGBA linear).
+const IO_PATERA_WALL_COLOR: [f32; 4] = [0.26, 0.17, 0.11, 1.0];
 
 /// Halo ao redor da patera: depósito avermelhado de enxofre de cadeia curta (RGBA linear).
 const IO_HALO_COLOR: [f32; 4] = [0.58, 0.24, 0.13, 1.0];
@@ -133,9 +154,7 @@ pub(super) fn io_recipe(profile: &MoonProfile) -> TerrainRecipe {
         shape: TerrainShape::Square,
     };
 
-    let paterae = io_paterae(seed);
-
-    let terrain_with_clearing = io_relief(seed, calibration.base_frequency, paterae.clone());
+    let terrain_with_clearing = io_relief(seed, calibration.base_frequency);
 
     // a inclinação vem só das planícies: a escarpa das paterae já tem a cor própria
     let slope_color = SlopeColorField {
@@ -157,10 +176,12 @@ pub(super) fn io_recipe(profile: &MoonProfile) -> TerrainRecipe {
 
     let patera_color = PateraColorField {
         base: frost,
-        paterae,
+        paterae: io_paterae(seed),
         floor_color: IO_PATERA_FLOOR_COLOR,
         halo_color: IO_HALO_COLOR,
+        wall_color: IO_PATERA_WALL_COLOR,
         halo_width_fraction: IO_HALO_WIDTH_FRACTION,
+        outline_jitter: Some(io_patera_outline_jitter(seed)),
     };
 
     let color_with_clearing = FlattenColorNearOrigin {
@@ -192,13 +213,22 @@ pub(super) fn io_recipe(profile: &MoonProfile) -> TerrainRecipe {
 fn io_relief(
     seed: u32,
     base_frequency: f32,
-    paterae: Vec<PateraSpec>,
 ) -> Add2<FlattenNearOrigin<CarvePaterae<PerlinFbm>>, PerlinFbm> {
-    let carved = CarvePaterae::new(io_plains(seed, base_frequency), paterae);
     Add2 {
-        a: FlattenNearOrigin::new(carved, SPAWN_CLEARING_RADIUS_M, SPAWN_CLEARING_BLEND_M),
+        a: FlattenNearOrigin::new(
+            io_carved_plains(seed, base_frequency),
+            SPAWN_CLEARING_RADIUS_M,
+            SPAWN_CLEARING_BLEND_M,
+        ),
         b: io_fine_detail(seed),
     }
+}
+
+/// Planícies com as paterae escavadas: borda irregular e cristas de pressão no piso.
+fn io_carved_plains(seed: u32, base_frequency: f32) -> CarvePaterae<PerlinFbm> {
+    CarvePaterae::new(io_plains(seed, base_frequency), io_paterae(seed))
+        .with_outline_jitter(io_patera_outline_jitter(seed))
+        .with_floor_relief(arc(io_floor_ridges(seed)))
 }
 
 /// Ondulação de grande escala das planícies de Io, centrada em zero.
@@ -223,6 +253,35 @@ fn io_paterae(seed: u32) -> Vec<PateraSpec> {
         SPAWN_CLEARING_RADIUS_M + SPAWN_CLEARING_BLEND_M,
         &IO_PATERA_SCALE,
     )
+}
+
+/// Irregularidade da borda das paterae, com semente própria. O relevo e a cor chamam esta
+/// mesma função, para o paredão e a cor dele coincidirem.
+fn io_patera_outline_jitter(seed: u32) -> OutlineJitter {
+    OutlineJitter {
+        noise: arc(PerlinFbm {
+            perlin: Perlin::new(seed.wrapping_add(3)),
+            freq: 1.0 / IO_PATERA_JITTER_WAVELENGTH_M,
+            octaves: IO_PATERA_JITTER_OCTAVES,
+            lacunarity: 2.0,
+            gain: 0.5,
+            amplitude: 1.0,
+        }),
+        amplitude_m: IO_PATERA_JITTER_AMPLITUDE_M,
+    }
+}
+
+/// Cristas de pressão da crosta de lava no piso das paterae, com semente própria.
+fn io_floor_ridges(seed: u32) -> PerlinRidged {
+    PerlinRidged {
+        perlin: Perlin::new(seed.wrapping_add(4)),
+        freq: 1.0 / IO_FLOOR_RIDGE_WAVELENGTH_M,
+        octaves: 2,
+        lacunarity: 2.0,
+        gain: 0.5,
+        amplitude: IO_FLOOR_RIDGE_AMPLITUDE_M,
+        z_anisotropy: 1.0,
+    }
 }
 
 /// Máscara de ruído das manchas de geada de SO2, com semente própria.
@@ -316,7 +375,7 @@ mod tests {
         let base_frequency = io_profile().terrain.base_frequency;
         for seed in [1_u32, 42, 99, 501, 31_337] {
             let plains = io_plains(seed, base_frequency);
-            let carved = CarvePaterae::new(io_plains(seed, base_frequency), io_paterae(seed));
+            let carved = io_carved_plains(seed, base_frequency);
             for ring in 0..=14 {
                 let radius = reach * ring as f32 / 14.0;
                 for step in 0..64 {
@@ -347,7 +406,7 @@ mod tests {
         let seed = profile.terrain.seed;
         let recipe = io_recipe(&profile);
         let plateau = FlattenNearOrigin::new(
-            CarvePaterae::new(io_plains(seed, profile.terrain.base_frequency), io_paterae(seed)),
+            io_carved_plains(seed, profile.terrain.base_frequency),
             SPAWN_CLEARING_RADIUS_M,
             SPAWN_CLEARING_BLEND_M,
         )

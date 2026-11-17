@@ -1,13 +1,77 @@
 //! Paterae de Io: depressões vulcânicas de piso plano (lava solidificada) cercadas por uma
 //! escarpa íngreme, com contorno irregular. Sem borda elevada, como nas paterae reais, que são
 //! caldeiras de colapso e não crateras de impacto.
+//!
+//! A escarpa tem o perfil de uma parede de colapso: a borda quebra em pouco espaço, o paredão
+//! desce íngreme pela maior parte da profundidade e um talude de detritos, menos inclinado, faz a
+//! transição côncava até o piso.
 
-use super::{ColorSource, HeightSource};
+use super::{ColorSource, HeightFn, HeightSource};
 use bevy::prelude::Vec2;
 use eigc_common::math::{lerp4, smoothstep};
 
 /// Número de harmônicos que deformam o contorno circular da patera (ordens 2, 3 e 4).
 pub const OUTLINE_HARMONICS: usize = 3;
+
+/// Fração da largura da escarpa, a partir da borda, em que a inclinação cresce de zero até a do
+/// paredão (quebra da borda arredondada, sem quina).
+const RIM_ROUNDING_FRACTION: f32 = 0.04;
+
+/// Fração da largura da escarpa, a partir da borda, onde o paredão termina e o talude começa.
+const CLIFF_END_FRACTION: f32 = 0.25;
+
+/// Fração da profundidade descida até o pé do paredão; o resto fica para o talude.
+const CLIFF_DROP_FRACTION: f32 = 0.6;
+
+/// Maior inclinação do perfil normalizado (fração da profundidade por fração da largura), no
+/// paredão. A inclinação máxima em metros é `SCARP_PEAK_NORMALIZED_SLOPE * depth_m /
+/// scarp_width_m`. O talude começa com ~0,4 dessa inclinação e se achata até o piso.
+pub const SCARP_PEAK_NORMALIZED_SLOPE: f32 =
+    CLIFF_DROP_FRACTION / (CLIFF_END_FRACTION - RIM_ROUNDING_FRACTION / 2.0);
+
+/// Fração da profundidade já descida em `t`, a posição na escarpa como fração da largura
+/// (0 na borda, 1 no pé do talude). Vale 0 para `t <= 0` e 1 para `t >= 1`, é monotônica e tem
+/// derivada contínua, exceto no pé do paredão, onde a inclinação cai de propósito.
+pub fn scarp_profile(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    let slope = SCARP_PEAK_NORMALIZED_SLOPE;
+    if t < RIM_ROUNDING_FRACTION {
+        slope * t * t / (2.0 * RIM_ROUNDING_FRACTION)
+    } else if t < CLIFF_END_FRACTION {
+        slope * (t - RIM_ROUNDING_FRACTION / 2.0)
+    } else {
+        let u = (t - CLIFF_END_FRACTION) / (1.0 - CLIFF_END_FRACTION);
+        CLIFF_DROP_FRACTION + (1.0 - CLIFF_DROP_FRACTION) * (1.0 - (1.0 - u) * (1.0 - u))
+    }
+}
+
+/// Irregularidade da borda em planta (reentrâncias de colapso e esporões do paredão), em escala
+/// menor que a dos harmônicos do contorno. O mesmo valor precisa ir para o relevo
+/// (`CarvePaterae`) e para a cor (`PateraColorField`), senão a cor do paredão sai do lugar.
+#[derive(Clone)]
+pub struct OutlineJitter {
+    /// Ruído no plano XZ, em [-1, 1] (valores fora são cortados).
+    pub noise: HeightFn,
+    /// Deslocamento máximo da borda, em metros (positivo alarga a patera).
+    pub amplitude_m: f32,
+}
+
+impl OutlineJitter {
+    /// Deslocamento da borda no ponto, em metros.
+    fn offset_at(&self, x: f32, z: f32) -> f32 {
+        self.noise.height_at(x, z).clamp(-1.0, 1.0) * self.amplitude_m
+    }
+}
+
+/// Deslocamento da borda no ponto, em metros (zero sem irregularidade).
+fn jitter_at(jitter: Option<&OutlineJitter>, x: f32, z: f32) -> f32 {
+    jitter.map_or(0.0, |jitter| jitter.offset_at(x, z))
+}
+
+/// Maior deslocamento possível da borda, em metros.
+fn jitter_reach(jitter: Option<&OutlineJitter>) -> f32 {
+    jitter.map_or(0.0, |jitter| jitter.amplitude_m.abs())
+}
 
 /// Medidas de uma patera.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -55,10 +119,17 @@ impl PateraSpec {
         )
     }
 
-    /// Peso do piso no ponto: `1` no piso plano, `0` fora da borda, transição suave na escarpa.
-    pub fn floor_weight_at(&self, x: f32, z: f32) -> f32 {
+    /// Posição do ponto na escarpa, em fração da largura: negativa fora da borda, 0 na borda,
+    /// 1 no pé do talude e maior que 1 no piso. `rim_offset_m` desloca a borda (positivo alarga).
+    pub fn scarp_fraction_at(&self, x: f32, z: f32, rim_offset_m: f32) -> f32 {
         let (distance, rim) = self.distance_and_rim(x, z);
-        1.0 - smoothstep(rim - self.scarp_width_m, rim, distance)
+        (rim + rim_offset_m - distance) / self.scarp_width_m
+    }
+
+    /// Peso do piso no ponto (fração da profundidade descida, pelo perfil da escarpa): `1` no
+    /// piso plano, `0` fora da borda.
+    pub fn floor_weight_at(&self, x: f32, z: f32) -> f32 {
+        scarp_profile(self.scarp_fraction_at(x, z, 0.0))
     }
 }
 
@@ -73,8 +144,8 @@ pub struct PateraScale {
     pub depth_min_m: f32,
     /// Maior profundidade, em metros.
     pub depth_max_m: f32,
-    /// Inclinação máxima da escarpa (subida/avanço). Define a largura da escarpa a partir da
-    /// profundidade: o perfil em smoothstep chega a 1,5 vez a inclinação média.
+    /// Inclinação máxima da escarpa (subida/avanço), a do paredão. Define a largura da escarpa
+    /// a partir da profundidade (ver `SCARP_PEAK_NORMALIZED_SLOPE`).
     pub max_scarp_slope: f32,
     /// Maior amplitude relativa de cada harmônico do contorno.
     pub outline_amplitude_max: f32,
@@ -153,8 +224,7 @@ fn draw_patera_spec(
         ),
         radius_m,
         depth_m,
-        // derivada máxima do smoothstep é 1,5 / largura
-        scarp_width_m: 1.5 * depth_m / scale.max_scarp_slope,
+        scarp_width_m: SCARP_PEAK_NORMALIZED_SLOPE * depth_m / scale.max_scarp_slope,
         outline_amplitudes,
         outline_phases_rad,
     }
@@ -170,9 +240,9 @@ fn hash01(seed: u32, index: u32) -> f32 {
     (z >> 40) as f32 / (1_u64 << 24) as f32
 }
 
-/// Escava paterae numa fonte de altura: dentro da borda a altura desce suavemente pela escarpa
-/// até um piso plano. O nível do piso de cada patera é a média da fonte ao longo da borda menos
-/// a profundidade, calculada uma vez em `new`. Onde duas depressões se cruzam vale a mais funda.
+/// Escava paterae numa fonte de altura: dentro da borda a altura desce pela escarpa até um piso
+/// plano. O nível do piso de cada patera é a média da fonte ao longo da borda menos a
+/// profundidade, calculada uma vez em `new`. Onde duas depressões se cruzam vale a mais funda.
 pub struct CarvePaterae<S: HeightSource> {
     /// Fonte de altura escavada.
     pub source: S,
@@ -180,6 +250,11 @@ pub struct CarvePaterae<S: HeightSource> {
     pub paterae: Vec<PateraSpec>,
     /// Altura do piso de cada patera, na mesma ordem de `paterae`, em metros.
     pub floor_heights: Vec<f32>,
+    /// Irregularidade da borda em planta; `None` deixa só o contorno dos harmônicos.
+    pub outline_jitter: Option<OutlineJitter>,
+    /// Relevo somado ao piso (ex.: cristas de pressão da crosta de lava), em metros. Some
+    /// subindo a escarpa junto com o peso do piso.
+    pub floor_relief: Option<HeightFn>,
 }
 
 impl<S: HeightSource> CarvePaterae<S> {
@@ -207,7 +282,21 @@ impl<S: HeightSource> CarvePaterae<S> {
             source,
             paterae,
             floor_heights,
+            outline_jitter: None,
+            floor_relief: None,
         }
+    }
+
+    /// Acrescenta a irregularidade da borda em planta.
+    pub fn with_outline_jitter(mut self, jitter: OutlineJitter) -> Self {
+        self.outline_jitter = Some(jitter);
+        self
+    }
+
+    /// Acrescenta relevo ao piso.
+    pub fn with_floor_relief(mut self, relief: HeightFn) -> Self {
+        self.floor_relief = Some(relief);
+        self
     }
 }
 
@@ -215,18 +304,28 @@ impl<S: HeightSource> HeightSource for CarvePaterae<S> {
     fn height_at(&self, x: f32, z: f32) -> f32 {
         let full = self.source.height_at(x, z);
         let point = Vec2::new(x, z);
+        let jitter = self.outline_jitter.as_ref();
+        let reach = jitter_reach(jitter);
         self.paterae
             .iter()
             .zip(&self.floor_heights)
-            .filter(|(spec, _)| point.distance(spec.center) < spec.max_rim_radius())
-            .map(|(spec, &floor)| floor + (full - floor) * (1.0 - spec.floor_weight_at(x, z)))
+            .filter(|(spec, _)| point.distance(spec.center) < spec.max_rim_radius() + reach)
+            .map(|(spec, &floor)| {
+                let weight = scarp_profile(spec.scarp_fraction_at(x, z, jitter_at(jitter, x, z)));
+                let relief = self
+                    .floor_relief
+                    .as_ref()
+                    .map_or(0.0, |relief| relief.height_at(x, z));
+                let floor = floor + relief;
+                floor + (full - floor) * (1.0 - weight)
+            })
             .fold(full, f32::min)
     }
 }
 
-/// Pinta as paterae por cima de uma fonte de cor: piso escuro de lava silicática, que clareia
-/// subindo a escarpa, e um halo de depósito avermelhado em anel ao redor da borda, que some até
-/// `halo_width_fraction` do raio além dela.
+/// Pinta as paterae por cima de uma fonte de cor: halo de depósito avermelhado em anel ao redor
+/// da borda, que some até `halo_width_fraction` do raio além dela; rocha exposta no paredão; e
+/// piso escuro de lava silicática, que sobe pelo talude misturado aos detritos.
 pub struct PateraColorField<C: ColorSource> {
     /// Cor de fundo fora das paterae.
     pub base: C,
@@ -236,6 +335,10 @@ pub struct PateraColorField<C: ColorSource> {
     pub floor_color: [f32; 4],
     /// Cor (RGBA linear) do halo.
     pub halo_color: [f32; 4],
+    /// Cor (RGBA linear) da rocha exposta no paredão.
+    pub wall_color: [f32; 4],
+    /// Irregularidade da borda, a mesma passada a `CarvePaterae`.
+    pub outline_jitter: Option<OutlineJitter>,
     /// Largura do halo além da borda, em fração do raio da borda.
     pub halo_width_fraction: f32,
 }
@@ -243,16 +346,22 @@ pub struct PateraColorField<C: ColorSource> {
 impl<C: ColorSource> ColorSource for PateraColorField<C> {
     fn color_at(&self, x: f32, z: f32) -> [f32; 4] {
         let point = Vec2::new(x, z);
+        let jitter = self.outline_jitter.as_ref();
         let mut color = self.base.color_at(x, z);
         for spec in &self.paterae {
-            let reach = spec.max_rim_radius() * (1.0 + self.halo_width_fraction);
+            let reach =
+                spec.max_rim_radius() * (1.0 + self.halo_width_fraction) + jitter_reach(jitter);
             if point.distance(spec.center) >= reach {
                 continue;
             }
             let (distance, rim) = spec.distance_and_rim(x, z);
             let halo = 1.0 - smoothstep(rim, rim * (1.0 + self.halo_width_fraction), distance);
+            let t = spec.scarp_fraction_at(x, z, jitter_at(jitter, x, z));
+            let wall = smoothstep(0.0, 2.0 * RIM_ROUNDING_FRACTION, t);
+            let floor = smoothstep(CLIFF_END_FRACTION, 1.0, t);
             color = lerp4(color, self.halo_color, halo);
-            color = lerp4(color, self.floor_color, spec.floor_weight_at(x, z));
+            color = lerp4(color, self.wall_color, wall);
+            color = lerp4(color, self.floor_color, floor);
         }
         color
     }
