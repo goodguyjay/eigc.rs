@@ -2,7 +2,7 @@ use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::{Mesh, Vec2};
 use eigc_terrain::height::{ColorSource, HeightSource};
 use eigc_terrain::mesh::{build_terrain_mesh, build_terrain_mesh_with_color};
-use eigc_terrain::params::TerrainParams;
+use eigc_terrain::params::{TerrainParams, TerrainShape};
 
 /// Uma implementação de HeightSource que sempre retorna altura zero.
 struct FlatHeight;
@@ -38,6 +38,7 @@ fn flat_height_produces_flat_mesh_with_upward_normals() {
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
         vertical_exaggeration: 1.0,
+        shape: TerrainShape::Square,
     };
 
     let mesh = build_terrain_mesh(params, &FlatHeight);
@@ -73,6 +74,7 @@ fn mesh_without_color_source_has_no_color_attribute() {
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
         vertical_exaggeration: 1.0,
+        shape: TerrainShape::Square,
     };
 
     let mesh = build_terrain_mesh(params, &FlatHeight);
@@ -91,6 +93,7 @@ fn mesh_with_color_source_includes_non_uniform_vertex_color_attribute() {
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
         vertical_exaggeration: 1.0,
+        shape: TerrainShape::Square,
     };
 
     let mesh = build_terrain_mesh_with_color(params, &FlatHeight, Some(&SplitColor));

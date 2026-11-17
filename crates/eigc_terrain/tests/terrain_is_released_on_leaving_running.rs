@@ -11,7 +11,7 @@ use eigc_moons::{ActiveMoonProfileHandle, AppState};
 use eigc_terrain::chunks::{TerrainChunk, TerrainLodStats, spawn_terrain_chunks};
 use eigc_terrain::height::{HeightSource, arc};
 use eigc_terrain::lod::TerrainLodConfig;
-use eigc_terrain::params::TerrainParams;
+use eigc_terrain::params::{TerrainParams, TerrainShape};
 use eigc_terrain::pipeline::{HeightResource, TerrainPlugin};
 
 /// Fonte de altura plana usada só para teste.
@@ -45,6 +45,7 @@ fn small_params() -> TerrainParams {
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
         vertical_exaggeration: 1.0,
+        shape: TerrainShape::Square,
     }
 }
 

@@ -17,7 +17,7 @@ use eigc_terrain::chunks::{
 };
 use eigc_terrain::height::{HeightSource, arc};
 use eigc_terrain::lod::{ChunkCoord, LOD_LEVEL_COUNT, TerrainLodConfig};
-use eigc_terrain::params::TerrainParams;
+use eigc_terrain::params::{TerrainParams, TerrainShape};
 use eigc_terrain::pipeline::{HeightResource, TerrainPlugin};
 use std::time::Duration;
 
@@ -72,6 +72,7 @@ fn test_params() -> TerrainParams {
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
         vertical_exaggeration: 1.0,
+        shape: TerrainShape::Square,
     }
 }
 

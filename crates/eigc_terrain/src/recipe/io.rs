@@ -13,7 +13,7 @@ use crate::height::patera::{
 };
 use crate::height::slope::SlopeColorField;
 use crate::height::{arc, arc_color};
-use crate::params::TerrainParams;
+use crate::params::{TerrainParams, TerrainShape};
 use bevy::prelude::Vec2;
 use eigc_moons::profile::MoonProfile;
 use noise::Perlin;
@@ -121,6 +121,7 @@ pub(super) fn io_recipe(profile: &MoonProfile) -> TerrainRecipe {
         line_dir: Vec2::from(calibration.feature_direction).normalize(),
         seed,
         vertical_exaggeration: VERTICAL_EXAGGERATION,
+        shape: TerrainShape::Square,
     };
 
     let paterae = io_paterae(seed);

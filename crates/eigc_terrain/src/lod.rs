@@ -77,6 +77,24 @@ pub(crate) fn distance_to_chunk(focus: Vec3, center: Vec2, chunk_size: f32) -> f
     Vec3::new(dx, focus.y, dz).length()
 }
 
+/// Diz se o chunk toca o círculo de raio `radius_m` centrado na origem. Chunks totalmente fora
+/// do círculo não são criados nem medidos.
+///
+/// Usa o ponto do retângulo do chunk mais próximo da origem, então um chunk que só tem um canto
+/// dentro do círculo conta como dentro, mesmo com o centro fora.
+pub(crate) fn chunk_touches_disc(
+    coord: ChunkCoord,
+    terrain_size: f32,
+    chunks_per_side: u32,
+    radius_m: f32,
+) -> bool {
+    let half = chunk_size(terrain_size, chunks_per_side) * 0.5;
+    let center = chunk_center(coord, terrain_size, chunks_per_side);
+    let nearest_x = (center.x.abs() - half).max(0.0);
+    let nearest_z = (center.y.abs() - half).max(0.0);
+    nearest_x * nearest_x + nearest_z * nearest_z < radius_m * radius_m
+}
+
 /// Converte o erro medido de um chunk em distâncias-limite por nível.
 ///
 /// Um erro de `e` metros a `d` metros da câmera ocupa `e * screen_scale / d` pixels, então o nível
@@ -535,6 +553,78 @@ mod tests {
 
         let order: Vec<ChunkCoord> = plan.iter().map(|request| request.coord).collect();
         assert_eq!(order, vec![nearest, second_nearest, coarsen_me]);
+    }
+
+    /// Grade de 16x16 chunks de 100 m num terreno de 1600 m, com o círculo inscrito (raio 800 m).
+    const DISC_GRID_SIDE: u32 = 16;
+    const DISC_RADIUS: f32 = TEST_TERRAIN_SIZE * 0.5;
+
+    fn touches_disc(ix: u32, iz: u32) -> bool {
+        chunk_touches_disc(
+            ChunkCoord { ix, iz },
+            TEST_TERRAIN_SIZE,
+            DISC_GRID_SIDE,
+            DISC_RADIUS,
+        )
+    }
+
+    /// Testa que o chunk do meio entra e os quatro chunks dos cantos ficam de fora.
+    #[test]
+    fn chunk_touches_disc_keeps_the_middle_and_drops_the_corners() {
+        assert!(touches_disc(8, 8));
+        let last = DISC_GRID_SIDE - 1;
+        for (ix, iz) in [(0, 0), (last, 0), (0, last), (last, last)] {
+            assert!(
+                !touches_disc(ix, iz),
+                "canto ({ix}, {iz}) deveria ficar fora"
+            );
+        }
+    }
+
+    /// Testa que um chunk com o centro fora do círculo, mas um canto dentro, conta como dentro, e
+    /// que o vizinho totalmente fora não conta.
+    #[test]
+    fn chunk_touches_disc_counts_a_chunk_that_crosses_the_edge() {
+        let center = chunk_center(
+            ChunkCoord { ix: 15, iz: 11 },
+            TEST_TERRAIN_SIZE,
+            DISC_GRID_SIDE,
+        );
+        assert!(
+            center.length() > DISC_RADIUS,
+            "o centro deveria estar fora do círculo"
+        );
+        assert!(touches_disc(15, 11));
+        assert!(!touches_disc(15, 12));
+    }
+
+    /// Testa que o resultado é simétrico: espelhar ou trocar os eixos da grade não muda nada.
+    #[test]
+    fn chunk_touches_disc_is_symmetric_across_the_grid() {
+        let last = DISC_GRID_SIDE - 1;
+        for ix in 0..DISC_GRID_SIDE {
+            for iz in 0..DISC_GRID_SIDE {
+                let expected = touches_disc(ix, iz);
+                assert_eq!(touches_disc(last - ix, iz), expected);
+                assert_eq!(touches_disc(ix, last - iz), expected);
+                assert_eq!(touches_disc(iz, ix), expected);
+            }
+        }
+    }
+
+    /// Testa que a grade de 4x4 dos testes de LOD (círculo inscrito) mantém os 16 chunks.
+    #[test]
+    fn chunk_touches_disc_keeps_every_chunk_of_a_coarse_grid() {
+        for ix in 0..4 {
+            for iz in 0..4 {
+                assert!(chunk_touches_disc(
+                    ChunkCoord { ix, iz },
+                    TEST_TERRAIN_SIZE,
+                    4,
+                    DISC_RADIUS
+                ));
+            }
+        }
     }
 
     proptest! {

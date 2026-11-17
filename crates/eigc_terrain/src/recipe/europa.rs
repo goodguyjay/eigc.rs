@@ -4,13 +4,15 @@ use super::{
     SPAWN_CLEARING_BLEND_M, SPAWN_CLEARING_RADIUS_M, TERRAIN_RES, TERRAIN_SIZE_M, TerrainRecipe,
     VERTICAL_EXAGGERATION, appearance_and_material, chunked_lod_config,
 };
-use crate::height::comb::{Add2, Bias, FlattenColorNearOrigin, FlattenNearOrigin, Scale};
+use crate::height::comb::{
+    Add2, Bias, FadeToFloorBeyondRadius, FlattenColorNearOrigin, FlattenNearOrigin, Scale,
+};
 use crate::height::heightmap::HeightmapHeight;
 use crate::height::linea::{LineaField, LineaScale, generate_linea_specs};
 use crate::height::noise::PerlinFbm;
 use crate::height::tint::TerrainTintField;
 use crate::height::{HeightSource, arc, arc_color};
-use crate::params::TerrainParams;
+use crate::params::{TerrainParams, TerrainShape};
 use bevy::prelude::Vec2;
 use eigc_moons::profile::MoonProfile;
 use noise::Perlin;
@@ -23,6 +25,35 @@ const EUROPA_HEIGHTMAP_PNG: &[u8] =
 /// Metadados RON do heightmap embutido (escala em metros e faixa de elevação).
 const EUROPA_HEIGHTMAP_RON: &str =
     include_str!("../../../../assets/terrain/europa/europa_rhadamanthys_patch_heightmap.ron");
+
+/// Raio do terreno de Europa, em metros: o círculo inscrito no recorte quadrado. Fora dele não há
+/// malha, e a altura já desceu até o piso (ver `EDGE_FLOOR_HEIGHT_M`). Todos os raios da borda e do
+/// limite jogável saem deste.
+const TERRAIN_DISC_RADIUS_M: f32 = TERRAIN_SIZE_M * 0.5;
+
+/// Largura, em metros, da rampa da borda: a altura começa a descer a `TERRAIN_DISC_RADIUS_M`
+/// menos isto (9,5 km do centro) e chega ao piso no raio do terreno. Valor de partida, sem
+/// calibração visual.
+const EDGE_FADE_WIDTH_M: f32 = 1500.0;
+
+/// Altura do piso plano em que a borda termina, em metros. Precisa ficar abaixo do ponto mais
+/// baixo do relevo dentro da rampa (o mínimo medido, com lineae e detalhe, é ~-311 m), senão a
+/// rampa subiria; o teste `europa_edge_floor_is_below_the_whole_relief` guarda isso. Valor de
+/// partida, sem calibração visual.
+const EDGE_FLOOR_HEIGHT_M: f32 = -400.0;
+
+/// Folga, em metros, entre o raio jogável e a borda do terreno. Maior que `EDGE_FADE_WIDTH_M` com
+/// sobra de 200 m, para o raio jogável ficar antes do início da rampa. Valor de partida, sem
+/// calibração visual.
+const PLAYABLE_MARGIN_M: f32 = 1700.0;
+
+/// Raio, em metros, do círculo em que o jogador pode andar em Europa (9,3 km do centro). Fica
+/// antes do início da rampa da borda (9,5 km): dali o ombro da rampa esconde o piso e o contorno
+/// em escada dos chunks, e quase não deixa ver as estrelas abaixo dele. A câmera deve usar esta
+/// função, e não repetir o número.
+pub fn playable_radius_m() -> f32 {
+    TERRAIN_DISC_RADIUS_M - PLAYABLE_MARGIN_M
+}
 
 /// Distância correspondente a 1 pixel do DTM, em metros.
 const DTM_PIXEL_M: f32 = 227.65;
@@ -146,7 +177,8 @@ const MOTTLE_SEED_SALT: u32 = 0x5EED_C010;
 /// A forma macro vem de um DTM real (USGS/Galileo) recentrado em zero e exagerado
 /// verticalmente, por cima entram lineae de centenas de metros e uma rugosidade fina procedural.
 /// Cor por inclinação e altura relativa do DTM, com manchas pela posição
-/// (`europa_terrain_color`); as lineae não entram na cor.
+/// (`europa_terrain_color`); as lineae não entram na cor. A borda desce até um piso plano, e o
+/// terreno é um disco: o círculo inscrito no recorte (`TERRAIN_DISC_RADIUS_M`).
 pub(super) fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
     let calibration = &profile.terrain;
 
@@ -171,6 +203,7 @@ pub(super) fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         line_dir: ridge_direction,
         seed,
         vertical_exaggeration: VERTICAL_EXAGGERATION,
+        shape: TerrainShape::Disc,
     };
 
     let terrain_color = europa_terrain_color(
@@ -209,10 +242,18 @@ pub(super) fn europa_recipe(profile: &MoonProfile) -> TerrainRecipe {
         SPAWN_CLEARING_BLEND_M,
     );
 
+    // a rampa envolve o relevo inteiro (depois da clareira), então atenua lineae e detalhe junto
+    let terrain_with_edge = FadeToFloorBeyondRadius {
+        source: terrain_with_clearing,
+        floor_height: EDGE_FLOOR_HEIGHT_M,
+        fade_start_radius_m: TERRAIN_DISC_RADIUS_M - EDGE_FADE_WIDTH_M,
+        fade_end_radius_m: TERRAIN_DISC_RADIUS_M,
+    };
+
     let (appearance, material_properties) = appearance_and_material(profile);
 
     TerrainRecipe {
-        height: arc(terrain_with_clearing),
+        height: arc(terrain_with_edge),
         params: terrain_params,
         appearance,
         material_properties,
@@ -364,6 +405,26 @@ mod tests {
         }
 
         assert!(rms_difference(&dtm_only, 24.0) < 0.85 * rms_difference(&hybrid, 24.0));
+    }
+
+    /// Testa que o raio jogável fica antes do início da rampa da borda, com folga de pelo menos
+    /// 150 m, e que o raio do disco é o mesmo que `TerrainParams::disc_radius_m` calcula a partir
+    /// do tamanho do recorte.
+    #[test]
+    fn playable_radius_stays_before_the_edge_ramp_with_margin() {
+        let fade_start = TERRAIN_DISC_RADIUS_M - EDGE_FADE_WIDTH_M;
+        assert!(playable_radius_m() <= fade_start - 150.0);
+
+        let params = TerrainParams {
+            size: TERRAIN_SIZE_M,
+            res: 2,
+            freq: 1.0,
+            line_dir: Vec2::X,
+            seed: 0,
+            vertical_exaggeration: VERTICAL_EXAGGERATION,
+            shape: TerrainShape::Disc,
+        };
+        assert_eq!(params.disc_radius_m(), TERRAIN_DISC_RADIUS_M);
     }
 
     const ICE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];

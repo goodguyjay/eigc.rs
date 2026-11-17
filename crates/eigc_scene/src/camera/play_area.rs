@@ -42,6 +42,7 @@ pub(super) fn keep_inside_play_area(
 mod tests {
     use super::*;
     use bevy::prelude::{App, Update, Vec2};
+    use eigc_terrain::params::TerrainShape;
 
     /// Testa que dentro do recorte a posição não muda.
     #[test]
@@ -72,6 +73,7 @@ mod tests {
             line_dir: Vec2::X,
             seed: 0,
             vertical_exaggeration: 1.0,
+            shape: TerrainShape::Square,
         })
         .add_systems(Update, keep_inside_play_area);
         let entity = app

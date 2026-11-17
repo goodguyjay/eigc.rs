@@ -12,6 +12,7 @@ eigc_terrain.workspace = true
 noise.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
 ron.workspace = true
 
 [features]

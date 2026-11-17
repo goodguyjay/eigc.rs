@@ -6,6 +6,8 @@
 mod europa;
 mod io;
 
+pub use europa::playable_radius_m;
+
 use crate::far_field::FarFieldConfig;
 use crate::height::{ColorFn, HeightFn};
 use crate::lod::TerrainLodConfig;

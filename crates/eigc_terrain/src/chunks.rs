@@ -1,7 +1,9 @@
 //! Chunks do terreno: spawn inicial, medição de erro geométrico e troca de nível de LOD.
 //!
-//! Todos os chunks nascem de uma vez, com a malha do nível mais grosso, e daí em diante só
-//! trocam de malha. Assim nunca falta terreno e nenhum sistema de `Update` faz `spawn`.
+//! Todos os chunks que tocam o círculo inscrito no terreno nascem de uma vez, com a malha do
+//! nível mais grosso, e daí em diante só trocam de malha. Assim nunca falta terreno e nenhum
+//! sistema de `Update` faz `spawn`. Chunks totalmente fora do círculo não existem e não são
+//! medidos.
 //!
 //! O trabalho pesado roda fora da thread principal (`AsyncComputeTaskPool`):
 //! - a medição do erro de cada nível de cada chunk ([`measure_chunk_errors`]);
@@ -13,8 +15,8 @@ use crate::chunk_mesh::{ChunkRegion, build_chunk_mesh};
 use crate::height::{ColorFn, ColorSource, HeightFn, HeightSource};
 use crate::lod::{
     COARSEST_LEVEL, ChunkCoord, ChunkLodInput, LOD_LEVEL_COUNT, TerrainLodConfig, chunk_center,
-    chunk_size, chunk_vertex_count, distance_to_chunk, level_distance_thresholds,
-    plan_lod_updates,
+    chunk_size, chunk_touches_disc, chunk_vertex_count, distance_to_chunk,
+    level_distance_thresholds, plan_lod_updates,
 };
 use crate::lod_error::{LevelErrors, measure_level_errors};
 use crate::params::TerrainParams;
@@ -98,7 +100,16 @@ impl ChunkErrorTable {
     }
 }
 
-/// Spawna todos os chunks do terreno com a malha do nível mais grosso.
+/// Diz se o chunk fica fora da malha: só acontece com recorte em disco, para chunks que não
+/// tocam o círculo inscrito.
+fn chunk_outside_mesh(coord: ChunkCoord, params: &TerrainParams, chunks_per_side: u32) -> bool {
+    params
+        .mesh_disc_radius_m()
+        .is_some_and(|radius| !chunk_touches_disc(coord, params.size, chunks_per_side, radius))
+}
+
+/// Spawna os chunks do terreno com a malha do nível mais grosso. Com recorte em disco (ver
+/// [`TerrainParams::mesh_disc_radius_m`]), só os que tocam o círculo inscrito.
 ///
 /// O `material` é compartilhado por todos os chunks e pode ser de qualquer tipo de `Material`.
 /// Os chunks são despawnados ao sair de `AppState::Running`, o que solta as malhas, o material e
@@ -115,6 +126,9 @@ pub fn spawn_terrain_chunks<M: Material>(
     for iz in 0..lod.chunks_per_side {
         for ix in 0..lod.chunks_per_side {
             let coord = ChunkCoord { ix, iz };
+            if chunk_outside_mesh(coord, params, lod.chunks_per_side) {
+                continue;
+            }
             let center = chunk_center(coord, params.size, lod.chunks_per_side);
             let mesh = build_level_mesh(coord, COARSEST_LEVEL, params.size, lod, height, color);
 
@@ -170,13 +184,16 @@ pub fn measure_chunk_errors(
         .iter()
         .enumerate()
         .filter(|(_, entry)| matches!(entry, ErrorEntry::Unmeasured))
-        .map(|(index, _)| {
+        .filter_map(|(index, _)| {
             let coord = ChunkCoord {
                 ix: index as u32 % chunks_per_side,
                 iz: index as u32 / chunks_per_side,
             };
+            if chunk_outside_mesh(coord, &params, chunks_per_side) {
+                return None;
+            }
             let center = chunk_center(coord, params.size, chunks_per_side);
-            (distance_to_chunk(focus.position, center, size), index)
+            Some((distance_to_chunk(focus.position, center, size), index))
         })
         .collect();
     unmeasured.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));

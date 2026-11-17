@@ -6,7 +6,7 @@ use bevy::prelude::{
     Startup, Vec2,
 };
 use eigc_terrain::height::arc;
-use eigc_terrain::params::TerrainParams;
+use eigc_terrain::params::{TerrainParams, TerrainShape};
 use eigc_terrain::pipeline::{HeightResource, TerrainAppearance};
 use eigc_terrain::systems::{TerrainMaterialProperties, spawn_terrain};
 
@@ -30,6 +30,7 @@ fn spawn_terrain_creates_exactly_one_terrain_entity() {
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
         vertical_exaggeration: 1.0,
+        shape: TerrainShape::Square,
     };
 
     let terrain_appearance = TerrainAppearance {
@@ -79,6 +80,7 @@ fn spawn_terrain_applies_material_properties_from_resource() {
         line_dir: Vec2::new(1.0, 0.0),
         seed: 0,
         vertical_exaggeration: 1.0,
+        shape: TerrainShape::Square,
     };
 
     let terrain_appearance = TerrainAppearance {

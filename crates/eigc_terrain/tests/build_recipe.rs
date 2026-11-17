@@ -1,6 +1,7 @@
 //! Testes de integração para recipe::build_recipe. Cobre as quatro luas do enum MoonId
 
 use eigc_moons::profile::{MoonId, MoonProfile, SkyCalibration, TerrainCalibration};
+use eigc_terrain::params::TerrainShape;
 use eigc_terrain::recipe::build_recipe;
 use rstest::rstest;
 
@@ -206,4 +207,17 @@ fn io_recipe_relief_is_a_plain_around_zero_with_patera_depressions() {
 fn uncalibrated_moons_should_panic_instead_of_silently_reusing_europa(#[case] moon_id: MoonId) {
     let profile = minimal_profile_for(moon_id);
     let _ = build_recipe(&profile);
+}
+
+/// Testa que só Europa tem recorte redondo. Io continua quadrada: o anel de extensão começa na
+/// borda quadrada, e tirar os chunks dos cantos abriria buracos entre o recorte e o anel.
+#[test]
+fn only_europa_cuts_the_terrain_to_a_disc() {
+    let europa = build_recipe(&minimal_profile_for(MoonId::Europa));
+    assert_eq!(europa.params.shape, TerrainShape::Disc);
+    assert_eq!(europa.params.mesh_disc_radius_m(), Some(europa.params.size * 0.5));
+
+    let io = build_recipe(&minimal_profile_for(MoonId::Io));
+    assert_eq!(io.params.shape, TerrainShape::Square);
+    assert_eq!(io.params.mesh_disc_radius_m(), None);
 }
