@@ -15,6 +15,13 @@ mod shared;
 mod starfield;
 mod sun;
 
+/// Brilho da luz ambiente, igual em todas as luas. É o único preenchimento das sombras do sol: em
+/// Io, Júpiter fica quase na direção do sol e o planet shine ilumina as mesmas faces que ele. Com
+/// a exposição padrão e o sol de 4500 lux, 150 deixa a sombra da borda de uma patera em ~27 de
+/// 255 na tela contra ~145 do chão iluminado (escura, mas com o piso legível) e clareia o chão
+/// iluminado em ~4 níveis. O valor anterior (0,05) deixava toda sombra preta pura.
+const AMBIENT_BRIGHTNESS: f32 = 150.0;
+
 /// Texturas do céu, carregadas no início da simulação.
 #[derive(Resource)]
 pub struct SkyAssets {
@@ -81,7 +88,7 @@ impl SkySettings {
         Self {
             base_jupiter_dir: Vec3::from_array(sky.base_jupiter_dir).normalize(),
             sun_illuminance: 4500.0, // sol a ~5.2 UA, universal entre as quatro luas
-            ambient_brightness: 0.05,
+            ambient_brightness: AMBIENT_BRIGHTNESS,
             orbital_period_seconds: sky.orbital_period_seconds,
             orbit_normal: Vec3::Y,
             jupiter_libration_lat: sky.jupiter_libration_lat_deg.to_radians(),
@@ -372,7 +379,7 @@ mod tests {
         let settings = SkySettings::from_profile(&profile);
 
         assert_eq!(settings.sun_illuminance, 4500.0);
-        assert_eq!(settings.ambient_brightness, 0.05);
+        assert_eq!(settings.ambient_brightness, AMBIENT_BRIGHTNESS);
         assert_eq!(settings.orbit_normal, Vec3::Y);
 
         // derivado de constante fixa (~5.2 UA) e não do perfil da lua
