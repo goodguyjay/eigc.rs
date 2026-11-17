@@ -4,6 +4,7 @@ use super::{
     SPAWN_CLEARING_BLEND_M, SPAWN_CLEARING_RADIUS_M, TERRAIN_RES, TERRAIN_SIZE_M, TerrainRecipe,
     VERTICAL_EXAGGERATION, appearance_and_material, chunked_lod_config,
 };
+use crate::color_map::ColorMapConfig;
 use crate::far_field::FarFieldConfig;
 use crate::height::comb::{Add2, FlattenColorNearOrigin, FlattenNearOrigin};
 use crate::height::noise::{PerlinFbm, PerlinRidged};
@@ -134,6 +135,14 @@ const IO_FAR_FIELD: FarFieldConfig = FarFieldConfig {
     skirt_depth_factor: 0.35,
 };
 
+/// Mapa de cor de Io: 4096 texels nos 22 km do recorte dão ~5,4 m por texel, o espaçamento do
+/// nível mais fino do LOD, em qualquer distância. Na cor por vértice, o nível mais grosso (~43 m)
+/// errava a cor nas bordas das paterae em até 40 níveis de sRGB. Ocupa ~90 MB de GPU com os mips
+/// e leva menos de 1 s para assar em vários núcleos.
+const IO_COLOR_MAP: ColorMapConfig = ColorMapConfig {
+    texels_per_side: 4096,
+};
+
 /// Monta a receita de geração de terreno para Io.
 ///
 /// Não existe DTM público de Io com resolução útil para um recorte local, então o relevo é todo
@@ -201,6 +210,7 @@ pub(super) fn io_recipe(profile: &MoonProfile) -> TerrainRecipe {
         color: Some(arc_color(color_with_clearing)),
         lod: chunked_lod_config(),
         far_field: Some(IO_FAR_FIELD),
+        color_map: Some(IO_COLOR_MAP),
     }
 }
 

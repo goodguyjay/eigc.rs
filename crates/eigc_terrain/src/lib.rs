@@ -2,6 +2,8 @@
 
 /// Construção da malha de um chunk do terreno (grade, normais, skirt).
 pub mod chunk_mesh;
+/// Mapa de cor do terreno: a cor da receita assada numa textura do recorte inteiro.
+pub mod color_map;
 /// Componentes e sistemas dos chunks do terreno (spawn inicial e troca de nível de LOD).
 pub mod chunks;
 /// Anel de extensão só visual ao redor do recorte (continua relevo e cor além da borda).

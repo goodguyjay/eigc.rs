@@ -1,6 +1,7 @@
 //! Material do terreno com mistura de duas escalas de textura.
 //!
-//! A textura de superfície tem ~1 mm por texel na escala física (tile de 2 m).
+//! A textura de superfície tem ~1 mm por texel na escala física (tile de 2 m). O material também
+//! pode trocar a cor por vértice por um mapa de cor do recorte inteiro (ver `color_map`).
 use crate::surface_textures::TerrainSurfaceTextures;
 use bevy::asset::Asset;
 use bevy::math::Vec4;
@@ -48,6 +49,23 @@ pub struct TerrainDetailExtension {
     #[sampler(106)]
     #[dependency]
     pub macro_arm: Option<Handle<Image>>,
+    /// `x`: 1.0 com o mapa de cor habilitado, `y`: lado (m) do recorte quadrado, centrado na
+    /// origem, que o mapa cobre. Desligado, o shader usa a cor por vértice.
+    #[uniform(107)]
+    pub color_map_params: Vec4,
+    /// Mapa de cor do recorte (sRGB), no lugar da cor por vértice dentro dele.
+    #[texture(108)]
+    #[sampler(109)]
+    #[dependency]
+    pub color_map: Option<Handle<Image>>,
+}
+
+impl TerrainDetailExtension {
+    /// Liga o mapa de cor `map`, que cobre o quadrado de lado `terrain_size_m` centrado na origem.
+    pub fn enable_color_map(&mut self, map: Handle<Image>, terrain_size_m: f32) {
+        self.color_map_params = Vec4::new(1.0, terrain_size_m, 0.0, 0.0);
+        self.color_map = Some(map);
+    }
 }
 
 impl MaterialExtension for TerrainDetailExtension {
@@ -65,6 +83,8 @@ pub fn build_terrain_extension(surface: Option<&TerrainSurfaceTextures>) -> Terr
             macro_diffuse: None,
             macro_normal: None,
             macro_arm: None,
+            color_map_params: Vec4::ZERO,
+            color_map: None,
         };
     };
 
@@ -73,6 +93,8 @@ pub fn build_terrain_extension(surface: Option<&TerrainSurfaceTextures>) -> Terr
         macro_diffuse: Some(surface.diffuse.clone()),
         macro_normal: Some(surface.normal.clone()),
         macro_arm: Some(surface.arm.clone()),
+        color_map_params: Vec4::ZERO,
+        color_map: None,
     }
 }
 
@@ -106,6 +128,21 @@ mod tests {
 
         assert_eq!(extension.params.w, 0.0);
         assert!(extension.macro_diffuse.is_none());
+    }
+
+    /// Testa se a extensão nasce sem mapa de cor (o shader usa a cor por vértice) e se ligar o
+    /// mapa vincula a textura e guarda o lado do recorte.
+    #[test]
+    fn color_map_starts_off_and_enabling_it_binds_the_map() {
+        let mut extension = build_terrain_extension(Some(&textures()));
+        assert_eq!(extension.color_map_params.x, 0.0);
+        assert!(extension.color_map.is_none());
+
+        extension.enable_color_map(Handle::<Image>::default(), 22000.0);
+
+        assert_eq!(extension.color_map_params.x, 1.0);
+        assert_eq!(extension.color_map_params.y, 22000.0);
+        assert!(extension.color_map.is_some());
     }
 
     /// Testa se a extensão com texturas tem parâmetros coerentes: a escala macro é maior que 1.0 e

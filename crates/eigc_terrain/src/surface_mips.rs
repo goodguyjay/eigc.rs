@@ -6,7 +6,7 @@ use bevy::render::render_resource::TextureFormat;
 
 /// Como os canais de uma textura devem ser combinados ao reduzir a resolução.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum MipKind {
+pub(crate) enum MipKind {
     /// Cor em sRGB
     SrgbColor,
     /// Dados lineares (ex.: ARM)
@@ -63,7 +63,12 @@ fn mip_level_count(width: u32, height: u32) -> u32 {
 }
 
 /// Devolve os bytes `nível 0 + nível 1 + ...` (RGBA8, um após o outro) e a quantidade de níveis.
-fn build_mip_chain(base: &[u8], width: u32, height: u32, kind: MipKind) -> (Vec<u8>, u32) {
+pub(crate) fn build_mip_chain(
+    base: &[u8],
+    width: u32,
+    height: u32,
+    kind: MipKind,
+) -> (Vec<u8>, u32) {
     let levels = mip_level_count(width, height);
     let mut data = Vec::with_capacity(base.len() + base.len() / 3);
     data.extend_from_slice(base);
@@ -166,7 +171,7 @@ fn srgb_to_linear(value: f32) -> f32 {
 }
 
 /// Converte um valor de cor de linear para sRGB (0.0..1.0).
-fn linear_to_srgb(value: f32) -> f32 {
+pub(crate) fn linear_to_srgb(value: f32) -> f32 {
     if value <= 0.003_130_8 {
         value * 12.92
     } else {

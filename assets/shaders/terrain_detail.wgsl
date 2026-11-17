@@ -12,6 +12,10 @@
 // tile (fileiras de marcas), que o deslocamento sozinho preserva.
 // Isso depende de os escalares do StandardMaterial estarem neutros (branco, roughness 1.0), o que
 // `terrain_material_neutral_scalars` garante.
+//
+// O tingimento vem da cor por vértice ou, quando a receita tem mapa de cor (`color_map.rs`), do
+// mapa dentro do recorte, que não perde resolução quando o chunk engrossa. Fora do recorte (anel
+// de extensão) vale sempre a cor por vértice.
 
 #import bevy_pbr::{
     pbr_fragment::pbr_input_from_standard_material,
@@ -35,6 +39,11 @@
 @group(#{MATERIAL_BIND_GROUP}) @binding(104) var macro_normal_sampler: sampler;
 @group(#{MATERIAL_BIND_GROUP}) @binding(105) var macro_arm_texture: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(106) var macro_arm_sampler: sampler;
+// x: 1.0 com o mapa de cor habilitado, y: lado (m) do recorte quadrado, centrado na origem,
+// coberto pelo mapa.
+@group(#{MATERIAL_BIND_GROUP}) @binding(107) var<uniform> color_map_params: vec4<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(108) var color_map_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(109) var color_map_sampler: sampler;
 
 // Lado do triângulo da grade, em tiles. Maior = menos regiões de transição (e menos mistura
 // fantasma), mas a repetição de cada trecho dura mais.
@@ -229,10 +238,22 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         }
 
 #ifdef VERTEX_COLORS
-        let vertex_tint = in.color;
+        var vertex_tint = in.color;
 #else
-        let vertex_tint = vec4<f32>(1.0);
+        var vertex_tint = vec4<f32>(1.0);
 #endif
+        if color_map_params.x > 0.5 {
+            let map_uv = in.world_position.xz / color_map_params.y + 0.5;
+            let map_color = textureSampleGrad(
+                color_map_texture,
+                color_map_sampler,
+                map_uv,
+                dpdx(map_uv) * gradient_scale,
+                dpdy(map_uv) * gradient_scale,
+            );
+            let inside_map = all(map_uv >= vec2<f32>(0.0)) && all(map_uv <= vec2<f32>(1.0));
+            vertex_tint = select(vertex_tint, map_color, inside_map);
+        }
         pbr_input.material.base_color = vertex_tint * diffuse;
         pbr_input.material.perceptual_roughness = arm.g;
         pbr_input.material.metallic = mix(pbr_input.material.metallic, arm.b, far_weight);

@@ -2,6 +2,7 @@
 //! terreno usando o HeightFn e TerrainParams fornecidos e troca o LOD de cada chunk conforme a
 //! distância ao foco.
 
+use crate::color_map::{PendingColorMap, finish_color_map, start_color_map};
 use crate::chunks::{
     ChunkErrorTable, TerrainLodStats, finish_chunk_builds, measure_chunk_errors,
     spawn_terrain_chunks, update_terrain_lod,
@@ -71,6 +72,12 @@ impl Plugin for TerrainPlugin {
             )
             .add_systems(
                 Update,
+                finish_color_map
+                    .run_if(in_state(AppState::Running))
+                    .run_if(resource_exists::<PendingColorMap>),
+            )
+            .add_systems(
+                Update,
                 (measure_chunk_errors, finish_chunk_builds, update_terrain_lod)
                     .chain()
                     .run_if(in_state(AppState::Running))
@@ -87,6 +94,7 @@ impl Plugin for TerrainPlugin {
 /// segundo plano ainda em andamento.
 fn clear_terrain_session(mut commands: Commands) {
     commands.remove_resource::<TerrainSurfaceTextures>();
+    commands.remove_resource::<PendingColorMap>();
     commands.remove_resource::<TerrainParams>();
     commands.remove_resource::<TerrainLodConfig>();
     commands.remove_resource::<ColorResource>();
@@ -145,6 +153,15 @@ fn build_terrain_from_loaded_profile(
         recipe.height.as_ref(),
         recipe.color.as_deref(),
     );
+    if let (Some(color), Some(config)) = (&recipe.color, recipe.color_map) {
+        start_color_map(
+            &mut commands,
+            color.clone(),
+            recipe.params.size,
+            config,
+            material.clone(),
+        );
+    }
     if let Some(far_field) = &recipe.far_field {
         spawn_far_field(
             &mut commands,

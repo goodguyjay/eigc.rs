@@ -8,6 +8,7 @@ mod io;
 
 pub use europa::playable_radius_m;
 
+use crate::color_map::ColorMapConfig;
 use crate::far_field::FarFieldConfig;
 use crate::height::{ColorFn, HeightFn};
 use crate::lod::TerrainLodConfig;
@@ -56,6 +57,9 @@ pub struct TerrainRecipe {
     /// Anel de extensão só visual ao redor do recorte. `None` deixa o recorte terminar na borda
     /// (ex.: Europa, cujo DTM só repete o pixel da borda fora do recorte).
     pub far_field: Option<FarFieldConfig>,
+    /// Mapa de cor do recorte, no lugar da cor por vértice dentro dele. Só vale com `color`
+    /// presente. `None` mantém a cor por vértice, que perde resolução nos níveis grossos do LOD.
+    pub color_map: Option<ColorMapConfig>,
 }
 
 /// Ponto de entrada para montar a receita de geração de terreno de uma lua específica.

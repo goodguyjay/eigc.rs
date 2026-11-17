@@ -224,3 +224,19 @@ fn only_europa_cuts_the_terrain_to_a_disc() {
     assert_eq!(io.params.shape, TerrainShape::Square);
     assert_eq!(io.params.mesh_disc_radius_m(), None);
 }
+
+/// Testa que só Io troca a cor por vértice pelo mapa de cor, e com resolução de pelo menos a do
+/// nível mais fino do LOD. Europa fica na cor por vértice.
+#[test]
+fn only_io_bakes_a_color_map_at_least_as_fine_as_the_finest_lod() {
+    let europa = build_recipe(&minimal_profile_for(MoonId::Europa));
+    assert!(europa.color_map.is_none());
+
+    let io = build_recipe(&minimal_profile_for(MoonId::Io));
+    let map = io.color_map.expect("Io deveria ter mapa de cor");
+    assert!(io.color.is_some(), "o mapa é assado a partir da cor da receita");
+    let texel_m = io.params.size / map.texels_per_side as f32;
+    let finest_vertex_m = io.params.size
+        / (io.lod.chunks_per_side * io.lod.quads_per_chunk[0]) as f32;
+    assert!(texel_m <= finest_vertex_m + 1e-3, "texel de {texel_m} m");
+}

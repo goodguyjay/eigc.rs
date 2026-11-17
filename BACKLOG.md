@@ -113,7 +113,8 @@
   `erro * escala_de_tela / distância <= max_screen_error_px`. A escala de tela vem do FOV e da
   altura da janela (`LodFocus.screen_scale`). Limitações conscientes: (1) o erro só considera
   altura, não a cor por vértice, que também perde resolução ao engrossar; o piso
-  `min_error_fraction` cobre isso de forma grosseira; (2) o erro é tratado como se fosse visto
+  `min_error_fraction` cobre isso de forma grosseira (Io já não depende disso dentro do recorte:
+  usa o mapa de cor de `color_map.rs`; Europa continua na cor por vértice); (2) o erro é tratado como se fosse visto
   de lado, o que é conservador para câmera alta olhando para baixo; (3) a medição amostra a grade
   do nível 0, então detalhe abaixo de ~10 m não entra no erro. `max_screen_error_px`,
   `min_error_fraction`, `in_flight_vertex_budget` e a resolução por nível (`europa_recipe`) são
