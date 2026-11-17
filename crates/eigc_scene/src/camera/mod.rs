@@ -1,5 +1,7 @@
 //! Câmera: primeira pessoa (padrão), voo livre de debug e orientação com lock em sol/Júpiter.
 
+/// Limite da área jogável da câmera em primeira pessoa (disco centrado na origem).
+pub mod bounds;
 /// Câmera em primeira pessoa: caminhada seguindo o terreno.
 pub mod first_person;
 /// Voo livre, modo de movimento de debug.

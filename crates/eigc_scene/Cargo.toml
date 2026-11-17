@@ -13,3 +13,6 @@ noise.workspace = true
 
 [features]
 dev = ["bevy/dynamic_linking"]
+
+[dev-dependencies]
+proptest.workspace = true
