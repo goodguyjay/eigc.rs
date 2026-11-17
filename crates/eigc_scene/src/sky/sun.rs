@@ -5,7 +5,9 @@ use crate::sky::{SkyAssets, SkyAssetsLoaded, SkySettings, SkyState};
 use bevy::app::App;
 use bevy::camera::CameraProjection;
 use bevy::camera::visibility::NoFrustumCulling;
-use bevy::light::{NotShadowCaster, NotShadowReceiver};
+use bevy::light::{
+    CascadeShadowConfig, CascadeShadowConfigBuilder, NotShadowCaster, NotShadowReceiver,
+};
 use bevy::prelude::{
     AlphaMode, Assets, Camera3d, Color, Commands, Component, DirectionalLight, GlobalAmbientLight,
     IntoScheduleConfigs, Mesh, Mesh3d, MeshMaterial3d, Meshable, Name, Plugin, Projection, Query,
@@ -19,6 +21,15 @@ use eigc_sim::SimSet;
 // O dobro do padrão do Bevy 0.18.1 (1,8): com o padrão, a rugosidade fina de Io sob sol baixo
 // mostra acne de sombra (pontos escuros em fileiras). Em Europa muda 0,17% dos pixels.
 const SUN_SHADOW_NORMAL_BIAS: f32 = 3.6;
+
+/// Distância à câmera, em metros, até onde o sol projeta sombra. O padrão do Bevy 0.18.1 (150 m)
+/// não alcança a sombra das bordas das paterae de Io: com 230 a 330 m de profundidade e o sol a
+/// ~25 graus, ela cobre 500 a 700 m do piso e precisa aparecer vista de cima da borda oposta.
+const SUN_SHADOW_MAX_DISTANCE_M: f32 = 3000.0;
+
+/// Fim da primeira cascata, em metros (o padrão do Bevy). As outras crescem em progressão
+/// geométrica até `SUN_SHADOW_MAX_DISTANCE_M` (com 4 cascatas: 10, 67, 448 e 3000 m).
+const SUN_SHADOW_FIRST_CASCADE_M: f32 = 10.0;
 
 /// Plugin que gerencia a luz do sol e o disco visual no céu.
 pub struct SunPlugin;
@@ -47,6 +58,16 @@ impl Plugin for SunPlugin {
     }
 }
 
+/// Cascatas de sombra do sol: alcance de `SUN_SHADOW_MAX_DISTANCE_M`, demais valores do padrão.
+fn sun_cascade_config() -> CascadeShadowConfig {
+    CascadeShadowConfigBuilder {
+        first_cascade_far_bound: SUN_SHADOW_FIRST_CASCADE_M,
+        maximum_distance: SUN_SHADOW_MAX_DISTANCE_M,
+        ..default()
+    }
+    .build()
+}
+
 /// Cria a luz direcional do sol e o disco visual no céu.
 fn spawn_sun(
     mut commands: Commands,
@@ -62,6 +83,7 @@ fn spawn_sun(
             shadow_normal_bias: SUN_SHADOW_NORMAL_BIAS,
             ..default()
         },
+        sun_cascade_config(),
         Transform::IDENTITY.looking_to(-settings.base_jupiter_dir.normalize(), Vec3::Y),
         SunLight,
         Name::new("SunLight"),
@@ -153,6 +175,22 @@ fn position_sun_disc(
 mod tests {
     use super::*;
     use bevy::prelude::PerspectiveProjection;
+
+    /// Testa se as cascatas de sombra alcançam a sombra da borda de uma patera de Io (330 m de
+    /// profundidade com o sol a 25 graus dá ~710 m) vista do outro lado de uma patera de ~2 km.
+    #[test]
+    fn sun_shadows_reach_past_a_patera_rim_shadow() {
+        let config = sun_cascade_config();
+
+        let rim_shadow_m = 330.0 / 25.0_f32.to_radians().tan();
+        let farthest = *config.bounds.last().expect("pelo menos uma cascata");
+        assert!(
+            (farthest - SUN_SHADOW_MAX_DISTANCE_M).abs() < 0.01,
+            "alcance de {farthest} m"
+        );
+        assert!(farthest >= 2000.0 + rim_shadow_m, "alcance de {farthest} m");
+        assert!(config.bounds.windows(2).all(|pair| pair[0] < pair[1]));
+    }
 
     /// Sem `SkySettings`, `position_sun_disc`/`update_sun_light` não devem rodar; com ela,
     /// devem atualizar o disco e a luz.
