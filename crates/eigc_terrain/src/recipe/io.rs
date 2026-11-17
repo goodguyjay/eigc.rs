@@ -14,6 +14,7 @@ use crate::height::patera::{
 };
 use crate::height::slope::SlopeColorField;
 use crate::height::{arc, arc_color};
+use crate::lod::TerrainLodConfig;
 use crate::params::{TerrainParams, TerrainShape};
 use bevy::prelude::Vec2;
 use eigc_moons::profile::MoonProfile;
@@ -143,6 +144,13 @@ const IO_COLOR_MAP: ColorMapConfig = ColorMapConfig {
     texels_per_side: 4096,
 };
 
+/// Piso do erro do LOD de Io como fração do espaçamento do nível (o padrão é 0,2). Com o mapa de
+/// cor, a cor não perde resolução quando o chunk engrossa, e o piso só precisa proteger a
+/// geometria. Medido sem o app (1080p, todos os chunks): 0,1 tira 21 a 23% dos vértices em relação
+/// a 0,2 (1,22 M para 0,96 M a pé no spawn), e abaixo de 0,1 nada muda porque o erro medido
+/// domina.
+const IO_MIN_ERROR_FRACTION: f32 = 0.1;
+
 /// Monta a receita de geração de terreno para Io.
 ///
 /// Não existe DTM público de Io com resolução útil para um recorte local, então o relevo é todo
@@ -208,7 +216,10 @@ pub(super) fn io_recipe(profile: &MoonProfile) -> TerrainRecipe {
         appearance,
         material_properties,
         color: Some(arc_color(color_with_clearing)),
-        lod: chunked_lod_config(),
+        lod: TerrainLodConfig {
+            min_error_fraction: IO_MIN_ERROR_FRACTION,
+            ..chunked_lod_config()
+        },
         far_field: Some(IO_FAR_FIELD),
         color_map: Some(IO_COLOR_MAP),
     }

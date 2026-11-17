@@ -240,3 +240,16 @@ fn only_io_bakes_a_color_map_at_least_as_fine_as_the_finest_lod() {
         / (io.lod.chunks_per_side * io.lod.quads_per_chunk[0]) as f32;
     assert!(texel_m <= finest_vertex_m + 1e-3, "texel de {texel_m} m");
 }
+
+/// Testa que Io usa um piso de erro do LOD menor que o de Europa (a cor de Io vem do mapa, não da
+/// malha) e que o resto da configuração de LOD é o mesmo nas duas luas.
+#[test]
+fn io_relaxes_only_the_lod_error_floor() {
+    let europa = build_recipe(&minimal_profile_for(MoonId::Europa)).lod;
+    let io = build_recipe(&minimal_profile_for(MoonId::Io)).lod;
+
+    assert!(io.min_error_fraction < europa.min_error_fraction);
+    assert_eq!(io.quads_per_chunk, europa.quads_per_chunk);
+    assert_eq!(io.chunks_per_side, europa.chunks_per_side);
+    assert_eq!(io.max_screen_error_px, europa.max_screen_error_px);
+}
