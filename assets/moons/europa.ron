@@ -15,11 +15,15 @@ MoonProfile(
     walkable: true,
     sky: SkyCalibration(
         orbital_period_seconds: 306822.0, // 3.551181 dias * 86400
-        base_jupiter_dir: (0.35, 0.25, -0.90),
+        // modelo simplificado: o recorte (Rhadamanthys, ~19 N, ~200 W) fica no hemisfério oposto a
+        // Júpiter, e no céu real Júpiter nunca apareceria lá
+        geometry: Fixed(
+            base_jupiter_dir: (0.35, 0.25, -0.90),
+            sun_elevation_deg: 25.0,
+        ),
         jupiter_libration_lat_deg: 2.0,
         jupiter_libration_lon_deg: 2.0,
         jupiter_ang_radius: 0.10384709, // (11.9 * 0.5).to_radians()
-        sun_elevation_deg: 25.0,
         eclipse_soft_deg: 1.0,
         planet_shine_max: 0.006,
     ),

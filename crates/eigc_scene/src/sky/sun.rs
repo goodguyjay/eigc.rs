@@ -11,7 +11,7 @@ use bevy::light::{
 use bevy::prelude::{
     AlphaMode, Assets, Camera3d, Color, Commands, Component, DirectionalLight, GlobalAmbientLight,
     IntoScheduleConfigs, Mesh, Mesh3d, MeshMaterial3d, Meshable, Name, Plugin, Projection, Query,
-    Res, ResMut, Sphere, StandardMaterial, Transform, Update, Vec3, With, Without,
+    Res, ResMut, Sphere, StandardMaterial, Transform, Update, Vec3, Visibility, With, Without,
     any_with_component, default, in_state, on_message, resource_exists,
 };
 use bevy::state::state_scoped::DespawnOnExit;
@@ -131,17 +131,25 @@ fn update_sun_light(
             .looking_to(-state.sun_dir.normalize(), Vec3::Y)
             .rotation;
 
-        light.illuminance = settings.sun_illuminance * state.eclipse_factor.clamp(0.0, 1.0);
+        let daylight = state.daylight_factor.clamp(0.0, 1.0);
+        light.illuminance =
+            settings.sun_illuminance * state.eclipse_factor.clamp(0.0, 1.0) * daylight;
 
-        ambient.brightness = settings.ambient_brightness;
+        // A luz ambiente clareia as sombras do terreno com a luz do dia espalhada; à noite
+        // (só nos céus de lugar real) ela some, e o chão fica com o planet shine.
+        ambient.brightness = settings.ambient_brightness * daylight;
     }
 }
 
-/// Posiciona e escala o disco do sol com base na direção do sol e no perfil da lua ativo.
+/// Posiciona e escala o disco do sol com base na direção do sol e no perfil da lua ativo. Com o
+/// disco inteiro abaixo do horizonte, ele fica escondido.
 fn position_sun_disc(
     state: Res<SkyState>,
     cam_q: Query<(&Transform, &Projection), (With<Camera3d>, Without<SunDisc>)>,
-    mut disc_q: Query<&mut Transform, (With<SunDisc>, Without<Camera3d>)>,
+    mut disc_q: Query<
+        (&mut Transform, Option<&mut Visibility>),
+        (With<SunDisc>, Without<Camera3d>),
+    >,
 ) {
     let Ok((cam_t, proj)) = cam_q.single() else {
         return;
@@ -152,9 +160,17 @@ fn position_sun_disc(
         _ => return,
     };
 
-    let Ok(mut t) = disc_q.single_mut() else {
+    let Ok((mut t, visibility)) = disc_q.single_mut() else {
         return;
     };
+
+    if let Some(mut visibility) = visibility {
+        *visibility = if state.daylight_factor > 0.0 {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+    }
 
     let dir_to_sun = state.sun_dir.normalize();
     let (position, scale) = place_celestial_disc(

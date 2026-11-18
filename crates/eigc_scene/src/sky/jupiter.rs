@@ -1,21 +1,47 @@
 //! Plugin das propriedades de Júpiter no céu.
 
 use crate::sky::shared::place_celestial_disc;
-use crate::sky::{SkyAssets, SkyAssetsLoaded, SkySettings, SkyState};
+use crate::sky::{SkyAssets, SkyAssetsLoaded, SkySettings, SkyState, animate_sky_physical};
 use bevy::app::App;
-use bevy::asset::RenderAssetUsages;
+use bevy::asset::Asset;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::camera::{Camera3d, CameraProjection};
 use bevy::light::NotShadowCaster;
+use bevy::math::Vec4;
+use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::{
-    AlphaMode, Assets, Color, Commands, Component, Handle, Image, IntoScheduleConfigs, Mesh,
-    Mesh3d, MeshMaterial3d, Meshable, Name, Plugin, Projection, Quat, Query, Res, ResMut, Sphere,
+    AlphaMode, Assets, Color, Commands, Component, IntoScheduleConfigs, Mesh, Mesh3d,
+    MeshMaterial3d, Meshable, Name, Plugin, Projection, Quat, Query, Res, ResMut, Sphere,
     StandardMaterial, Transform, Update, Vec3, With, Without, any_with_component, default,
     in_state, on_message, resource_exists,
 };
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use bevy::reflect::TypePath;
+use bevy::render::render_resource::AsBindGroup;
+use bevy::shader::ShaderRef;
 use bevy::state::state_scoped::DespawnOnExit;
 use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonProfile};
+
+/// Caminho (relativo à raiz de assets) do shader de iluminação própria de Júpiter.
+const JUPITER_SHADER_PATH: &str = "shaders/jupiter_phase.wgsl";
+
+/// Material de Júpiter: o `StandardMaterial` dá a textura, e a extensão calcula a luz do sol.
+pub type JupiterMaterial = ExtendedMaterial<StandardMaterial, JupiterShading>;
+
+/// Iluminação própria de Júpiter: só o sol, sem as luzes da cena. A luz ambiente acenderia o lado
+/// noturno, e a `SunLight` se apaga com o sol abaixo do horizonte do recorte, mas o sol continua
+/// iluminando Júpiter (que fica cheio à noite).
+#[derive(Asset, AsBindGroup, TypePath, Debug, Clone)]
+pub struct JupiterShading {
+    /// `xyz`: direção para o sol, no espaço do mundo. `w`: iluminância do sol, em lux.
+    #[uniform(100)]
+    pub sun: Vec4,
+}
+
+impl MaterialExtension for JupiterShading {
+    fn fragment_shader() -> ShaderRef {
+        ShaderRef::Path(JUPITER_SHADER_PATH.into())
+    }
+}
 
 /// Plugin das propriedades de Júpiter no céu.
 pub struct JupiterPlugin;
@@ -24,7 +50,8 @@ pub struct JupiterPlugin;
 #[derive(Component)]
 struct Jupiter;
 
-/// Plugin que registra os sistemas para criar e posicionar Júpiter.
+/// Plugin que registra os sistemas para criar e posicionar Júpiter. O `JupiterMaterial` é
+/// registrado pelo `SkyPlugin`.
 impl Plugin for JupiterPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
@@ -35,48 +62,35 @@ impl Plugin for JupiterPlugin {
         )
             .add_systems(
                 Update,
-                place_and_scale_jupiter
+                (
+                    place_and_scale_jupiter,
+                    light_jupiter_with_the_sun
+                        .after(animate_sky_physical)
+                        .run_if(resource_exists::<Assets<JupiterMaterial>>),
+                )
                     .run_if(any_with_component::<Jupiter>)
                     .run_if(resource_exists::<SkySettings>),
             );
     }
 }
 
-/// Textura de oclusão preta de 1 texel. No `StandardMaterial`, a oclusão multiplica só a luz
-/// indireta (a luz ambiente, entre elas), e não a luz direta do sol.
-fn black_occlusion_texture(images: &mut Assets<Image>) -> Handle<Image> {
-    images.add(Image::new_fill(
-        Extent3d {
-            width: 1,
-            height: 1,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        &[0, 0, 0, 255],
-        TextureFormat::Rgba8Unorm,
-        RenderAssetUsages::RENDER_WORLD,
-    ))
-}
-
 /// Cria a entidade de Júpiter com os materiais apropriados.
 fn spawn_jupiter(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut mats: ResMut<Assets<StandardMaterial>>,
-    mut images: ResMut<Assets<Image>>,
+    mut mats: ResMut<Assets<JupiterMaterial>>,
     sky_assets: Res<SkyAssets>,
 ) {
-    let mat = mats.add(StandardMaterial {
-        base_color_texture: Some(sky_assets.jupiter_tex.clone()),
-        base_color: Color::srgb(1.0, 1.0, 1.0),
-        unlit: false,
-        reflectance: 0.0,
-        perceptual_roughness: 1.0,
-        alpha_mode: AlphaMode::Opaque,
-        // A luz ambiente existe para clarear as sombras do terreno. Em Júpiter, ela acenderia o
-        // lado noturno do disco, que só recebe luz do sol.
-        occlusion_texture: Some(black_occlusion_texture(&mut images)),
-        ..default()
+    let mat = mats.add(JupiterMaterial {
+        base: StandardMaterial {
+            base_color_texture: Some(sky_assets.jupiter_tex.clone()),
+            base_color: Color::srgb(1.0, 1.0, 1.0),
+            reflectance: 0.0,
+            perceptual_roughness: 1.0,
+            alpha_mode: AlphaMode::Opaque,
+            ..default()
+        },
+        extension: JupiterShading { sun: Vec4::ZERO },
     });
 
     let sphere_mesh = meshes.add(Mesh::from(Sphere::new(1.0).mesh().uv(64, 32)));
@@ -95,8 +109,30 @@ fn spawn_jupiter(
     ));
 }
 
+/// Uniform do sol para o shader de Júpiter: a direção para o sol e a iluminância cheia, sem o
+/// fator de dia do recorte nem o eclipse (que é a sombra de Júpiter sobre a lua, não sobre ele).
+fn jupiter_sun_uniform(sun_dir: Vec3, sun_illuminance: f32) -> Vec4 {
+    sun_dir.normalize_or_zero().extend(sun_illuminance)
+}
+
+/// Atualiza a direção do sol no material de Júpiter, a partir de `SkyState` (dinâmico).
+fn light_jupiter_with_the_sun(
+    settings: Res<SkySettings>,
+    state: Res<SkyState>,
+    jup_q: Query<&MeshMaterial3d<JupiterMaterial>, With<Jupiter>>,
+    mut mats: ResMut<Assets<JupiterMaterial>>,
+) {
+    let Ok(material) = jup_q.single() else {
+        return;
+    };
+    if let Some(material) = mats.get_mut(&material.0) {
+        material.extension.sun = jupiter_sun_uniform(state.sun_dir, settings.sun_illuminance);
+    }
+}
+
 /// Posiciona e escala Júpiter com base na direção do sol e no perfil da lua ativo.
 fn place_and_scale_jupiter(
+    settings: Res<SkySettings>,
     state: Res<SkyState>,
     active: Res<ActiveMoonProfileHandle>,
     profiles: Res<Assets<MoonProfile>>,
@@ -132,13 +168,10 @@ fn place_and_scale_jupiter(
     t.scale = Vec3::splat(scale);
 
     let forward = (-dir).normalize_or_zero();
-    let mut up_hint = Vec3::Y;
+    let mut up_hint = settings.celestial_north.normalize_or(Vec3::Y);
     let axis = up_hint.cross(forward).normalize_or_zero();
     if axis.length_squared() > 0.0 {
-        up_hint = Quat::from_axis_angle(
-            axis,
-            eigc_common::constants::JUPITER_OBLIQUITY_DEG.to_radians(),
-        ) * up_hint;
+        up_hint = Quat::from_axis_angle(axis, settings.jupiter_axis_tilt) * up_hint;
     }
 
     t.look_to(forward, up_hint);
@@ -151,8 +184,8 @@ fn place_and_scale_jupiter(
 mod tests {
     use super::*;
     use bevy::MinimalPlugins;
-    use bevy::prelude::{AssetApp, AssetPlugin, PerspectiveProjection, Startup};
-    use eigc_moons::{MoonId, SkyCalibration, TerrainCalibration};
+    use bevy::prelude::{AssetApp, AssetPlugin, Handle, Image, PerspectiveProjection, Startup};
+    use eigc_moons::{MoonId, SkyCalibration, SkyGeometry, TerrainCalibration};
 
     /// App mínimo que só cria Júpiter.
     fn app_with_spawned_jupiter() -> App {
@@ -160,8 +193,7 @@ mod tests {
         app.add_plugins(MinimalPlugins)
             .add_plugins(AssetPlugin::default())
             .init_asset::<Mesh>()
-            .init_asset::<StandardMaterial>()
-            .init_asset::<Image>()
+            .init_asset::<JupiterMaterial>()
             .insert_resource(SkyAssets {
                 jupiter_tex: Handle::<Image>::default(),
                 sun_tex: Handle::<Image>::default(),
@@ -185,30 +217,41 @@ mod tests {
         assert_eq!(jupiter.iter(app.world()).count(), 1);
     }
 
-    /// Regressão: com a luz ambiente em 150 (para clarear as sombras do terreno), o lado noturno
-    /// de Júpiter aparecia marrom e iluminado. A oclusão preta tira a luz ambiente do material
-    /// sem mexer na luz do sol.
+    /// Regressão: com o sol abaixo do horizonte do recorte, a `SunLight` se apaga, e Júpiter
+    /// (iluminado por ela) virava um disco preto à noite, quando deveria estar cheio. O material
+    /// próprio recebe o sol com a iluminância cheia, mesmo à noite e no eclipse.
     #[test]
-    fn jupiter_night_side_ignores_the_ambient_light() {
+    fn jupiter_stays_lit_by_the_sun_at_night() {
         let mut app = app_with_spawned_jupiter();
+        let settings = SkySettings {
+            sun_illuminance: 4500.0,
+            ..default()
+        };
+        let sun_dir = Vec3::new(0.0, -0.5, 1.0);
+        app.insert_resource(settings)
+            .insert_resource(SkyState {
+                sun_dir,
+                daylight_factor: 0.0,
+                eclipse_factor: 0.0,
+                ..default()
+            })
+            .add_systems(Update, light_jupiter_with_the_sun);
+        app.update();
 
         let mut jupiter = app
             .world_mut()
-            .query_filtered::<&MeshMaterial3d<StandardMaterial>, With<Jupiter>>();
+            .query_filtered::<&MeshMaterial3d<JupiterMaterial>, With<Jupiter>>();
         let handle = jupiter.single(app.world()).expect("deveria existir um Júpiter").0.clone();
-        let materials = app.world().resource::<Assets<StandardMaterial>>();
-        let occlusion = materials
-            .get(&handle)
-            .and_then(|material| material.occlusion_texture.clone())
-            .expect("Júpiter deveria ter textura de oclusão");
-
-        let image = app
+        let sun = app
             .world()
-            .resource::<Assets<Image>>()
-            .get(&occlusion)
-            .expect("a textura de oclusão deveria existir");
-        let data = image.data.as_ref().expect("a oclusão deveria ter dados na CPU");
-        assert_eq!(data[0], 0, "o canal vermelho (oclusão) deveria ser zero");
+            .resource::<Assets<JupiterMaterial>>()
+            .get(&handle)
+            .expect("o material de Júpiter deveria existir")
+            .extension
+            .sun;
+
+        assert!((sun.truncate() - sun_dir.normalize()).length() < 1e-6, "direção {sun:?}");
+        assert_eq!(sun.w, 4500.0);
     }
 
     fn test_profile(jupiter_angular_diameter_deg: f32) -> MoonProfile {
@@ -229,11 +272,13 @@ mod tests {
             walkable: true,
             sky: SkyCalibration {
                 orbital_period_seconds: 1000.0,
-                base_jupiter_dir: [1.0, 0.2, 0.0],
+                geometry: SkyGeometry::Fixed {
+                    base_jupiter_dir: [1.0, 0.2, 0.0],
+                    sun_elevation_deg: 20.0,
+                },
                 jupiter_libration_lat_deg: 0.0,
                 jupiter_libration_lon_deg: 0.0,
                 jupiter_ang_radius: 0.104_72,
-                sun_elevation_deg: 20.0,
                 eclipse_soft_deg: 1.0,
                 planet_shine_max: 0.006,
             },
@@ -306,6 +351,7 @@ mod tests {
             jupiter_dir,
             ..default()
         })
+        .insert_resource(SkySettings::default())
         .insert_resource(profiles)
         .insert_resource(ActiveMoonProfileHandle(handle))
         .add_systems(Update, place_and_scale_jupiter);

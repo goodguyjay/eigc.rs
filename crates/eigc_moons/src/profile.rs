@@ -43,21 +43,45 @@ pub struct TerrainCalibration {
     pub reflectance: f32,
 }
 
+/// Geometria do céu: de onde vêm a direção de Júpiter e o caminho do sol.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+pub enum SkyGeometry {
+    /// Modelo simplificado: Júpiter numa direção fixa e o sol girando a uma elevação constante em
+    /// torno da vertical. O sol nunca se põe. Usado por Europa, cujo recorte (Rhadamanthys) fica
+    /// no hemisfério oposto a Júpiter.
+    Fixed {
+        /// Direção base de Júpiter, no espaço do mundo (Y para cima).
+        base_jupiter_dir: [f32; 3],
+        /// Elevação do sol acima do horizonte, em graus, constante ao longo da órbita.
+        sun_elevation_deg: f32,
+    },
+    /// Lugar real do recorte na superfície da lua. A direção de Júpiter, o polo celeste e o
+    /// caminho do sol (o equador celeste) saem só daqui: há dia, noite e eclipse em toda órbita.
+    Site {
+        /// Latitude do recorte, em graus (positiva no hemisfério norte).
+        latitude_deg: f32,
+        /// Longitude do recorte medida a partir do ponto sub-joviano, em graus (positiva para
+        /// leste, o que deixa Júpiter a oeste no céu).
+        longitude_deg: f32,
+        /// Fração da órbita já decorrida no instante zero da simulação. Zero é o sol oposto a
+        /// Júpiter (Júpiter cheio); 0,5 é o eclipse.
+        start_orbit_fraction: f32,
+    },
+}
+
 /// Parâmetros de calibração do céu específicos por lua e ajustes artísticos de eclipse/planetshine.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SkyCalibration {
     /// Período orbital da lua ao redor de Júpiter em segundos
     pub orbital_period_seconds: f32,
-    /// Direção base de Júpiter
-    pub base_jupiter_dir: [f32; 3],
+    /// Geometria do céu (modelo simplificado ou lugar real do recorte).
+    pub geometry: SkyGeometry,
     /// Amplitude artística de libração de Júpiter em graus
     pub jupiter_libration_lat_deg: f32,
     /// Amplitude artística de libração de Júpiter em graus
     pub jupiter_libration_lon_deg: f32,
     /// Raio angular de Júpiter visto da lua em radianos
     pub jupiter_ang_radius: f32,
-    /// Elevação do sol acima do horizonte ao meio-dia local em graus
-    pub sun_elevation_deg: f32,
     /// Largura da transição suave de entrada/saída de eclipse em graus
     pub eclipse_soft_deg: f32,
     /// Intensidade máxima da luz refletida de Júpiter em lux

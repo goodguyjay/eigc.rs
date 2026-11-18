@@ -15,11 +15,15 @@ MoonProfile(
     walkable: true,
     sky: SkyCalibration(
         orbital_period_seconds: 152853.5, // 1.769138 dias * 86400
-        base_jupiter_dir: (0.344, 0.407, -0.846), // elevação 24°, 1° abaixo do sol; eclipse quase central
-        jupiter_libration_lat_deg: 2.0,
-        jupiter_libration_lon_deg: 2.0,
+        // lugar declarado do recorte: Júpiter a ~24 graus de elevação, a oeste
+        geometry: Site(
+            latitude_deg: 20.0,
+            longitude_deg: 64.0,
+            start_orbit_fraction: 0.16, // chegada de manhã, sol a ~30 graus subindo
+        ),
+        jupiter_libration_lat_deg: 0.0, // eixo de rotação normal à órbita: sem libração em latitude
+        jupiter_libration_lon_deg: 0.47, // 2 * excentricidade (0.0041), em graus
         jupiter_ang_radius: 0.16790067, // (19.24 * 0.5).to_radians()
-        sun_elevation_deg: 25.0,
         eclipse_soft_deg: 1.0,
         planet_shine_max: 0.016, // 0.006 de Europa * (19.24 / 11.9)^2, razão dos ângulos sólidos
     ),

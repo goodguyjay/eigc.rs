@@ -12,7 +12,7 @@ use bevy::prelude::{
 use bevy::state::app::StatesPlugin;
 use eigc_moons::{
     ActiveMoonProfileHandle, AppState, MoonId, MoonPlugin, MoonProfile, SkyCalibration,
-    TerrainCalibration,
+    SkyGeometry, TerrainCalibration,
 };
 use eigc_scene::sky::{SkyAssets, SkyPlugin};
 use eigc_sim::SimTime;
@@ -40,11 +40,13 @@ fn test_profile() -> MoonProfile {
         walkable: true,
         sky: SkyCalibration {
             orbital_period_seconds: 1000.0,
-            base_jupiter_dir: [1.0, 0.2, 0.0],
+            geometry: SkyGeometry::Fixed {
+                base_jupiter_dir: [1.0, 0.2, 0.0],
+                sun_elevation_deg: 20.0,
+            },
             jupiter_libration_lat_deg: 0.0,
             jupiter_libration_lon_deg: 0.0,
             jupiter_ang_radius: 0.104_72,
-            sun_elevation_deg: 20.0,
             eclipse_soft_deg: 1.0,
             planet_shine_max: 0.006,
         },

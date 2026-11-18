@@ -1,12 +1,14 @@
 //! Plugin de céu: Júpiter, planet shine e starfield, calibrados por lua ativa.
 
 use bevy::app::App;
+use bevy::pbr::MaterialPlugin;
 use bevy::prelude::{
-    AssetServer, Assets, Commands, GlobalAmbientLight, Handle, Image, IntoScheduleConfigs,
-    Message, MessageWriter, OnEnter, OnExit, Plugin, Quat, Res, ResMut, Resource, Update, Vec3, error, in_state,
-    resource_exists,
+    AssetApp, AssetServer, Assets, Commands, GlobalAmbientLight, Handle, Image,
+    IntoScheduleConfigs, Message, MessageWriter, OnEnter, OnExit, Plugin, Quat, Res, ResMut,
+    Resource, Update, Vec3, error, in_state, resource_exists,
 };
-use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonProfile};
+use bevy::render::RenderApp;
+use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonProfile, SkyGeometry};
 use eigc_sim::{SimSet, SimTime};
 
 mod jupiter;
@@ -49,6 +51,12 @@ pub struct SkyState {
     pub sun_dir: Vec3,
     /// Direção de Júpiter, normalizada
     pub jupiter_dir: Vec3,
+    /// Fator de dia, 0.0 = sol abaixo do horizonte, 1.0 = disco do sol inteiro acima dele. No
+    /// modelo `Fixed` o sol nunca se põe, e o fator vale sempre 1.0.
+    pub daylight_factor: f32,
+    /// Rotação do céu (estrelas) desde o instante zero. Identidade no modelo `Fixed`, em que as
+    /// estrelas ficam paradas.
+    pub sky_rotation: Quat,
 }
 
 /// Configurações físicas do céu, calibradas para a lua ativa.
@@ -62,8 +70,18 @@ pub struct SkySettings {
     pub ambient_brightness: f32,
     /// Período orbital, em segundos
     pub orbital_period_seconds: f32,
-    /// Normal do plano orbital
+    /// Eixo em torno do qual o sol gira, no sentido positivo, ao longo da órbita. No modelo
+    /// `Fixed` é a vertical; no `Site` é o polo sul celeste, porque o céu aparente gira para oeste.
     pub orbit_normal: Vec3,
+    /// Polo norte celeste, no espaço do mundo. Orienta o eixo de rotação de Júpiter no céu.
+    pub celestial_north: Vec3,
+    /// Inclinação extra do eixo de Júpiter em relação a `celestial_north`, em radianos. No
+    /// `Site` vale zero: as luas orbitam no plano do equador de Júpiter.
+    pub jupiter_axis_tilt: f32,
+    /// Fase da órbita no instante zero da simulação, em radianos (zero = sol oposto a Júpiter).
+    pub start_phase: f32,
+    /// Se as estrelas giram junto com o céu (`Site`) ou ficam paradas (`Fixed`).
+    pub stars_follow_sky: bool,
     /// Latitude de libração de Júpiter, em radianos
     pub jupiter_libration_lat: f32,
     /// Longitude de libração de Júpiter, em radianos
@@ -76,8 +94,34 @@ pub struct SkySettings {
     pub planet_shine_max: f32,
     /// Suavização do eclipse, em radianos
     pub eclipse_soft: f32,
-    /// Elevação do sol, em radianos
+    /// Elevação do sol acima do plano perpendicular a `orbit_normal`, em radianos. No `Fixed` é a
+    /// elevação acima do horizonte; no `Site` é a declinação do sol, zero.
     pub sun_elevation: f32,
+}
+
+/// Direções de um lugar real na superfície, no espaço do mundo (leste = +X, cima = +Y,
+/// norte = -Z).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SiteDirections {
+    /// Direção de Júpiter, no ponto sub-joviano do céu (paralaxe ignorada).
+    pub jupiter: Vec3,
+    /// Polo norte celeste.
+    pub celestial_north: Vec3,
+}
+
+/// Direções de Júpiter e do polo norte celeste vistas de um lugar na latitude e longitude dadas
+/// (graus; longitude medida a partir do ponto sub-joviano, positiva para leste).
+///
+/// Em coordenadas fixas na lua (X para Júpiter, Z para o polo norte), o lugar fica em
+/// `(cos lat cos lon, cos lat sin lon, sin lat)`, com leste `(-sin lon, cos lon, 0)` e norte
+/// `(-sin lat cos lon, -sin lat sin lon, cos lat)`.
+pub fn site_directions(latitude_deg: f32, longitude_deg: f32) -> SiteDirections {
+    let (sin_lat, cos_lat) = latitude_deg.to_radians().sin_cos();
+    let (sin_lon, cos_lon) = longitude_deg.to_radians().sin_cos();
+    SiteDirections {
+        jupiter: Vec3::new(-sin_lon, cos_lat * cos_lon, sin_lat * cos_lon),
+        celestial_north: Vec3::new(0.0, sin_lat, -cos_lat),
+    }
 }
 
 /// Constrói `SkySettings` a partir do `MoonProfile` ativo.
@@ -85,26 +129,77 @@ impl SkySettings {
     /// Constrói a calibração de céu a partir de `MoonProfile` ativo.
     pub fn from_profile(profile: &MoonProfile) -> Self {
         let sky = &profile.sky;
+        let geometry = match sky.geometry {
+            SkyGeometry::Fixed {
+                base_jupiter_dir,
+                sun_elevation_deg,
+            } => GeometrySettings {
+                base_jupiter_dir: Vec3::from_array(base_jupiter_dir).normalize(),
+                orbit_normal: Vec3::Y,
+                celestial_north: Vec3::Y,
+                jupiter_axis_tilt: eigc_common::constants::JUPITER_OBLIQUITY_DEG.to_radians(),
+                start_phase: 0.0,
+                stars_follow_sky: false,
+                sun_elevation: sun_elevation_deg.to_radians(),
+            },
+            SkyGeometry::Site {
+                latitude_deg,
+                longitude_deg,
+                start_orbit_fraction,
+            } => {
+                let site = site_directions(latitude_deg, longitude_deg);
+                GeometrySettings {
+                    base_jupiter_dir: site.jupiter,
+                    orbit_normal: -site.celestial_north,
+                    celestial_north: site.celestial_north,
+                    jupiter_axis_tilt: 0.0,
+                    start_phase: start_orbit_fraction * std::f32::consts::TAU,
+                    stars_follow_sky: true,
+                    sun_elevation: 0.0,
+                }
+            }
+        };
         Self {
-            base_jupiter_dir: Vec3::from_array(sky.base_jupiter_dir).normalize(),
+            base_jupiter_dir: geometry.base_jupiter_dir,
             sun_illuminance: 4500.0, // sol a ~5.2 UA, universal entre as quatro luas
             ambient_brightness: AMBIENT_BRIGHTNESS,
             orbital_period_seconds: sky.orbital_period_seconds,
-            orbit_normal: Vec3::Y,
+            orbit_normal: geometry.orbit_normal,
+            celestial_north: geometry.celestial_north,
+            jupiter_axis_tilt: geometry.jupiter_axis_tilt,
+            start_phase: geometry.start_phase,
+            stars_follow_sky: geometry.stars_follow_sky,
             jupiter_libration_lat: sky.jupiter_libration_lat_deg.to_radians(),
             jupiter_libration_lon: sky.jupiter_libration_lon_deg.to_radians(),
             sun_ang_radius: (0.53_f32 / 5.2).to_radians() * 0.5, // ~0.5° / 5.2 UA universal
             jupiter_ang_radius: sky.jupiter_ang_radius,
             planet_shine_max: sky.planet_shine_max,
             eclipse_soft: sky.eclipse_soft_deg.to_radians(),
-            sun_elevation: sky.sun_elevation_deg.to_radians(),
+            sun_elevation: geometry.sun_elevation,
         }
     }
+}
+
+/// Campos de `SkySettings` que dependem da geometria do céu.
+struct GeometrySettings {
+    base_jupiter_dir: Vec3,
+    orbit_normal: Vec3,
+    celestial_north: Vec3,
+    jupiter_axis_tilt: f32,
+    start_phase: f32,
+    stars_follow_sky: bool,
+    sun_elevation: f32,
 }
 
 /// Plugin de céu: Júpiter, planet shine e starfield, calibrados por lua ativa.
 impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
+        if app.get_sub_app(RenderApp).is_some() {
+            app.add_plugins(MaterialPlugin::<jupiter::JupiterMaterial>::default());
+        } else {
+            app.init_asset::<jupiter::JupiterMaterial>();
+        }
+
         app.add_message::<SkyAssetsLoaded>()
             .add_systems(
                 OnEnter(AppState::Running),
@@ -216,7 +311,8 @@ fn sky_state_at(settings: &SkySettings, t: f32) -> SkyState {
     let jup_wobble = Quat::from_axis_angle(right, wob_lat) * Quat::from_axis_angle(up, wob_lon);
     let jupiter_dir = (jup_wobble * settings.base_jupiter_dir).normalize();
 
-    let phase = (t / settings.orbital_period_seconds) * 2.0 * std::f32::consts::PI;
+    let phase =
+        (t / settings.orbital_period_seconds) * 2.0 * std::f32::consts::PI + settings.start_phase;
     let rot = Quat::from_axis_angle(up, phase);
     let horizon_dir = (-jupiter_dir).reject_from(up).normalize();
     let elevation = settings.sun_elevation;
@@ -230,11 +326,26 @@ fn sky_state_at(settings: &SkySettings, t: f32) -> SkyState {
     let planet_shine =
         (settings.planet_shine_max * phase_brightness).clamp(0.0, settings.planet_shine_max);
 
+    let sun_elevation_above_horizon = sun_dir.y.clamp(-1.0, 1.0).asin();
+    let daylight = eigc_common::math::smoothstep(
+        -settings.sun_ang_radius,
+        settings.sun_ang_radius,
+        sun_elevation_above_horizon,
+    );
+
+    let sky_rotation = if settings.stars_follow_sky {
+        Quat::from_axis_angle(up, phase - settings.start_phase)
+    } else {
+        Quat::IDENTITY
+    };
+
     SkyState {
         eclipse_factor: eclipse,
         planet_shine_factor: planet_shine,
         sun_dir,
         jupiter_dir,
+        daylight_factor: daylight,
+        sky_rotation,
     }
 }
 
@@ -276,11 +387,13 @@ mod tests {
             walkable: true,
             sky: SkyCalibration {
                 orbital_period_seconds: 100_000.0,
-                base_jupiter_dir: [1.0, 0.0, 0.0],
+                geometry: SkyGeometry::Fixed {
+                    base_jupiter_dir: [1.0, 0.0, 0.0],
+                    sun_elevation_deg: 30.0,
+                },
                 jupiter_libration_lat_deg: 4.0,
                 jupiter_libration_lon_deg: 8.0,
                 jupiter_ang_radius: 0.174_533, // 10° em radianos
-                sun_elevation_deg: 30.0,
                 eclipse_soft_deg: 2.0,
                 planet_shine_max: 0.01,
             },
@@ -308,7 +421,10 @@ mod tests {
     #[test]
     fn from_profile_converts_and_normalizes_base_jupiter_direction() {
         let mut profile = test_profile();
-        profile.sky.base_jupiter_dir = [2.0, 0.0, 0.0];
+        profile.sky.geometry = SkyGeometry::Fixed {
+            base_jupiter_dir: [2.0, 0.0, 0.0],
+            sun_elevation_deg: 30.0,
+        };
         let settings = SkySettings::from_profile(&profile);
 
         assert!((settings.base_jupiter_dir - Vec3::new(1.0, 0.0, 0.0)).length() < 1e-6);
@@ -318,7 +434,10 @@ mod tests {
     /// pelo centro de Júpiter em meia órbita.
     fn settings_with_central_eclipse() -> SkySettings {
         let mut profile = test_profile();
-        profile.sky.sun_elevation_deg = 0.0;
+        profile.sky.geometry = SkyGeometry::Fixed {
+            base_jupiter_dir: [1.0, 0.0, 0.0],
+            sun_elevation_deg: 0.0,
+        };
         profile.sky.jupiter_libration_lat_deg = 0.0;
         profile.sky.jupiter_libration_lon_deg = 0.0;
         SkySettings::from_profile(&profile)
@@ -372,7 +491,8 @@ mod tests {
         assert_eq!(inside, 0.0);
     }
 
-    /// Testa se campos universais (sol, brilho ambiente, normal orbital) permanecem constantes independentemente da calibração da lua.
+    /// Testa se campos universais (sol, brilho ambiente) permanecem constantes independentemente
+    /// da calibração da lua, e se o modelo `Fixed` gira o sol em torno da vertical.
     #[test]
     fn from_profile_keeps_universal_fields_independent_of_moon_calibration() {
         let profile = test_profile();
@@ -385,5 +505,198 @@ mod tests {
         // derivado de constante fixa (~5.2 UA) e não do perfil da lua
         let expected_sun_ang_radius = (0.53_f32 / 5.2).to_radians() * 0.5;
         assert!((settings.sun_ang_radius - expected_sun_ang_radius).abs() < 1e-6);
+    }
+
+    /// Perfil real de Europa, o único no modelo `Fixed`.
+    fn europa_profile() -> MoonProfile {
+        ron::de::from_str(include_str!("../../../../assets/moons/europa.ron"))
+            .expect("o europa.ron deveria ser um MoonProfile válido")
+    }
+
+    /// Regressão: o céu de Europa não pode mudar com a entrada do modelo `Site`. Os valores foram
+    /// tirados de `sky_state_at` antes da mudança, com o `europa.ron` de então: (fração da órbita,
+    /// direção do sol, direção de Júpiter, eclipse, planet shine).
+    #[test]
+    fn europa_sky_keeps_the_values_from_before_the_site_model() {
+        const SNAPSHOT: [(f32, [f32; 3], [f32; 3], f32, f32); 7] = [
+            (
+                0.0,
+                [-0.328_487_84, 0.422_618_27, 0.844_683_05],
+                [0.350_878_3, 0.250_627_37, -0.902_258_5],
+                1.0,
+                0.004_682_845_4,
+            ),
+            (
+                0.13,
+                [0.395_528_14, 0.422_618_2, 0.815_445_4],
+                [0.344_968_62, 0.258_816_18, -0.902_225_55],
+                1.0,
+                0.003_977_779_8,
+            ),
+            (
+                0.37,
+                [0.835_174_3, 0.422_618_27, -0.351_962_54],
+                [0.334_589_66, 0.272_263_23, -0.902_176_56],
+                1.0,
+                0.001_486_638,
+            ),
+            (
+                0.5,
+                [0.310_953_35, 0.422_618_33, -0.851_294_3],
+                [0.329_588_77, 0.277_856_74, -0.902_312_04],
+                1.0,
+                0.000_295_588_25,
+            ),
+            (
+                0.71,
+                [-0.750_664_95, 0.422_618_27, -0.507_834_6],
+                [0.322_946_97, 0.283_347_76, -0.903_005_7],
+                1.0,
+                0.002_345_756_4,
+            ),
+            (
+                0.93,
+                [-0.636_281_6, 0.422_618_33, 0.645_398_7],
+                [0.318_395_38, 0.283_689_08, -0.904_513_6],
+                1.0,
+                0.004_393_17,
+            ),
+            (
+                2.41,
+                [0.727_850_26, 0.422_618_27, -0.540_025_7],
+                [0.350_238_3, 0.217_178_51, -0.911_134_9],
+                1.0,
+                0.001_099_753_8,
+            ),
+        ];
+        let settings = SkySettings::from_profile(&europa_profile());
+
+        for (fraction, sun, jupiter, eclipse, planet_shine) in SNAPSHOT {
+            let state = sky_state_at(&settings, fraction * settings.orbital_period_seconds);
+            assert!((state.sun_dir - Vec3::from_array(sun)).length() < 1e-5, "sol em {fraction}");
+            assert!(
+                (state.jupiter_dir - Vec3::from_array(jupiter)).length() < 1e-5,
+                "Júpiter em {fraction}"
+            );
+            assert!((state.eclipse_factor - eclipse).abs() < 1e-5, "eclipse em {fraction}");
+            assert!(
+                (state.planet_shine_factor - planet_shine).abs() < 1e-6,
+                "planet shine em {fraction}"
+            );
+            assert_eq!(state.daylight_factor, 1.0, "Europa não tem noite: {fraction}");
+            assert_eq!(state.sky_rotation, Quat::IDENTITY, "estrelas paradas: {fraction}");
+        }
+    }
+
+    /// Testa que Júpiter fica na elevação asin(cos lat cos lon), a oeste para longitude
+    /// positiva, e que o polo norte celeste fica na elevação da latitude, ao norte (-Z).
+    #[test]
+    fn site_directions_put_jupiter_and_the_pole_where_the_latitude_says() {
+        let site = site_directions(40.0, 58.0);
+        let expected_jupiter_elevation =
+            (40.0_f32.to_radians().cos() * 58.0_f32.to_radians().cos()).asin();
+
+        assert!((site.jupiter.length() - 1.0).abs() < 1e-6);
+        assert!((site.jupiter.y.asin() - expected_jupiter_elevation).abs() < 1e-5);
+        assert!(site.jupiter.x < 0.0, "Júpiter deveria ficar a oeste: {:?}", site.jupiter);
+        assert!((site.celestial_north.y.asin() - 40.0_f32.to_radians()).abs() < 1e-5);
+        assert!(site.celestial_north.z < 0.0, "o polo deveria ficar ao norte");
+        assert!(site.jupiter.dot(site.celestial_north).abs() < 1e-6, "Júpiter fora do equador");
+    }
+
+    /// Calibração `Site` sem libração, começando na fração `start_orbit_fraction` da órbita.
+    fn site_settings(
+        latitude_deg: f32,
+        longitude_deg: f32,
+        start_orbit_fraction: f32,
+    ) -> SkySettings {
+        let mut profile = test_profile();
+        profile.sky.geometry = SkyGeometry::Site {
+            latitude_deg,
+            longitude_deg,
+            start_orbit_fraction,
+        };
+        profile.sky.jupiter_libration_lat_deg = 0.0;
+        profile.sky.jupiter_libration_lon_deg = 0.0;
+        SkySettings::from_profile(&profile)
+    }
+
+    /// Estado do céu em `fraction` da órbita.
+    fn state_at_fraction(settings: &SkySettings, fraction: f32) -> SkyState {
+        sky_state_at(settings, fraction * settings.orbital_period_seconds)
+    }
+
+    /// Elevação do sol acima do horizonte, em graus, em `fraction` da órbita.
+    fn sun_elevation_deg_at(settings: &SkySettings, fraction: f32) -> f32 {
+        state_at_fraction(settings, fraction).sun_dir.y.asin().to_degrees()
+    }
+
+    /// Testa que, num lugar real, o sol sobe até 90 - latitude e desce até -(90 - latitude):
+    /// metade da órbita é noite.
+    #[test]
+    fn site_sun_peaks_at_ninety_minus_latitude_and_sets_for_half_the_orbit() {
+        let settings = site_settings(40.0, 58.0, 0.0);
+        let elevations: Vec<f32> = (0..720)
+            .map(|step| sun_elevation_deg_at(&settings, step as f32 / 720.0))
+            .collect();
+        let highest = elevations.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let lowest = elevations.iter().copied().fold(f32::INFINITY, f32::min);
+        let night = elevations.iter().filter(|elevation| **elevation < 0.0).count();
+
+        assert!((highest - 50.0).abs() < 0.5, "máximo {highest}");
+        assert!((lowest + 50.0).abs() < 0.5, "mínimo {lowest}");
+        assert!((night as f32 / 720.0 - 0.5).abs() < 0.01, "noite em {night} de 720");
+    }
+
+    /// Testa que o sol nasce a leste (+X), e que o fator de dia vale 1 ao meio-dia e 0 à
+    /// meia-noite.
+    #[test]
+    fn site_sun_rises_in_the_east_and_daylight_follows_it() {
+        let settings = site_settings(40.0, 58.0, 0.0);
+        let fractions: Vec<f32> = (0..720).map(|step| step as f32 / 720.0).collect();
+
+        let sunrise = fractions
+            .windows(2)
+            .find(|pair| {
+                sun_elevation_deg_at(&settings, pair[0]) < 0.0
+                    && sun_elevation_deg_at(&settings, pair[1]) >= 0.0
+            })
+            .expect("o sol deveria nascer uma vez por órbita");
+        let at_sunrise = state_at_fraction(&settings, sunrise[1]).sun_dir;
+        assert!(at_sunrise.x > 0.99, "nasceu fora do leste: {at_sunrise:?}");
+
+        let noon = fractions
+            .iter()
+            .copied()
+            .max_by(|a, b| {
+                sun_elevation_deg_at(&settings, *a).total_cmp(&sun_elevation_deg_at(&settings, *b))
+            })
+            .expect("órbita não vazia");
+        let midnight = (noon + 0.5).fract();
+        assert_eq!(state_at_fraction(&settings, noon).daylight_factor, 1.0);
+        assert_eq!(state_at_fraction(&settings, midnight).daylight_factor, 0.0);
+    }
+
+    /// Testa que, num lugar real, o sol passa pelo centro de Júpiter em meia órbita (eclipse
+    /// total) e que as estrelas giram com o céu.
+    #[test]
+    fn site_sun_crosses_jupiter_at_half_orbit_and_the_stars_turn() {
+        let settings = site_settings(20.0, 64.0, 0.0);
+        let state = state_at_fraction(&settings, 0.5);
+
+        assert!(state.sun_dir.angle_between(state.jupiter_dir) < 1e-3);
+        assert_eq!(state.eclipse_factor, 0.0);
+        let turned = state.sky_rotation * Vec3::X;
+        assert!(turned.angle_between(Vec3::X) > 0.1, "estrelas paradas: {turned:?}");
+    }
+
+    /// Testa que `start_orbit_fraction` adianta o céu: começar em 0,5 é começar no eclipse, com
+    /// as estrelas na posição inicial.
+    #[test]
+    fn site_start_orbit_fraction_shifts_the_sky() {
+        let state = state_at_fraction(&site_settings(20.0, 64.0, 0.5), 0.0);
+
+        assert_eq!(state.eclipse_factor, 0.0);
+        assert_eq!(state.sky_rotation, Quat::IDENTITY);
     }
 }

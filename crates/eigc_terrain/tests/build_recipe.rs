@@ -1,6 +1,8 @@
 //! Testes de integração para recipe::build_recipe. Cobre as quatro luas do enum MoonId
 
-use eigc_moons::profile::{MoonId, MoonProfile, SkyCalibration, TerrainCalibration};
+use eigc_moons::profile::{
+    MoonId, MoonProfile, SkyCalibration, SkyGeometry, TerrainCalibration,
+};
 use eigc_terrain::params::TerrainShape;
 use eigc_terrain::recipe::build_recipe;
 
@@ -23,14 +25,16 @@ fn minimal_profile_for(moon_id: MoonId) -> MoonProfile {
         terrain_steep_color: [0.3, 0.2, 0.1, 1.0],
         walkable: true,
         sky: SkyCalibration {
-            base_jupiter_dir: [0.0, 0.0, -1.0],
+            geometry: SkyGeometry::Fixed {
+                base_jupiter_dir: [0.0, 0.0, -1.0],
+                sun_elevation_deg: 1.0,
+            },
             planet_shine_max: 0.01,
             jupiter_ang_radius: 0.10384709,
             orbital_period_seconds: 3.551181 * 86_400.0,
             eclipse_soft_deg: 1.0,
             jupiter_libration_lat_deg: 2.0,
             jupiter_libration_lon_deg: 2.0,
-            sun_elevation_deg: 1.0,
         },
     }
 }

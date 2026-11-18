@@ -64,8 +64,10 @@ fn spawn_starfield(
     ));
 }
 
-/// Mantém o domo de estrelas na posição da câmera, para que ele não se mova com o parallax.
+/// Mantém o domo de estrelas na posição da câmera, para que ele não se mova com o parallax, e
+/// gira o domo junto com o céu (`SkyState::sky_rotation`).
 fn track_camera(
+    state: Res<SkyState>,
     cam_q: Query<&Transform, (With<Camera3d>, Without<StarDome>)>,
     mut dome_q: Query<&mut Transform, (With<StarDome>, Without<Camera3d>)>,
 ) {
@@ -77,6 +79,7 @@ fn track_camera(
     };
 
     t.translation = cam.translation;
+    t.rotation = state.sky_rotation;
 }
 
 /// Escurece o domo de estrelas quando a câmera está olhando perto do sol, para reduzir o brilho das estrelas.
@@ -102,7 +105,9 @@ fn dim_stars_near_sun(
     let view_dir = cam.forward().normalize();
     let sun_dir = state.sun_dir.normalize();
     let sep = view_dir.dot(sun_dir).clamp(-1.0, 1.0).acos();
-    let brightness = star_brightness(sep, fov, state.eclipse_factor);
+    // Com o sol escondido (atrás de Júpiter ou abaixo do horizonte), não há ofuscamento.
+    let sun_visible = state.eclipse_factor * state.daylight_factor;
+    let brightness = star_brightness(sep, fov, sun_visible);
 
     if let Some(mat) = mats.get_mut(&star_mat.0) {
         mat.base_color = Color::linear_rgb(brightness, brightness, brightness);

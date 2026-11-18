@@ -50,10 +50,11 @@
   exigiria um elemento de céu ou um volume próprio (partículas ou shader), não uma `HeightSource`.
   Trade-off: Io sem a feição mais famosa, em troca de não abrir uma frente de render nova.
 - [ ] **Io não tem lagos de lava com emissão visível.** Ficou fora do escopo inicial de Io. O
-  piso das paterae é só escuro (`IO_PATERA_FLOOR_COLOR`), sem emissão. Depende do item "O sol
-  nunca se põe" (Cena / Visual): sem noite, a emissão só apareceria durante o eclipse. Exigiria
-  emissão por região no material do terreno (ex.: um canal do mapa de cor), com risco médio de
-  Bevy. Trade-off: as paterae parecem inativas.
+  piso das paterae é só escuro (`IO_PATERA_FLOOR_COLOR`), sem emissão. Io já tem noite (céu de
+  lugar real, `SkyGeometry::Site`), então a emissão apareceria no lado noturno; ver também "A
+  noite das luas de lugar real é quase preta" (Cena / Visual). Exigiria emissão por região no
+  material do terreno (ex.: um canal do mapa de cor), com risco médio de Bevy. Trade-off: as
+  paterae parecem inativas.
 - [ ] **Europa não tem anel de extensão.** `europa_recipe` usa `far_field: None` porque o DTM
   (`height::heightmap`) repete o pixel da borda fora do recorte, o que esticaria faixas no anel.
   Precisa de uma fonte de altura própria para fora do DTM (ex.: só o detalhe sintético e as
@@ -62,7 +63,6 @@
   tem só ondulação fbm, rugosidade fina e a clareira de spawn, com constantes de partida não
   medidas, cor lisa do perfil, sem anel de extensão e sem textura de superfície.
   Faltam crateras, sulcos e mapa de cor.
-  O céu também é provisório: `base_jupiter_dir` não foi calibrado e o eclipse não foi conferido.
   Trade-off: Ganimedes entra no menu antes de ter relevo característico.
 - [ ] Calibrar receita de terreno de calisto (`recipe/mod.rs`, hoje unimplemented!)
 - [X] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa
@@ -281,15 +281,32 @@
 - [ ] **Com a calibração atual de Europa, o eclipse por Júpiter nunca acontece.** Pela conta, a
   trajetória do sol (elevação fixa de 25 graus) passa a no mínimo ~10,5 graus do centro de
   Júpiter (elevação ~14,5 graus), mais que o raio de Júpiter mais a suavização (~7 graus).
-  Não conferido com o app rodando. Io já tem eclipse em toda órbita (Júpiter a 24 graus, 1 grau
-  abaixo do sol), travado por `eigc_scene/tests/io_eclipse_happens_every_orbit.rs`.
-- [ ] **O sol nunca se põe: não existe noite, só eclipse.** `sky_state_at` gira o sol num
-  círculo de elevação fixa (`sun_elevation_deg`) em torno do eixo Y. No hemisfério sub-joviano
-  real, o sol faz um grande círculo que passa perto de Júpiter, nasce e se põe, e o eclipse cai
-  no meio-dia local. Débito consciente: o modelo atual é simples e já dá eclipse com duração
-  realista em Io. Custo: lagos de lava com emissão no "lado noturno" (ver "Io não tem lagos de
-  lava com emissão visível", em Terreno) só ficam visíveis durante o eclipse. Revisar antes de
-  implementá-los.
+  Não conferido com o app rodando. Io e Ganimedes têm eclipse em toda órbita (céu de lugar
+  real), travado por `eigc_scene/tests/eclipse_happens_every_orbit.rs`.
+- [ ] **Em Europa o sol nunca se põe: não existe noite, só eclipse.** Europa usa o modelo
+  simplificado (`SkyGeometry::Fixed`): o sol gira num círculo de elevação fixa em torno do eixo Y.
+  Io e Ganimedes já usam o lugar real do recorte (`SkyGeometry::Site`), com dia, noite e eclipse.
+  Europa ficou de fora por decisão do desenvolvedor: o DTM é de Rhadamanthys (~19 N, ~200 W), no
+  hemisfério oposto a Júpiter, e no céu real Júpiter nunca apareceria lá. Trade-off: Europa
+  mantém Júpiter no céu em troca de uma geometria irreal. O teste
+  `europa_sky_keeps_the_values_from_before_the_site_model` trava o céu de Europa.
+- [ ] **A noite das luas de lugar real é quase preta.** À noite, a luz do sol e a luz ambiente
+  (que clareia as sombras do dia) somem, e o chão fica só com o planet shine de Júpiter cheio:
+  ~11 lux em Ganimedes e ~72 lux em Io, contra 4500 lux do sol. Com a exposição fixa da câmera,
+  isso é praticamente preto na tela, embora um olho adaptado enxergasse. Caminhos: adaptação de
+  exposição (ADDITIONS.md) ou um piso de luz ambiente à noite. Decisão do desenvolvedor pendente.
+- [ ] **Céu de lugar real: simplificações conscientes.** (1) A declinação do sol é sempre zero:
+  a obliquidade de Júpiter (3,1 graus) é ignorada, então o eclipse é sempre central. (2) A
+  paralaxe de Júpiter (0,14 a 0,25 grau) é ignorada. (3) A libração ainda usa os períodos
+  artísticos de `sky_state_at` (0,3 e 0,2 órbita), não o período orbital; só as amplitudes de Io
+  e Ganimedes passaram a valores físicos (2 vezes a excentricidade), e Europa mantém 2 graus.
+  (4) O pôr do sol considera o horizonte plano: um morro alto ainda recebe sol com o sol já
+  abaixo do horizonte matemático, e as sombras do sol só alcançam 3 km. Trade-off: modelo
+  simples e testável, com erro de no máximo alguns graus.
+- [ ] **Júpiter tem iluminação própria, aproximada.** O shader `jupiter_phase.wgsl` calcula só a
+  parte difusa da luz do sol (Lambert dividido por pi), no lugar do Burley do Bevy, e ignora as
+  luzes da cena. O brilho do lado iluminado ficou parecido com o anterior na comparação visual,
+  mas não idêntico. Trade-off: Júpiter fica cheio à noite e com o lado noturno preto.
 - [ ] **Diâmetro do sol em duas fontes.** O disco visual usa `SUN_ANGULAR_DIAMETER_DEG = 0.10`
   (`eigc_common::constants`), e o eclipse usa `SkySettings::sun_ang_radius`, derivado à parte
   em `from_profile` (`0.53 / 5.2` graus, metade). Hoje batem (0,102 contra 0,10), mas é a mesma
