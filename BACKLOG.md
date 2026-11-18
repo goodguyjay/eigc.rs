@@ -68,8 +68,18 @@
   estimada de memória. O sal da semente das crateras (`GANYMEDE_CRATER_SEED_SALT`) foi escolhido
   para haver uma cratera complexa a leste da clareira; mudar a semente do `ganymede.ron` muda
   isso. Crateras que se sobrepõem somam os desvios de altura, em vez de a mais nova apagar a
-  mais antiga. Ainda faltam mapa de cor (faixa clara, raios das crateras recentes, geada), anel
-  de extensão e textura de superfície. Validado só com capturas do app (vista aérea e do chão).
+  mais antiga. Validado só com capturas do app (vista aérea e do chão).
+- [ ] **Cor de Ganimedes é de partida, sem comparação com imagens reais.** A cor
+  (`ganymede_color`, `recipe/ganymede.rs`) junta terreno escuro, gelo claro nas encostas
+  íngremes, a faixa clara, interior, ejecta e raios das crateras recentes e geada nas encostas
+  voltadas para o norte (física: em latitude alta, essas encostas são as mais frias). As cores e
+  os limiares são valores de partida, calibrados por cobertura e percentis em testes, não pela
+  refletância real dos terrenos. Os raios ficam curtos (5 raios da borda; os reais chegam a
+  dezenas). O mapa de cor custa ~1,3 µs por texel (~21 s em um núcleo, ~1,5 s nos 16 núcleos da
+  máquina de desenvolvimento), contra menos de 1 s em Io, porque a inclinação e a geada amostram
+  a superfície com crateras. Enquanto Ganimedes não tem textura de superfície, o shader não lê o
+  mapa (ele só entra no bloco da textura), e o terreno usa a cor por vértice, que perde detalhe
+  nos níveis grossos do LOD.
 - [ ] Calibrar receita de terreno de calisto (`recipe/mod.rs`, hoje unimplemented!)
 - [X] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa
   documentada de motivo geológico ou estético

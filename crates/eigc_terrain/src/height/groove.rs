@@ -5,9 +5,9 @@
 //! A faixa soma um desvio de altura à fonte: o nível próprio da faixa (`floor_offset_m`) mais o
 //! perfil dos sulcos, os dois pesados pela posição na borda. Fora da faixa, o desvio é zero.
 
-use super::{HeightFn, HeightSource};
+use super::{ColorSource, HeightFn, HeightSource};
 use bevy::prelude::Vec2;
-use eigc_common::math::smoothstep;
+use eigc_common::math::{lerp4, smoothstep};
 
 /// Perfil de um sulco ao longo de um comprimento de onda: `phase` em comprimentos de onda, 0 no
 /// topo de uma crista e 0,5 no fundo de um sulco. Varia de -1 a 1.
@@ -81,6 +81,26 @@ impl HeightSource for GrooveBand {
         let variation = self.amplitude_noise.height_at(x, z).clamp(-1.0, 1.0);
         let amplitude = self.amplitude_m * (1.0 + self.amplitude_variation * variation);
         weight * (self.floor_offset_m + amplitude * groove_profile(phase))
+    }
+}
+
+/// Pinta a faixa de sulcos por cima de uma fonte de cor, com a mesma borda irregular do relevo.
+pub struct GrooveBandColor<C: ColorSource> {
+    /// Cor de fundo, fora da faixa.
+    pub base: C,
+    /// Faixa pintada (a mesma somada ao relevo).
+    pub band: GrooveBand,
+    /// Cor (RGBA linear) da faixa.
+    pub band_color: [f32; 4],
+}
+
+impl<C: ColorSource> ColorSource for GrooveBandColor<C> {
+    fn color_at(&self, x: f32, z: f32) -> [f32; 4] {
+        lerp4(
+            self.base.color_at(x, z),
+            self.band_color,
+            self.band.band_weight_at(x, z),
+        )
     }
 }
 
@@ -158,5 +178,25 @@ mod tests {
             ..straight_band()
         };
         assert!((widened.band_weight_at(3500.0, 0.0) - 0.5).abs() < 1e-5);
+    }
+
+    struct Black;
+    impl ColorSource for Black {
+        fn color_at(&self, _x: f32, _z: f32) -> [f32; 4] {
+            [0.0, 0.0, 0.0, 1.0]
+        }
+    }
+
+    /// Testa que a cor da faixa vale dentro dela e some fora, acompanhando o peso da borda.
+    #[test]
+    fn band_color_follows_the_band_weight() {
+        let color = GrooveBandColor {
+            base: Black,
+            band: straight_band(),
+            band_color: [1.0, 1.0, 1.0, 1.0],
+        };
+        assert_eq!(color.color_at(0.0, 0.0)[0], 1.0);
+        assert!((color.color_at(3000.0, 0.0)[0] - 0.5).abs() < 1e-5);
+        assert_eq!(color.color_at(5000.0, 0.0)[0], 0.0);
     }
 }

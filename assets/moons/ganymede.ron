@@ -7,13 +7,16 @@ MoonProfile(
     terrain: TerrainCalibration(
         seed: 307,
         base_frequency: 0.00025, // 1.0 / 4000.0
-        feature_direction: (0.26, 0.97), // direção dos sulcos, ~15 graus de norte-sul: o sol da manhã e da tarde (leste e oeste) os marca com sombra
+        // direção dos sulcos, ~15 graus de norte-sul: o sol da manhã e da tarde (leste e oeste)
+        // os marca com sombra
+        feature_direction: (0.26, 0.97),
         warp_amplitude_meters: 0.0, // sem uso em Ganimedes
         perceptual_roughness: 0.8,
         reflectance: 0.5,
     ),
     terrain_base_color: (0.55, 0.50, 0.44, 1.0), // terreno escuro antigo, TODO (jay): ajustar visualmente
-    terrain_steep_color: (0.42, 0.38, 0.33, 1.0), // encostas, TODO (jay): ajustar visualmente
+    // gelo exposto: o material escuro escorrega das encostas, TODO (jay): ajustar visualmente
+    terrain_steep_color: (0.80, 0.79, 0.77, 1.0),
     walkable: true,
     sky: SkyCalibration(
         orbital_period_seconds: 618153.4, // 7.154553 dias * 86400

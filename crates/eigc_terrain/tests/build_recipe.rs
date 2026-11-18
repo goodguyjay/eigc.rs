@@ -204,8 +204,8 @@ fn io_recipe_relief_is_a_plain_around_zero_with_patera_depressions() {
     assert!(lowest < -100.0, "as paterae deveriam afundar o piso: mínimo {lowest}");
 }
 
-/// Testa se a receita mínima de Ganimedes produz um recorte quadrado de alturas finitas, ainda
-/// sem cor por vértice, com a clareira de spawn nivelada em volta da origem.
+/// Testa se a receita de Ganimedes produz um recorte quadrado de alturas finitas, com cor por
+/// vértice e anel de extensão, e com a clareira de spawn nivelada em volta da origem.
 #[test]
 fn ganymede_recipe_produces_a_square_cutout_with_a_level_spawn_clearing() {
     let profile = minimal_profile_for(MoonId::Ganymede);
@@ -214,7 +214,8 @@ fn ganymede_recipe_produces_a_square_cutout_with_a_level_spawn_clearing() {
     assert_eq!(recipe.params.seed, profile.terrain.seed);
     assert_eq!(recipe.appearance.display_name, profile.display_name);
     assert_eq!(recipe.params.shape, TerrainShape::Square);
-    assert!(recipe.color.is_none(), "a receita mínima usa só a cor lisa do perfil");
+    assert!(recipe.color.is_some(), "Ganimedes deveria produzir cor por vértice");
+    assert!(recipe.far_field.is_some(), "Ganimedes deveria ter anel de extensão");
 
     let half_size = recipe.params.size * 0.5;
     for (x, z) in [(0.0, 0.0), (half_size, -half_size), (-3000.0, 7000.0)] {
@@ -257,20 +258,24 @@ fn only_europa_cuts_the_terrain_to_a_disc() {
     assert_eq!(io.params.mesh_disc_radius_m(), None);
 }
 
-/// Testa que só Io troca a cor por vértice pelo mapa de cor, e com resolução de pelo menos a do
-/// nível mais fino do LOD. Europa fica na cor por vértice.
+/// Testa que Io e Ganimedes trocam a cor por vértice pelo mapa de cor, com resolução de pelo
+/// menos a do nível mais fino do LOD. Europa fica na cor por vértice.
 #[test]
-fn only_io_bakes_a_color_map_at_least_as_fine_as_the_finest_lod() {
+fn io_and_ganymede_bake_a_color_map_at_least_as_fine_as_the_finest_lod() {
     let europa = build_recipe(&minimal_profile_for(MoonId::Europa));
     assert!(europa.color_map.is_none());
 
-    let io = build_recipe(&minimal_profile_for(MoonId::Io));
-    let map = io.color_map.expect("Io deveria ter mapa de cor");
-    assert!(io.color.is_some(), "o mapa é assado a partir da cor da receita");
-    let texel_m = io.params.size / map.texels_per_side as f32;
-    let finest_vertex_m = io.params.size
-        / (io.lod.chunks_per_side * io.lod.quads_per_chunk[0]) as f32;
-    assert!(texel_m <= finest_vertex_m + 1e-3, "texel de {texel_m} m");
+    for moon_id in [MoonId::Io, MoonId::Ganymede] {
+        let recipe = build_recipe(&minimal_profile_for(moon_id));
+        let map = recipe
+            .color_map
+            .unwrap_or_else(|| panic!("{moon_id:?} deveria ter mapa de cor"));
+        assert!(recipe.color.is_some(), "o mapa é assado a partir da cor da receita");
+        let texel_m = recipe.params.size / map.texels_per_side as f32;
+        let finest_vertex_m = recipe.params.size
+            / (recipe.lod.chunks_per_side * recipe.lod.quads_per_chunk[0]) as f32;
+        assert!(texel_m <= finest_vertex_m + 1e-3, "{moon_id:?}: texel de {texel_m} m");
+    }
 }
 
 /// Testa que Io usa um piso de erro do LOD menor que o de Europa (a cor de Io vem do mapa, não da

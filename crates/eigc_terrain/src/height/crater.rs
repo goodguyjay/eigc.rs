@@ -7,10 +7,10 @@
 //! Crateras que se sobrepõem somam os desvios. Uma grade espacial limita cada consulta às
 //! crateras que alcançam o ponto, porque um recorte cheio de crateras tem centenas delas.
 
-use super::HeightSource;
 use super::hash::hash01;
+use super::{ColorSource, HeightSource};
 use bevy::prelude::Vec2;
-use eigc_common::math::smoothstep;
+use eigc_common::math::{lerp4, smoothstep};
 
 /// Alcance do manto de ejecta, em raios da borda. Além dele a cratera não mexe na altura.
 pub const EJECTA_REACH_RADII: f32 = 2.5;
@@ -207,9 +207,11 @@ struct CraterGrid {
 }
 
 impl CraterGrid {
-    fn new(craters: &[CraterSpec]) -> Self {
+    /// Grade com o alcance de cada cratera em `reach_radii` raios da borda.
+    fn new(craters: &[CraterSpec], reach_radii: f32) -> Self {
+        let reach_of = |c: &CraterSpec| Vec2::splat(c.radius_m * reach_radii);
         let Some((min, max)) = craters.iter().fold(None, |bounds: Option<(Vec2, Vec2)>, c| {
-            let reach = Vec2::splat(c.reach_m());
+            let reach = reach_of(c);
             let (lo, hi) = (c.center - reach, c.center + reach);
             Some(bounds.map_or((lo, hi), |(min, max)| (min.min(lo), max.max(hi))))
         }) else {
@@ -225,7 +227,7 @@ impl CraterGrid {
         let rows = ((max.y - min.y) / GRID_CELL_M).ceil().max(1.0) as usize;
         let mut cells = vec![Vec::new(); columns * rows];
         for (index, crater) in craters.iter().enumerate() {
-            let reach = Vec2::splat(crater.reach_m());
+            let reach = reach_of(crater);
             let (first, last) = (
                 ((crater.center - reach - min) / GRID_CELL_M).floor(),
                 ((crater.center + reach - min) / GRID_CELL_M).floor(),
@@ -269,7 +271,7 @@ pub struct CraterField<S: HeightSource> {
 impl<S: HeightSource> CraterField<S> {
     /// Soma `craters` a `source`.
     pub fn new(source: S, craters: Vec<CraterSpec>) -> Self {
-        let grid = CraterGrid::new(&craters);
+        let grid = CraterGrid::new(&craters, EJECTA_REACH_RADII);
         Self {
             source,
             craters,
@@ -293,6 +295,85 @@ impl<S: HeightSource> HeightSource for CraterField<S> {
             .map(|&index| self.craters[index as usize].height_delta_at(x, z))
             .sum();
         self.source.height_at(x, z) + delta
+    }
+}
+
+/// Alcance dos raios claros de uma cratera recente, em raios da borda. Os raios reais chegam a
+/// dezenas de raios; aqui ficam curtos para não cobrir o recorte de raios.
+pub const RAY_REACH_RADII: f32 = 5.0;
+
+/// Valores sorteados por cratera para os raios: número de raios e duas fases.
+const HASH_SLOTS_PER_RAY_PATTERN: u32 = 3;
+
+/// Pinta as crateras recentes por cima de uma fonte de cor: o interior e o manto de ejecta
+/// expõem gelo claro, e além do manto o claro continua só em raios. Crateras antigas não mudam a
+/// cor (o gelo exposto já escureceu).
+pub struct CraterColorField<C: ColorSource> {
+    /// Cor de fundo.
+    pub base: C,
+    /// Cor (RGBA linear) do gelo exposto.
+    pub bright_color: [f32; 4],
+    /// Conservação a partir da qual a cratera começa a clarear o entorno.
+    pub min_freshness: f32,
+    /// Semente do padrão de raios.
+    pub seed: u32,
+    craters: Vec<CraterSpec>,
+    grid: CraterGrid,
+}
+
+impl<C: ColorSource> CraterColorField<C> {
+    /// Pinta as crateras de `craters` com conservação acima de `min_freshness` por cima de `base`.
+    pub fn new(
+        base: C,
+        craters: Vec<CraterSpec>,
+        bright_color: [f32; 4],
+        min_freshness: f32,
+        seed: u32,
+    ) -> Self {
+        let grid = CraterGrid::new(&craters, RAY_REACH_RADII);
+        Self {
+            base,
+            bright_color,
+            min_freshness,
+            seed,
+            craters,
+            grid,
+        }
+    }
+
+    /// Peso do gelo claro de uma cratera no ponto, de 0 a 1.
+    fn bright_weight(&self, index: u32, crater: &CraterSpec, point: Vec2) -> f32 {
+        let fresh = smoothstep(self.min_freshness, 1.0, crater.freshness);
+        if fresh <= 0.0 {
+            return 0.0;
+        }
+        let offset = point - crater.center;
+        let r = offset.length() / crater.radius_m;
+        if r >= RAY_REACH_RADII {
+            return 0.0;
+        }
+        let interior = 1.0 - smoothstep(0.9, 1.1, r);
+        let blanket = 1.0 - smoothstep(1.0, 1.8, r);
+        let draw = |slot: u32| hash01(self.seed, index * HASH_SLOTS_PER_RAY_PATTERN + slot);
+        let angle = offset.y.atan2(offset.x);
+        let count = (7.0 + 6.0 * draw(0)).floor();
+        let a = 0.5 + 0.5 * (count * angle + std::f32::consts::TAU * draw(1)).cos();
+        let b = 0.5 + 0.5 * ((count + 3.0) * angle + std::f32::consts::TAU * draw(2)).cos();
+        let ray = (a * b).powi(3) * (1.0 - smoothstep(1.2, RAY_REACH_RADII, r));
+        fresh * interior.max(blanket).max(ray)
+    }
+}
+
+impl<C: ColorSource> ColorSource for CraterColorField<C> {
+    fn color_at(&self, x: f32, z: f32) -> [f32; 4] {
+        let point = Vec2::new(x, z);
+        let weight = self
+            .grid
+            .candidates(point)
+            .iter()
+            .map(|&index| self.bright_weight(index, &self.craters[index as usize], point))
+            .fold(0.0, f32::max);
+        lerp4(self.base.color_at(x, z), self.bright_color, weight)
     }
 }
 
@@ -431,5 +512,60 @@ mod tests {
             assert!((field.height_at(x, z) - brute).abs() < 1e-3, "({x}, {z})");
         }
         assert_eq!(field.height_at(1.0e6, 1.0e6), 0.0);
+    }
+
+    struct Dark;
+    impl ColorSource for Dark {
+        fn color_at(&self, _x: f32, _z: f32) -> [f32; 4] {
+            [0.0, 0.0, 0.0, 1.0]
+        }
+    }
+
+    /// Cratera de raio 500 m em `center` com a conservação dada.
+    fn crater_at(center: Vec2, freshness: f32) -> CraterSpec {
+        crater_from_scale(center, 500.0, freshness, &scale())
+    }
+
+    /// Testa que só a cratera recente clareia o próprio interior; a antiga não muda a cor.
+    #[test]
+    fn only_fresh_craters_brighten_their_interior() {
+        let fresh = Vec2::new(-5000.0, 0.0);
+        let old = Vec2::new(5000.0, 0.0);
+        let field = CraterColorField::new(
+            Dark,
+            vec![crater_at(fresh, 1.0), crater_at(old, 0.1)],
+            [1.0, 1.0, 1.0, 1.0],
+            0.6,
+            1,
+        );
+
+        assert_eq!(field.color_at(fresh.x, fresh.y)[0], 1.0);
+        assert_eq!(field.color_at(old.x, old.y)[0], 0.0);
+        assert_eq!(field.color_at(0.0, 0.0)[0], 0.0);
+    }
+
+    /// Testa que, além do manto de ejecta, o claro vem em raios: a 3 raios do centro, algumas
+    /// direções ficam bem claras e outras quase escuras.
+    #[test]
+    fn fresh_craters_cast_rays_beyond_the_ejecta_blanket() {
+        let field = CraterColorField::new(
+            Dark,
+            vec![crater_at(Vec2::ZERO, 1.0)],
+            [1.0, 1.0, 1.0, 1.0],
+            0.6,
+            7,
+        );
+        let values: Vec<f32> = (0..360)
+            .map(|degree| {
+                let angle = (degree as f32).to_radians();
+                field.color_at(angle.cos() * 1500.0, angle.sin() * 1500.0)[0]
+            })
+            .collect();
+        let brightest = values.iter().copied().fold(0.0, f32::max);
+        let darkest = values.iter().copied().fold(1.0, f32::min);
+
+        assert!(brightest > 0.3, "raio mais claro {brightest}");
+        assert!(darkest < 0.05, "entre raios {darkest}");
+        assert_eq!(field.color_at(0.0, 500.0 * RAY_REACH_RADII + 1.0)[0], 0.0);
     }
 }
