@@ -65,7 +65,11 @@ mod tests {
 
     #[test]
     fn rejects_invalid_value() {
-        assert!(Environment::parse("(skip_intro: talvez)").is_err());
+        let result = Environment::parse("(skip_intro: talvez)");
+        assert!(
+            result.is_err(),
+            "valor inválido de skip_intro deveria ser rejeitado, mas foi aceito: {result:?}"
+        );
     }
 
     #[test]

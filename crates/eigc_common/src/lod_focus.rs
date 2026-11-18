@@ -44,7 +44,10 @@ mod tests {
     #[test]
     fn default_screen_scale_matches_1080p_and_60_degree_fov() {
         let scale = screen_scale_from_fov(std::f32::consts::FRAC_PI_3, 1080.0);
-        assert!((scale - DEFAULT_SCREEN_SCALE).abs() < 0.5);
+        assert!(
+            (scale - DEFAULT_SCREEN_SCALE).abs() < 0.5,
+            "escala para 1080 px e 60 graus deveria ficar a menos de 0.5 de {DEFAULT_SCREEN_SCALE}, mas foi {scale}"
+        );
     }
 
     /// Janela mais alta ou FOV mais estreito deixam o mesmo objeto maior na tela.
