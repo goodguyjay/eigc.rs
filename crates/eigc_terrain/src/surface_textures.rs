@@ -20,6 +20,17 @@ const IO_REGOLITH_NORMAL_PATH: &str = "terrain/materials/io_regolith/io_regolith
 /// Caminho do mapa ARM do regolito de Io (AO no canal R, roughness no G, metallic no B).
 const IO_REGOLITH_ARM_PATH: &str = "terrain/materials/io_regolith/io_regolith_arm_2k.png";
 
+/// Caminho do albedo do regolito de Ganimedes, gerado por `tools/generate_ganymede_regolith.py`.
+/// Cinza neutro: o shader multiplica pela cor da receita (terreno escuro, faixa clara, geada).
+const GANYMEDE_REGOLITH_DIFFUSE_PATH: &str =
+    "terrain/materials/ganymede_regolith/ganymede_regolith_diff_2k.png";
+/// Caminho do normal map do regolito de Ganimedes (convenção OpenGL).
+const GANYMEDE_REGOLITH_NORMAL_PATH: &str =
+    "terrain/materials/ganymede_regolith/ganymede_regolith_nor_gl_2k.png";
+/// Caminho do mapa ARM do regolito de Ganimedes (AO no canal R, roughness no G, metallic no B).
+const GANYMEDE_REGOLITH_ARM_PATH: &str =
+    "terrain/materials/ganymede_regolith/ganymede_regolith_arm_2k.png";
+
 /// Anisotropia máxima do sampler.
 const ANISOTROPY_CLAMP: u16 = 16;
 
@@ -43,7 +54,8 @@ pub fn surface_textures_for(
     match moon_id {
         MoonId::Europa => Some(load_europa_ice(asset_server)),
         MoonId::Io => Some(load_io_regolith(asset_server)),
-        MoonId::Ganymede | MoonId::Callisto => None,
+        MoonId::Ganymede => Some(load_ganymede_regolith(asset_server)),
+        MoonId::Callisto => None,
     }
 }
 
@@ -64,6 +76,16 @@ fn load_io_regolith(asset_server: &AssetServer) -> TerrainSurfaceTextures {
         diffuse: load_repeating(asset_server, IO_REGOLITH_DIFFUSE_PATH, true),
         normal: load_repeating(asset_server, IO_REGOLITH_NORMAL_PATH, false),
         arm: load_repeating(asset_server, IO_REGOLITH_ARM_PATH, false),
+    }
+}
+
+/// Carrega o material de regolito de Ganimedes (tile físico de 2,0 m, como o de Europa e o de
+/// Io), gerado por script a partir de um relevo sintético (`tools/generate_ganymede_regolith.py`).
+fn load_ganymede_regolith(asset_server: &AssetServer) -> TerrainSurfaceTextures {
+    TerrainSurfaceTextures {
+        diffuse: load_repeating(asset_server, GANYMEDE_REGOLITH_DIFFUSE_PATH, true),
+        normal: load_repeating(asset_server, GANYMEDE_REGOLITH_NORMAL_PATH, false),
+        arm: load_repeating(asset_server, GANYMEDE_REGOLITH_ARM_PATH, false),
     }
 }
 

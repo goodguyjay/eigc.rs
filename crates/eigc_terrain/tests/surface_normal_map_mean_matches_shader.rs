@@ -47,17 +47,25 @@ fn shader_normal_map_mean() -> [f64; 2] {
 
 /// Nomes das constantes (privadas em `surface_textures.rs`) com o caminho de cada normal map que
 /// o jogo carrega. `NORMAL_MAP_MEAN_XY` é uma só no shader, então vale para todas.
-const NORMAL_MAP_PATH_CONSTANTS: [&str; 2] = ["EUROPA_ICE_NORMAL_PATH", "IO_REGOLITH_NORMAL_PATH"];
+const NORMAL_MAP_PATH_CONSTANTS: [&str; 3] = [
+    "EUROPA_ICE_NORMAL_PATH",
+    "IO_REGOLITH_NORMAL_PATH",
+    "GANYMEDE_REGOLITH_NORMAL_PATH",
+];
 
 /// Lê o caminho de um normal map que o jogo carrega, para o teste acompanhar uma troca de
 /// textura.
 fn loaded_normal_map_path(constant: &str) -> String {
     let source = read_text("crates/eigc_terrain/src/surface_textures.rs");
-    let line = declaration_line(&source, constant);
-    let path = line
+    // a declaração pode quebrar a linha antes da string, então lê até o `;`
+    let start = source
+        .find(&format!("const {constant}"))
+        .unwrap_or_else(|| panic!("declaração de {constant} não encontrada"));
+    let declaration = &source[start..start + source[start..].find(';').unwrap_or(0)];
+    let path = declaration
         .split('"')
         .nth(1)
-        .unwrap_or_else(|| panic!("{constant} deveria ser uma string: {line}"));
+        .unwrap_or_else(|| panic!("{constant} deveria ser uma string: {declaration}"));
     format!("assets/{path}")
 }
 

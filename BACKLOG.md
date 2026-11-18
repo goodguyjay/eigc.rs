@@ -77,9 +77,15 @@
   refletância real dos terrenos. Os raios ficam curtos (5 raios da borda; os reais chegam a
   dezenas). O mapa de cor custa ~1,3 µs por texel (~21 s em um núcleo, ~1,5 s nos 16 núcleos da
   máquina de desenvolvimento), contra menos de 1 s em Io, porque a inclinação e a geada amostram
-  a superfície com crateras. Enquanto Ganimedes não tem textura de superfície, o shader não lê o
-  mapa (ele só entra no bloco da textura), e o terreno usa a cor por vértice, que perde detalhe
-  nos níveis grossos do LOD.
+  a superfície com crateras. O shader só lê o mapa de cor dentro do bloco da textura de
+  superfície (`terrain_detail.wgsl`): uma lua sem textura fica na cor por vértice mesmo com
+  `color_map` configurado.
+- [ ] **A textura de regolito de Ganimedes (`ganymede_regolith`) é procedural e não foi comparada
+  com dados reais.** Gerada por `tools/generate_ganymede_regolith.py`: pó fino com o Hurst da
+  rugosidade fina (0,5) e blocos de gelo claros de 1 a 8 cm, parâmetros escolhidos a olho, sem
+  dado de Ganimedes nessa escala. A semente (311) foi escolhida entre 307 e 312 pela emenda do
+  tile mais equilibrada. Albedo médio ~0,87, como o de Io, para escurecer a cor da receita na
+  mesma medida.
 - [ ] Calibrar receita de terreno de calisto (`recipe/mod.rs`, hoje unimplemented!)
 - [X] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa
   documentada de motivo geológico ou estético
