@@ -44,6 +44,16 @@
   (`CENTER_EXTENT_FRACTION`), então o anel é só planície com geada. A malha do anel (~172 m entre
   vértices) é bem mais grossa que a dos chunks e sub-amostra a rugosidade fina; não apareceu
   emenda na validação visual, mas os valores são calibráveis.
+- [ ] **Io não tem plumas vulcânicas.** Ficou fora do escopo inicial de Io. As plumas reais
+  chegam a ~300 km de altura (Pele) e espalham depósitos por centenas de km, bem além do recorte
+  de 22 km e do `far` de 50 km da câmera, que também posiciona o sol e Júpiter. Representá-las
+  exigiria um elemento de céu ou um volume próprio (partículas ou shader), não uma `HeightSource`.
+  Trade-off: Io sem a feição mais famosa, em troca de não abrir uma frente de render nova.
+- [ ] **Io não tem lagos de lava com emissão visível.** Ficou fora do escopo inicial de Io. O
+  piso das paterae é só escuro (`IO_PATERA_FLOOR_COLOR`), sem emissão. Depende do item "O sol
+  nunca se põe" (Cena / Visual): sem noite, a emissão só apareceria durante o eclipse. Exigiria
+  emissão por região no material do terreno (ex.: um canal do mapa de cor), com risco médio de
+  Bevy. Trade-off: as paterae parecem inativas.
 - [ ] **Europa não tem anel de extensão.** `europa_recipe` usa `far_field: None` porque o DTM
   (`height::heightmap`) repete o pixel da borda fora do recorte, o que esticaria faixas no anel.
   Precisa de uma fonte de altura própria para fora do DTM (ex.: só o detalhe sintético e as
@@ -272,8 +282,9 @@
   círculo de elevação fixa (`sun_elevation_deg`) em torno do eixo Y. No hemisfério sub-joviano
   real, o sol faz um grande círculo que passa perto de Júpiter, nasce e se põe, e o eclipse cai
   no meio-dia local. Débito consciente: o modelo atual é simples e já dá eclipse com duração
-  realista em Io. Custo: lagos de lava com emissão no "lado noturno" (fase 5 de Io) só ficam
-  visíveis durante o eclipse. Revisar antes dessa fase.
+  realista em Io. Custo: lagos de lava com emissão no "lado noturno" (ver "Io não tem lagos de
+  lava com emissão visível", em Terreno) só ficam visíveis durante o eclipse. Revisar antes de
+  implementá-los.
 - [ ] **Diâmetro do sol em duas fontes.** O disco visual usa `SUN_ANGULAR_DIAMETER_DEG = 0.10`
   (`eigc_common::constants`), e o eclipse usa `SkySettings::sun_ang_radius`, derivado à parte
   em `from_profile` (`0.53 / 5.2` graus, metade). Hoje batem (0,102 contra 0,10), mas é a mesma
