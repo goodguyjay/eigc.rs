@@ -8,7 +8,7 @@ use crate::interaction::{
 };
 use crate::pause::{prepare_menu_return, toggle_pause_on_escape};
 use crate::scene::{spawn_menu_scene, spin_menu_moons};
-use crate::settings::{SettingsState, close_settings_panel_on_escape};
+use crate::settings::{SettingsState, apply_fullscreen_mode, close_settings_panel_on_escape};
 use crate::ui::{
     ToastState, animate_settings_panel_open, highlight_labels, position_moon_labels,
     refresh_panel_content, slide_detail_panel, spawn_loading_overlay, spawn_menu_ui,
@@ -19,7 +19,7 @@ use crate::ui::{
 use bevy::picking::mesh_picking::MeshPickingPlugin;
 use bevy::prelude::{
     App, IntoScheduleConfigs, Message, OnEnter, OnExit, Plugin, State, Update, in_state,
-    on_message, resource_exists,
+    on_message, resource_changed, resource_exists,
 };
 use eigc_moons::{AppState, PauseState};
 
@@ -66,6 +66,10 @@ impl Plugin for MenuPlugin {
                     .run_if(resource_exists::<State<PauseState>>),
             )
             .add_systems(Update, style_buttons.run_if(in_state(PauseState::Paused)))
+            .add_systems(
+                Update,
+                apply_fullscreen_mode.run_if(resource_changed::<SettingsState>),
+            )
             .add_systems(
                 Update,
                 (

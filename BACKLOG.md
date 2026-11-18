@@ -410,16 +410,20 @@ não por teste unitário de função pura.
   terreno carrega o `europa_ice`. A pasta segue no repositório como referência (README com a
   origem e a licença CC0), e `tools/attenuate_surface_marks.py` continua em uso como biblioteca do
   gerador novo. Remover a pasta reduz o repositório, mas perde a comparação com uma textura real.
-- [ ] **O seletor de tela cheia do painel de configurações é só visual.** O valor fica em
-  `SettingsState::fullscreen_enabled` (`crates/eigc_menu/src/settings.rs`), mas só muda a cor das
-  opções "Não"/"Sim" (`sync_fullscreen_selector`, `ui/update.rs`): nenhum sistema troca o
-  `WindowMode` da janela, e nada é salvo em disco. Falta aplicar o modo na janela e decidir se a
-  escolha persiste entre execuções.
-- [ ] **A linha "Configurar controles" do painel de configurações não faz nada.**
+- [X] **O seletor de tela cheia do painel de configurações é só visual.** Resolvido:
+  `apply_fullscreen_mode` (`crates/eigc_menu/src/settings.rs`) leva o valor para `Window::mode`
+  (tela cheia sem borda no monitor atual, ou janela).
+- [ ] **Tela cheia tem duas fontes de verdade e não é salva em disco.**
+  `SettingsState::fullscreen_enabled` é copiado para `Window::mode` num sentido só. Hoje funciona
+  porque nada além do seletor muda o modo da janela. Se entrar um atalho (ex.: Alt+Enter) ou
+  persistência da escolha entre execuções, o seletor pode mostrar um valor diferente da janela;
+  nesse caso, passar a ler o seletor de `Window::mode` e tirar o campo do `SettingsState`.
+- [ ] **A linha "Configurar controles" do painel de configurações está escondida.**
   `ConfigureControlsRow` (`crates/eigc_menu/src/ui/components.rs`, criada em
-  `spawn_configure_controls_row`, `ui/spawn.rs`) é um `Button` que destaca o fundo em hover, mas
-  não tem observer de clique. Falta a tela de configuração de teclado e mouse; até lá, o card
-  promete uma ação que não existe.
+  `spawn_configure_controls_row`, `ui/spawn.rs`) nasce com `Display::None` porque ainda não tem
+  ação: falta a tela de configuração de teclado e mouse. Componente, estilo de hover e animação
+  continuam no código para facilitar a volta; para mostrar o card de novo, basta tirar o
+  `display: Display::None` do spawn.
 
 ## Plataformas
 - [ ] Em `camera/look.rs` e `camera/plugin.rs` o comportamento de `CursorGrabMode::Locked` não é

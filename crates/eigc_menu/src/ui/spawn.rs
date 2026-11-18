@@ -17,7 +17,8 @@ use crate::theme::{self, MenuFonts};
 use bevy::asset::Handle;
 use bevy::prelude::{
     AlignItems, AssetServer, BackgroundColor, BorderColor, BorderRadius, BoxShadow, Bundle, Button,
-    ChildSpawnerCommands, Color, Commands, FlexDirection, GlobalZIndex, ImageNode, JustifyContent,
+    ChildSpawnerCommands, Color, Commands, Display, FlexDirection, GlobalZIndex, ImageNode,
+    JustifyContent,
     Name, Node, Overflow, Pickable, PositionType, Res, Text, TextColor, UiRect, UiTransform, Val,
     Visibility, default,
 };
@@ -444,8 +445,8 @@ fn spawn_settings_button(
     spawn_settings_panel(root, fonts, asset_server);
 }
 
-/// Painel de configurações: cabeçalho com título e X, os cards de "Tela cheia" (seletor "Não"/"Sim",
-/// só visual) e "Configurar controles" (ainda sem ação), e o rodapé. Nasce oculto; aparece e some
+/// Painel de configurações: cabeçalho com título e X, os cards de "Tela cheia" (seletor "Não"/"Sim")
+/// e "Configurar controles" (escondido por enquanto), e o rodapé. Nasce oculto; aparece e some
 /// conforme `SettingsState`. Leva `OverviewUi` pelo mesmo motivo do botão de engrenagem.
 fn spawn_settings_panel(
     root: &mut ChildSpawnerCommands,
@@ -622,7 +623,8 @@ fn spawn_row_text(
     });
 }
 
-/// Contêiner dos dois cards de opção ("Tela cheia" e "Configurar controles"), com espaço entre eles,
+/// Contêiner dos cards de opção ("Tela cheia" e "Configurar controles", este escondido por
+/// enquanto), com espaço entre eles,
 /// uma margem lateral para não colarem nas bordas do painel, e a mesma margem embaixo para o painel
 /// terminar logo depois do último card.
 fn spawn_settings_cards(panel: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
@@ -733,13 +735,19 @@ fn spawn_fullscreen_option(
 
 /// Card "Configurar controles": título e descrição à esquerda, chevron à direita. O card inteiro é
 /// clicável (sem ação por enquanto) e destaca o fundo em hover.
+///
+/// Nasce escondido (`Display::None`) até existir a tela de controles: não ocupa espaço no painel
+/// nem recebe hover ou clique. Ver `BACKLOG.md`.
 fn spawn_configure_controls_row(cards: &mut ChildSpawnerCommands, fonts: &MenuFonts) {
     cards
         .spawn((
             Name::new("ConfigureControlsRow"),
             ConfigureControlsRow,
             Button,
-            settings_card_node(),
+            Node {
+                display: Display::None,
+                ..settings_card_node()
+            },
             BackgroundColor(theme::SETTINGS_CARD_BACKGROUND),
             BorderColor::all(theme::SETTINGS_SELECTOR_BORDER),
             // Sem `SettingsFadeBackground`: o fundo deste card muda com o hover
