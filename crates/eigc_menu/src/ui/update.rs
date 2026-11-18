@@ -525,12 +525,12 @@ mod tests {
     }
 
     /// Testa que a mensagem do aviso cita o nome da lua em português
-    /// (`Ganimedes`).
+    /// (`Calisto`).
     #[test]
     fn toast_message_names_the_moon() {
         assert_eq!(
-            toast_message(MoonId::Ganymede),
-            "Exploração de Ganimedes ainda não implementada"
+            toast_message(MoonId::Callisto),
+            "Exploração de Calisto ainda não implementada"
         );
     }
 

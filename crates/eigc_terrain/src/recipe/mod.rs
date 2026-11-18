@@ -4,6 +4,7 @@
 //! próprio; aqui ficam só o ponto de entrada e o que as receitas compartilham.
 
 mod europa;
+mod ganymede;
 mod io;
 
 pub use europa::playable_radius_m;
@@ -67,7 +68,7 @@ pub fn build_recipe(profile: &MoonProfile) -> TerrainRecipe {
     match profile.moon_id {
         MoonId::Europa => europa::europa_recipe(profile),
         MoonId::Io => io::io_recipe(profile),
-        MoonId::Ganymede => unimplemented!("receita de Ganymede ainda não calibrada"),
+        MoonId::Ganymede => ganymede::ganymede_recipe(profile),
         MoonId::Callisto => unimplemented!("receita de Callisto ainda não calibrada"),
     }
 }

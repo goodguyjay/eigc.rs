@@ -204,8 +204,8 @@ mod tests {
             focused: Some(MoonId::Europa),
         };
         assert_eq!(
-            resolve_click(moon_info(MoonId::Ganymede), &selection),
-            ClickOutcome::NotImplemented(MoonId::Ganymede)
+            resolve_click(moon_info(MoonId::Callisto), &selection),
+            ClickOutcome::NotImplemented(MoonId::Callisto)
         );
     }
 

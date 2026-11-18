@@ -117,13 +117,13 @@ mod tests {
         assert!(app.world().resource::<NoticeLog>().0.is_empty());
     }
 
-    /// Testa que pedir a exploração de uma lua não implementada (Ganimedes) mantém o
+    /// Testa que pedir a exploração de uma lua não implementada (Calisto) mantém o
     /// estado em `MainMenu`, não carrega perfil e emite só o aviso de não
     /// implementada.
     #[test]
     fn exploring_an_unimplemented_moon_only_raises_a_notice() {
         let mut app = menu_app();
-        app.world_mut().write_message(ExploreRequested(MoonId::Ganymede));
+        app.world_mut().write_message(ExploreRequested(MoonId::Callisto));
         app.update();
         app.update();
 
@@ -132,14 +132,14 @@ mod tests {
             AppState::MainMenu
         );
         assert!(!app.world().contains_resource::<ActiveMoonProfileHandle>());
-        assert_eq!(app.world().resource::<NoticeLog>().0, vec![MoonId::Ganymede]);
+        assert_eq!(app.world().resource::<NoticeLog>().0, vec![MoonId::Callisto]);
     }
 
-    /// Testa que a decisão para as luas disponíveis (Europa e Io) é iniciar a
-    /// exploração.
+    /// Testa que a decisão para as luas disponíveis (Europa, Io e Ganimedes) é
+    /// iniciar a exploração.
     #[test]
     fn available_moons_start_exploration() {
-        for moon_id in [MoonId::Europa, MoonId::Io] {
+        for moon_id in [MoonId::Europa, MoonId::Io, MoonId::Ganymede] {
             assert_eq!(
                 decide_explore(moon_info(moon_id)),
                 ExploreDecision::Start(moon_id)

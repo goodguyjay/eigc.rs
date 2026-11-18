@@ -58,7 +58,12 @@
   (`height::heightmap`) repete o pixel da borda fora do recorte, o que esticaria faixas no anel.
   Precisa de uma fonte de altura própria para fora do DTM (ex.: só o detalhe sintético e as
   lineae) antes de ligar o anel.
-- [ ] Calibrar receita de terreno de ganimedes (`recipe/mod.rs`, hoje unimplemented!)
+- [ ] **Receita de Ganimedes é só a planície mínima.** `ganymede_recipe` (`recipe/ganymede.rs`)
+  tem só ondulação fbm, rugosidade fina e a clareira de spawn, com constantes de partida não
+  medidas, cor lisa do perfil, sem anel de extensão e sem textura de superfície.
+  Faltam crateras, sulcos e mapa de cor.
+  O céu também é provisório: `base_jupiter_dir` não foi calibrado e o eclipse não foi conferido.
+  Trade-off: Ganimedes entra no menu antes de ter relevo característico.
 - [ ] Calibrar receita de terreno de calisto (`recipe/mod.rs`, hoje unimplemented!)
 - [X] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa
   documentada de motivo geológico ou estético
@@ -352,12 +357,12 @@ não por teste unitário de função pura.
   (`orbital_period_days` vs `sky.orbital_period_seconds`, o segundo com o valor exato, o primeiro
   arredondado). Diâmetro, gravidade, distância de Júpiter e textos existem só no `MoonInfo`, então
   não duplicam. É duplicação consciente, aceita por três motivos:
-  1. Os `.ron` de Ganimedes e Calisto estão vazios (0 bytes), e o menu precisa mostrar as
+  1. O `.ron` de Calisto está vazio (0 bytes), e o menu precisa mostrar as
      quatro luas na partida, sem esperar o carregamento assíncrono de perfis que falhariam no
      parse.
   2. O `MoonProfile` não tem campos de apresentação (descrição, estatísticas). Acrescentá-los
-     exigiria RON válido para as três luas não calibradas, o que quebra o loader e os testes que
-     esperam `unimplemented!()` em `build_recipe` para elas.
+     exigiria RON válido para Calisto, ainda não calibrada, o que quebra o loader e o teste que
+     espera `unimplemented!()` em `build_recipe` para ela.
   3. Tabela estática em código foi a escolha explícita do desenvolvedor para o menu.
   Mitigação parcial: `eigc_moons/tests/moon_info_stays_consistent_with_profiles.rs`
   falha se nome, `available`/`walkable` ou período (tolerância de 0,5%) divergirem em qualquer lua

@@ -84,7 +84,8 @@ fn finish_intro_when_leaving_menu(
     }
 }
 
-/// Lua pedida por flag de debug (`--europa` ou `--io`), para entrar direto sem clicar no menu.
+/// Lua pedida por flag de debug (`--europa`, `--io` ou `--ganymede`), para entrar direto sem
+/// clicar no menu.
 #[cfg(feature = "dev")]
 #[derive(Resource, Clone, Copy, Debug)]
 struct DebugMoonRequest(MoonId);
@@ -111,11 +112,15 @@ fn send_debug_moon_request_if_intro_already_done(
     }
 }
 
-/// Lê a flag de lua de debug (`--europa` ou `--io`). `Ok(None)` sem flag; `Err` com a mensagem
-/// de uso quando as duas aparecem juntas.
+/// Lê a flag de lua de debug (`--europa`, `--io` ou `--ganymede`). `Ok(None)` sem flag; `Err` com
+/// a mensagem de uso quando mais de uma aparece.
 #[cfg(feature = "dev")]
 fn parse_debug_moon(args: &[String]) -> Result<Option<MoonId>, String> {
-    const FLAGS: [(&str, MoonId); 2] = [("--europa", MoonId::Europa), ("--io", MoonId::Io)];
+    const FLAGS: [(&str, MoonId); 3] = [
+        ("--europa", MoonId::Europa),
+        ("--io", MoonId::Io),
+        ("--ganymede", MoonId::Ganymede),
+    ];
 
     let mut requested = FLAGS
         .iter()
@@ -125,7 +130,9 @@ fn parse_debug_moon(args: &[String]) -> Result<Option<MoonId>, String> {
     match (requested.next(), requested.next()) {
         (None, _) => Ok(None),
         (Some(moon_id), None) => Ok(Some(moon_id)),
-        (Some(_), Some(_)) => Err("uso: escolha só uma lua de debug (--europa ou --io)".to_string()),
+        (Some(_), Some(_)) => {
+            Err("uso: escolha só uma lua de debug (--europa, --io ou --ganymede)".to_string())
+        }
     }
 }
 
@@ -192,7 +199,7 @@ fn main() {
     #[cfg(feature = "dev")]
     app.add_plugins(eigc_perf::debug_tools::DebugToolsPlugin);
 
-    // Só debug: `--europa`/`--io` esperam a abertura terminar de vez (clarão desfeito) antes de
+    // Só debug: as flags de lua esperam a abertura terminar de vez (clarão desfeito) antes de
     // pedir a exploração, para a transição do menu pro jogo não ficar brusca. `--spawn x y z`
     // (usado junto de uma delas) faz a câmera nascer na posição pedida.
     #[cfg(feature = "dev")]
@@ -262,7 +269,7 @@ mod tests {
         values.iter().map(|value| value.to_string()).collect()
     }
 
-    /// Testa que `--europa` e `--io` escolhem a lua de debug correspondente.
+    /// Testa que `--europa`, `--io` e `--ganymede` escolhem a lua de debug correspondente.
     #[cfg(feature = "dev")]
     #[test]
     fn debug_moon_flag_picks_the_requested_moon() {
@@ -274,6 +281,10 @@ mod tests {
             parse_debug_moon(&args(&["eigc_app", "--io", "--spawn", "0", "5", "0"])),
             Ok(Some(MoonId::Io))
         );
+        assert_eq!(
+            parse_debug_moon(&args(&["eigc_app", "--ganymede"])),
+            Ok(Some(MoonId::Ganymede))
+        );
         assert_eq!(parse_debug_moon(&args(&["eigc_app"])), Ok(None));
     }
 
@@ -283,6 +294,7 @@ mod tests {
     #[test]
     fn debug_moon_flag_rejects_two_moons() {
         assert!(parse_debug_moon(&args(&["eigc_app", "--europa", "--io"])).is_err());
+        assert!(parse_debug_moon(&args(&["eigc_app", "--io", "--ganymede"])).is_err());
     }
 
     /// Testa que `--spawn` lê três coordenadas, inclusive negativas e fracionárias.

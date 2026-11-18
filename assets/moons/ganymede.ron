@@ -1,0 +1,29 @@
+// Recorte de Ganimedes: lugar declarado, não lido pelo código. Latitude média (~40 graus), perto do
+// oval auroral e da borda da calota de geada, no hemisfério sub-joviano, a ~58 graus de longitude
+// do ponto sub-joviano. Com Júpiter a 24 graus de elevação, esse é o lugar coerente com o céu.
+MoonProfile(
+    moon_id: Ganymede,
+    display_name: "Ganimedes",
+    jupiter_angular_diameter_deg: 7.64, // 2 * atan(71492 km / 1070400 km)
+    terrain: TerrainCalibration(
+        seed: 307,
+        base_frequency: 0.00025, // 1.0 / 4000.0
+        feature_direction: (1.0, 0.0), // direção dos sulcos, ainda sem uso
+        warp_amplitude_meters: 0.0, // sem uso em Ganimedes
+        perceptual_roughness: 0.8,
+        reflectance: 0.5,
+    ),
+    terrain_base_color: (0.55, 0.50, 0.44, 1.0), // terreno escuro antigo, TODO (jay): ajustar visualmente
+    terrain_steep_color: (0.42, 0.38, 0.33, 1.0), // encostas, TODO (jay): ajustar visualmente
+    walkable: true,
+    sky: SkyCalibration(
+        orbital_period_seconds: 618153.4, // 7.154553 dias * 86400
+        base_jupiter_dir: (0.344, 0.407, -0.846), // provisório: eclipse ainda não calibrado
+        jupiter_libration_lat_deg: 2.0,
+        jupiter_libration_lon_deg: 2.0,
+        jupiter_ang_radius: 0.06667158, // (7.64 * 0.5).to_radians()
+        sun_elevation_deg: 25.0,
+        eclipse_soft_deg: 1.0,
+        planet_shine_max: 0.0025, // 0.006 de Europa * (7.64 / 11.9)^2, razão dos ângulos sólidos
+    ),
+)

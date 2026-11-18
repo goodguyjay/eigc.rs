@@ -35,3 +35,7 @@ run-eigc-europa-at = "run --package eigc_app --features dev -- --europa --spawn"
 run-eigc-io = "run --package eigc_app --features dev -- --io"
 # só debug: entra em Io com a câmera em voo livre na posição dada (mesmo uso de run-eigc-europa-at)
 run-eigc-io-at = "run --package eigc_app --features dev -- --io --spawn"
+# só debug: pula o menu e entra direto em Ganimedes
+run-eigc-ganymede = "run --package eigc_app --features dev -- --ganymede"
+# só debug: entra em Ganimedes com a câmera em voo livre na posição dada (mesmo uso de run-eigc-europa-at)
+run-eigc-ganymede-at = "run --package eigc_app --features dev -- --ganymede --spawn"

@@ -3,7 +3,6 @@
 use eigc_moons::profile::{MoonId, MoonProfile, SkyCalibration, TerrainCalibration};
 use eigc_terrain::params::TerrainShape;
 use eigc_terrain::recipe::build_recipe;
-use rstest::rstest;
 
 /// Cria um MoonProfile mínimo para teste, com valores arbitrários, exceto pelo moon_id.
 /// Não representa valores reais da aplicação.
@@ -201,14 +200,43 @@ fn io_recipe_relief_is_a_plain_around_zero_with_patera_depressions() {
     assert!(lowest < -100.0, "as paterae deveriam afundar o piso: mínimo {lowest}");
 }
 
-/// Testa se a receita para luas não calibradas (Ganymede, Callisto) causa pânico ao invés de
-/// reutilizar silenciosamente a receita de Europa.
-#[rstest]
-#[case(MoonId::Ganymede)]
-#[case(MoonId::Callisto)]
+/// Testa se a receita mínima de Ganimedes produz um recorte quadrado de alturas finitas, ainda
+/// sem cor por vértice, com a clareira de spawn nivelada em volta da origem.
+#[test]
+fn ganymede_recipe_produces_a_square_cutout_with_a_level_spawn_clearing() {
+    let profile = minimal_profile_for(MoonId::Ganymede);
+    let recipe = build_recipe(&profile);
+
+    assert_eq!(recipe.params.seed, profile.terrain.seed);
+    assert_eq!(recipe.appearance.display_name, profile.display_name);
+    assert_eq!(recipe.params.shape, TerrainShape::Square);
+    assert!(recipe.color.is_none(), "a receita mínima usa só a cor lisa do perfil");
+
+    let half_size = recipe.params.size * 0.5;
+    for (x, z) in [(0.0, 0.0), (half_size, -half_size), (-3000.0, 7000.0)] {
+        let height = recipe.height.height_at(x, z);
+        assert!(height.is_finite(), "altura não finita em ({x}, {z})");
+    }
+
+    // limite folgado para a rugosidade fina, bem abaixo das dezenas de metros da planície
+    const ROUGHNESS_TOLERANCE_M: f32 = 5.0;
+    let origin_height = recipe.height.height_at(0.0, 0.0);
+    for (x, z) in [(100.0, 0.0), (0.0, -140.0), (-90.0, 90.0)] {
+        let height = recipe.height.height_at(x, z);
+        assert!(
+            (height - origin_height).abs() < ROUGHNESS_TOLERANCE_M,
+            "ponto ({x}, {z}) dentro da clareira deveria ficar perto do platô: {height} contra \
+             {origin_height}"
+        );
+    }
+}
+
+/// Testa se a receita para a lua não calibrada (Callisto) causa pânico ao invés de reutilizar
+/// silenciosamente a receita de Europa.
+#[test]
 #[should_panic(expected = "ainda não calibrada")]
-fn uncalibrated_moons_should_panic_instead_of_silently_reusing_europa(#[case] moon_id: MoonId) {
-    let profile = minimal_profile_for(moon_id);
+fn uncalibrated_moon_should_panic_instead_of_silently_reusing_europa() {
+    let profile = minimal_profile_for(MoonId::Callisto);
     let _ = build_recipe(&profile);
 }
 
