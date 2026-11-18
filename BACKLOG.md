@@ -69,6 +69,17 @@
   para haver uma cratera complexa a leste da clareira; mudar a semente do `ganymede.ron` muda
   isso. Crateras que se sobrepõem somam os desvios de altura, em vez de a mais nova apagar a
   mais antiga. Validado só com capturas do app (vista aérea e do chão).
+- [ ] **Relevo de Ganimedes não usa DTM.** Por decisão do desenvolvedor, Ganimedes seguiu o
+  caminho de Io, com relevo todo procedural. Existem DTMs estéreo da Galileo para trechos
+  pequenos de Ganimedes (não verificados: local, resolução e licença), e o bucket da USGS usado em
+  Europa (`astrogeo-ard`) só tem Europa. Trade-off: escalas estilizadas em troca de não depender
+  de um dado que talvez não cubra um recorte de 22 km com resolução útil.
+- [ ] **Ganimedes não tem calota polar, só geada nas encostas voltadas para o norte.** O recorte
+  fica a 40 graus de latitude, perto da borda das calotas polares reais (que acompanham a
+  fronteira entre linhas de campo magnético abertas e fechadas; de memória, não conferido). A
+  receita só pinta geada em manchas nas encostas frias (`PoleFacingFrost`), sem a transição para
+  o terreno claro e contínuo da calota. Trade-off: geada local e barata em troca da paisagem de
+  borda de calota.
 - [ ] **Cor de Ganimedes é de partida, sem comparação com imagens reais.** A cor
   (`ganymede_color`, `recipe/ganymede.rs`) junta terreno escuro, gelo claro nas encostas
   íngremes, a faixa clara, interior, ejecta e raios das crateras recentes e geada nas encostas
@@ -327,6 +338,17 @@
   (4) O pôr do sol considera o horizonte plano: um morro alto ainda recebe sol com o sol já
   abaixo do horizonte matemático, e as sombras do sol só alcançam 3 km. Trade-off: modelo
   simples e testável, com erro de no máximo alguns graus.
+- [ ] **Ganimedes não tem aurora.** Ficou fora do escopo inicial. O recorte foi declarado a
+  40 graus de latitude, no hemisfério voltado para Júpiter, para deixar a aurora possível: os
+  ovais aurorais ficam em latitude média a alta (chegam a ~10 graus N no hemisfério leading), e
+  uma cortina a ~50 km de altitude (estimativa, não conferida) só seria vista a até ~500 km, ou
+  ~11 graus de latitude. A emissão visível (O I 630,0 e 557,7 nm) só foi medida com Ganimedes
+  dentro do eclipse por Júpiter, e o brilho deve ficar perto do limite do olho (no ultravioleta,
+  10 a 200 Rayleigh). No jogo apareceria à noite e no eclipse, com brilho baixo. Exigiria um
+  elemento de céu próprio (cortina com material emissivo ligado ao `daylight_factor` e ao
+  `eclipse_factor`), com risco alto de Bevy. Antes de implementar: conferir em fonte a latitude
+  do oval perto do lugar declarado e o brilho no visível. Fontes: arXiv:2205.13223 (HST),
+  arXiv:2409.06055 (Keck, aurora no visível), McGrath et al. 2013 (JGR Space Physics).
 - [ ] **Júpiter tem iluminação própria, aproximada.** O shader `jupiter_phase.wgsl` calcula só a
   parte difusa da luz do sol (Lambert dividido por pi), no lugar do Burley do Bevy, e ignora as
   luzes da cena. O brilho do lado iluminado ficou parecido com o anterior na comparação visual,
