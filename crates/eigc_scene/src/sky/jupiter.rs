@@ -3,15 +3,17 @@
 use crate::sky::shared::place_celestial_disc;
 use crate::sky::{SkyAssets, SkyAssetsLoaded, SkySettings, SkyState};
 use bevy::app::App;
+use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::camera::{Camera3d, CameraProjection};
 use bevy::light::NotShadowCaster;
 use bevy::prelude::{
-    AlphaMode, Assets, Color, Commands, Component, IntoScheduleConfigs, Mesh, Mesh3d,
-    MeshMaterial3d, Meshable, Name, Plugin, Projection, Quat, Query, Res, ResMut, Sphere,
+    AlphaMode, Assets, Color, Commands, Component, Handle, Image, IntoScheduleConfigs, Mesh,
+    Mesh3d, MeshMaterial3d, Meshable, Name, Plugin, Projection, Quat, Query, Res, ResMut, Sphere,
     StandardMaterial, Transform, Update, Vec3, With, Without, any_with_component, default,
     in_state, on_message, resource_exists,
 };
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::state::state_scoped::DespawnOnExit;
 use eigc_moons::{ActiveMoonProfileHandle, AppState, MoonProfile};
 
@@ -40,11 +42,28 @@ impl Plugin for JupiterPlugin {
     }
 }
 
+/// Textura de oclusão preta de 1 texel. No `StandardMaterial`, a oclusão multiplica só a luz
+/// indireta (a luz ambiente, entre elas), e não a luz direta do sol.
+fn black_occlusion_texture(images: &mut Assets<Image>) -> Handle<Image> {
+    images.add(Image::new_fill(
+        Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &[0, 0, 0, 255],
+        TextureFormat::Rgba8Unorm,
+        RenderAssetUsages::RENDER_WORLD,
+    ))
+}
+
 /// Cria a entidade de Júpiter com os materiais apropriados.
 fn spawn_jupiter(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
     sky_assets: Res<SkyAssets>,
 ) {
     let mat = mats.add(StandardMaterial {
@@ -54,6 +73,9 @@ fn spawn_jupiter(
         reflectance: 0.0,
         perceptual_roughness: 1.0,
         alpha_mode: AlphaMode::Opaque,
+        // A luz ambiente existe para clarear as sombras do terreno. Em Júpiter, ela acenderia o
+        // lado noturno do disco, que só recebe luz do sol.
+        occlusion_texture: Some(black_occlusion_texture(&mut images)),
         ..default()
     });
 
@@ -129,18 +151,17 @@ fn place_and_scale_jupiter(
 mod tests {
     use super::*;
     use bevy::MinimalPlugins;
-    use bevy::prelude::{AssetApp, AssetPlugin, Handle, Image, PerspectiveProjection, Startup};
+    use bevy::prelude::{AssetApp, AssetPlugin, PerspectiveProjection, Startup};
     use eigc_moons::{MoonId, SkyCalibration, TerrainCalibration};
 
-    /// Regressão: Júpiter projetava sombra. Com o sol atrás dele, aparecia no chão uma faixa
-    /// escura a ~3 km que recuava conforme o jogador se aproximava.
-    #[test]
-    fn jupiter_does_not_cast_shadows() {
+    /// App mínimo que só cria Júpiter.
+    fn app_with_spawned_jupiter() -> App {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             .add_plugins(AssetPlugin::default())
             .init_asset::<Mesh>()
             .init_asset::<StandardMaterial>()
+            .init_asset::<Image>()
             .insert_resource(SkyAssets {
                 jupiter_tex: Handle::<Image>::default(),
                 sun_tex: Handle::<Image>::default(),
@@ -148,13 +169,46 @@ mod tests {
                 all_loaded: true,
             })
             .add_systems(Startup, spawn_jupiter);
-
         app.update();
+        app
+    }
+
+    /// Regressão: Júpiter projetava sombra. Com o sol atrás dele, aparecia no chão uma faixa
+    /// escura a ~3 km que recuava conforme o jogador se aproximava.
+    #[test]
+    fn jupiter_does_not_cast_shadows() {
+        let mut app = app_with_spawned_jupiter();
 
         let mut jupiter = app
             .world_mut()
             .query_filtered::<&NotShadowCaster, With<Jupiter>>();
         assert_eq!(jupiter.iter(app.world()).count(), 1);
+    }
+
+    /// Regressão: com a luz ambiente em 150 (para clarear as sombras do terreno), o lado noturno
+    /// de Júpiter aparecia marrom e iluminado. A oclusão preta tira a luz ambiente do material
+    /// sem mexer na luz do sol.
+    #[test]
+    fn jupiter_night_side_ignores_the_ambient_light() {
+        let mut app = app_with_spawned_jupiter();
+
+        let mut jupiter = app
+            .world_mut()
+            .query_filtered::<&MeshMaterial3d<StandardMaterial>, With<Jupiter>>();
+        let handle = jupiter.single(app.world()).expect("deveria existir um Júpiter").0.clone();
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        let occlusion = materials
+            .get(&handle)
+            .and_then(|material| material.occlusion_texture.clone())
+            .expect("Júpiter deveria ter textura de oclusão");
+
+        let image = app
+            .world()
+            .resource::<Assets<Image>>()
+            .get(&occlusion)
+            .expect("a textura de oclusão deveria existir");
+        let data = image.data.as_ref().expect("a oclusão deveria ter dados na CPU");
+        assert_eq!(data[0], 0, "o canal vermelho (oclusão) deveria ser zero");
     }
 
     fn test_profile(jupiter_angular_diameter_deg: f32) -> MoonProfile {
