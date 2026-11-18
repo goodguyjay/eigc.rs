@@ -5,6 +5,7 @@ use crate::sky::{SkyAssets, SkyAssetsLoaded, SkySettings, SkyState};
 use bevy::app::App;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::camera::{Camera3d, CameraProjection};
+use bevy::light::NotShadowCaster;
 use bevy::prelude::{
     AlphaMode, Assets, Color, Commands, Component, IntoScheduleConfigs, Mesh, Mesh3d,
     MeshMaterial3d, Meshable, Name, Plugin, Projection, Quat, Query, Res, ResMut, Sphere,
@@ -64,6 +65,9 @@ fn spawn_jupiter(
         Transform::default(),
         Jupiter,
         NoFrustumCulling,
+        // Júpiter é reposicionado em relação à câmera a cada quadro. Com o sol atrás dele, a
+        // esfera ficaria entre o sol e o chão e projetaria uma sombra que anda com o jogador.
+        NotShadowCaster,
         Name::new("Jupiter"),
         DespawnOnExit(AppState::Running),
     ));
@@ -124,8 +128,34 @@ fn place_and_scale_jupiter(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy::prelude::PerspectiveProjection;
+    use bevy::MinimalPlugins;
+    use bevy::prelude::{AssetApp, AssetPlugin, Handle, Image, PerspectiveProjection, Startup};
     use eigc_moons::{MoonId, SkyCalibration, TerrainCalibration};
+
+    /// Regressão: Júpiter projetava sombra. Com o sol atrás dele, aparecia no chão uma faixa
+    /// escura a ~3 km que recuava conforme o jogador se aproximava.
+    #[test]
+    fn jupiter_does_not_cast_shadows() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_plugins(AssetPlugin::default())
+            .init_asset::<Mesh>()
+            .init_asset::<StandardMaterial>()
+            .insert_resource(SkyAssets {
+                jupiter_tex: Handle::<Image>::default(),
+                sun_tex: Handle::<Image>::default(),
+                starfield_tex: Handle::<Image>::default(),
+                all_loaded: true,
+            })
+            .add_systems(Startup, spawn_jupiter);
+
+        app.update();
+
+        let mut jupiter = app
+            .world_mut()
+            .query_filtered::<&NotShadowCaster, With<Jupiter>>();
+        assert_eq!(jupiter.iter(app.world()).count(), 1);
+    }
 
     fn test_profile(jupiter_angular_diameter_deg: f32) -> MoonProfile {
         MoonProfile {
