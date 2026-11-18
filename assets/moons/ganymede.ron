@@ -7,7 +7,7 @@ MoonProfile(
     terrain: TerrainCalibration(
         seed: 307,
         base_frequency: 0.00025, // 1.0 / 4000.0
-        feature_direction: (1.0, 0.0), // direção dos sulcos, ainda sem uso
+        feature_direction: (0.26, 0.97), // direção dos sulcos, ~15 graus de norte-sul: o sol da manhã e da tarde (leste e oeste) os marca com sombra
         warp_amplitude_meters: 0.0, // sem uso em Ganimedes
         perceptual_roughness: 0.8,
         reflectance: 0.5,

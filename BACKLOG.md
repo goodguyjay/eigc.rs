@@ -59,11 +59,17 @@
   (`height::heightmap`) repete o pixel da borda fora do recorte, o que esticaria faixas no anel.
   Precisa de uma fonte de altura própria para fora do DTM (ex.: só o detalhe sintético e as
   lineae) antes de ligar o anel.
-- [ ] **Receita de Ganimedes é só a planície mínima.** `ganymede_recipe` (`recipe/ganymede.rs`)
-  tem só ondulação fbm, rugosidade fina e a clareira de spawn, com constantes de partida não
-  medidas, cor lisa do perfil, sem anel de extensão e sem textura de superfície.
-  Faltam crateras, sulcos e mapa de cor.
-  Trade-off: Ganimedes entra no menu antes de ter relevo característico.
+- [ ] **Relevo de Ganimedes é procedural e não foi calibrado contra dados.** `ganymede_recipe`
+  (`recipe/ganymede.rs`) monta o contato entre terreno escuro com crateras (`height::crater`) e
+  uma faixa de terreno claro sulcado (`height::groove`), sem DTM. Escalas estilizadas para caber
+  no recorte de 22 km: faixa de ~5 km (as reais têm dezenas a centenas de km), sulcos a cada
+  1,2 km com ~120 m de crista a fundo (os mais marcados reais ficam entre 3 e 10 km), crateras de
+  160 m a 5,6 km de diâmetro, com a lei de potência de expoente 2 e a densidade do terreno escuro
+  estimada de memória. O sal da semente das crateras (`GANYMEDE_CRATER_SEED_SALT`) foi escolhido
+  para haver uma cratera complexa a leste da clareira; mudar a semente do `ganymede.ron` muda
+  isso. Crateras que se sobrepõem somam os desvios de altura, em vez de a mais nova apagar a
+  mais antiga. Ainda faltam mapa de cor (faixa clara, raios das crateras recentes, geada), anel
+  de extensão e textura de superfície. Validado só com capturas do app (vista aérea e do chão).
 - [ ] Calibrar receita de terreno de calisto (`recipe/mod.rs`, hoje unimplemented!)
 - [X] Revisar bias: -0.1 na receita de Europa (`recipe.rs`), sem justificativa
   documentada de motivo geológico ou estético

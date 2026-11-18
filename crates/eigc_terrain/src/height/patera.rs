@@ -6,6 +6,7 @@
 //! desce íngreme pela maior parte da profundidade e um talude de detritos, menos inclinado, faz a
 //! transição côncava até o piso.
 
+use super::hash::hash01;
 use super::{ColorSource, HeightFn, HeightSource};
 use bevy::prelude::Vec2;
 use eigc_common::math::{lerp4, smoothstep};
@@ -230,16 +231,6 @@ fn draw_patera_spec(
     }
 }
 
-/// Valor pseudo-aleatório determinístico em [0, 1) a partir de uma semente e um índice
-/// (mistura splitmix64).
-fn hash01(seed: u32, index: u32) -> f32 {
-    let mut z = (u64::from(seed) << 32 | u64::from(index)).wrapping_add(0x9E37_79B9_7F4A_7C15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^= z >> 31;
-    (z >> 40) as f32 / (1_u64 << 24) as f32
-}
-
 /// Escava paterae numa fonte de altura: dentro da borda a altura desce pela escarpa até um piso
 /// plano. O nível do piso de cada patera é a média da fonte ao longo da borda menos a
 /// profundidade, calculada uma vez em `new`. Onde duas depressões se cruzam vale a mais funda.
@@ -364,23 +355,5 @@ impl<C: ColorSource> ColorSource for PateraColorField<C> {
             color = lerp4(color, self.floor_color, floor);
         }
         color
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Testa que o hash é determinístico, fica em [0, 1) e espalha os valores pela faixa.
-    #[test]
-    fn hash01_is_deterministic_and_spread_over_unit_interval() {
-        let values: Vec<f32> = (0..1000).map(|i| hash01(7, i)).collect();
-        assert_eq!(values, (0..1000).map(|i| hash01(7, i)).collect::<Vec<_>>());
-        assert!(values.iter().all(|v| (0.0..1.0).contains(v)));
-
-        let mean = values.iter().sum::<f32>() / values.len() as f32;
-        assert!((mean - 0.5).abs() < 0.05, "média {mean}");
-        assert!(values.iter().any(|&v| v < 0.05) && values.iter().any(|&v| v > 0.95));
-        assert_ne!(hash01(7, 0), hash01(8, 0));
     }
 }

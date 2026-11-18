@@ -4,6 +4,12 @@ use std::sync::Arc;
 
 /// Combinadores de `HeightSource` (soma, escala, viés).
 pub mod comb;
+/// Crateras de impacto: tigela, borda, ejecta e pico central, com degradação pela idade.
+pub mod crater;
+/// Faixas de sulcos paralelos (terreno claro sulcado de Ganimedes).
+pub mod groove;
+/// Sorteio determinístico compartilhado pelas feições geradas por semente.
+mod hash;
 /// Fonte de altura baseada em DTM real (heightmap 16 bits amostrado por interpolação bicúbica).
 pub mod heightmap;
 /// Lineae de Europa: pares de cristas com vale, em traçado reto ou em arco estilizado.
