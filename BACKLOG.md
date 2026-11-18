@@ -290,11 +290,13 @@
   hemisfério oposto a Júpiter, e no céu real Júpiter nunca apareceria lá. Trade-off: Europa
   mantém Júpiter no céu em troca de uma geometria irreal. O teste
   `europa_sky_keeps_the_values_from_before_the_site_model` trava o céu de Europa.
-- [ ] **A noite das luas de lugar real é quase preta.** À noite, a luz do sol e a luz ambiente
-  (que clareia as sombras do dia) somem, e o chão fica só com o planet shine de Júpiter cheio:
-  ~11 lux em Ganimedes e ~72 lux em Io, contra 4500 lux do sol. Com a exposição fixa da câmera,
-  isso é praticamente preto na tela, embora um olho adaptado enxergasse. Caminhos: adaptação de
-  exposição (ADDITIONS.md) ou um piso de luz ambiente à noite. Decisão do desenvolvedor pendente.
+- [ ] **A luz da noite nas luas de lugar real é um piso artístico.** À noite só chega o planet
+  shine de Júpiter cheio (~11 lux em Ganimedes, ~72 lux em Io, contra 4500 lux do sol), que com a
+  exposição fixa da câmera fica preto. Por decisão do desenvolvedor, a luz ambiente cai de 150 para
+  um piso de 40 (`NIGHT_AMBIENT_BRIGHTNESS`, `sky/mod.rs`) em vez de zerar: o chão de Ganimedes
+  fica em ~17 de 255 na tela à noite, contra ~137 de dia. O piso é igual em todas as luas e não
+  depende da fase de Júpiter. Trade-off: noite legível em troca de fidelidade; a adaptação de
+  exposição (ADDITIONS.md) seria o caminho fiel.
 - [ ] **Céu de lugar real: simplificações conscientes.** (1) A declinação do sol é sempre zero:
   a obliquidade de Júpiter (3,1 graus) é ignorada, então o eclipse é sempre central. (2) A
   paralaxe de Júpiter (0,14 a 0,25 grau) é ignorada. (3) A libração ainda usa os períodos

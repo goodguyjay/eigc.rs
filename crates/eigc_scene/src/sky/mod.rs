@@ -24,6 +24,13 @@ mod sun;
 /// iluminado em ~4 níveis. O valor anterior (0,05) deixava toda sombra preta pura.
 const AMBIENT_BRIGHTNESS: f32 = 150.0;
 
+/// Piso da luz ambiente à noite, igual em todas as luas (só tem efeito nos céus de lugar real; no
+/// modelo `Fixed` o sol nunca se põe). Fisicamente, à noite só chega o planet shine de Júpiter
+/// (~11 lux em Ganimedes, ~72 lux em Io), que com a exposição fixa da câmera fica preto na tela.
+/// O piso faz o papel do olho adaptado ao escuro: o chão continua legível, bem mais escuro que de
+/// dia. Valor calibrado a olho com o app rodando.
+const NIGHT_AMBIENT_BRIGHTNESS: f32 = 40.0;
+
 /// Texturas do céu, carregadas no início da simulação.
 #[derive(Resource)]
 pub struct SkyAssets {
@@ -66,8 +73,10 @@ pub struct SkySettings {
     pub base_jupiter_dir: Vec3,
     /// Iluminância do sol, em lux
     pub sun_illuminance: f32,
-    /// Brilho ambiente, em lux
+    /// Brilho ambiente de dia, em lux
     pub ambient_brightness: f32,
+    /// Brilho ambiente com o sol abaixo do horizonte, em lux (piso da noite)
+    pub night_ambient_brightness: f32,
     /// Período orbital, em segundos
     pub orbital_period_seconds: f32,
     /// Eixo em torno do qual o sol gira, no sentido positivo, ao longo da órbita. No modelo
@@ -163,6 +172,7 @@ impl SkySettings {
             base_jupiter_dir: geometry.base_jupiter_dir,
             sun_illuminance: 4500.0, // sol a ~5.2 UA, universal entre as quatro luas
             ambient_brightness: AMBIENT_BRIGHTNESS,
+            night_ambient_brightness: NIGHT_AMBIENT_BRIGHTNESS,
             orbital_period_seconds: sky.orbital_period_seconds,
             orbit_normal: geometry.orbit_normal,
             celestial_north: geometry.celestial_north,
@@ -500,6 +510,8 @@ mod tests {
 
         assert_eq!(settings.sun_illuminance, 4500.0);
         assert_eq!(settings.ambient_brightness, AMBIENT_BRIGHTNESS);
+        assert_eq!(settings.night_ambient_brightness, NIGHT_AMBIENT_BRIGHTNESS);
+        assert!(settings.night_ambient_brightness < settings.ambient_brightness);
         assert_eq!(settings.orbit_normal, Vec3::Y);
 
         // derivado de constante fixa (~5.2 UA) e não do perfil da lua

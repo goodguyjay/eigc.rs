@@ -135,10 +135,18 @@ fn update_sun_light(
         light.illuminance =
             settings.sun_illuminance * state.eclipse_factor.clamp(0.0, 1.0) * daylight;
 
-        // A luz ambiente clareia as sombras do terreno com a luz do dia espalhada; à noite
-        // (só nos céus de lugar real) ela some, e o chão fica com o planet shine.
-        ambient.brightness = settings.ambient_brightness * daylight;
+        ambient.brightness = ambient_brightness_for(
+            settings.ambient_brightness,
+            settings.night_ambient_brightness,
+            daylight,
+        );
     }
+}
+
+/// Brilho da luz ambiente dado o fator de dia: o valor de dia com o sol acima do horizonte, o
+/// piso da noite com ele abaixo, e a interpolação linear entre os dois no pôr do sol.
+fn ambient_brightness_for(day: f32, night: f32, daylight_factor: f32) -> f32 {
+    night + (day - night) * daylight_factor.clamp(0.0, 1.0)
 }
 
 /// Posiciona e escala o disco do sol com base na direção do sol e no perfil da lua ativo. Com o
@@ -191,6 +199,15 @@ fn position_sun_disc(
 mod tests {
     use super::*;
     use bevy::prelude::PerspectiveProjection;
+
+    /// Testa que a luz ambiente vale o valor de dia com o sol inteiro acima do horizonte (o
+    /// único caso em Europa) e o piso da noite com ele abaixo, sem chegar a zero.
+    #[test]
+    fn ambient_light_falls_to_the_night_floor_when_the_sun_sets() {
+        assert_eq!(ambient_brightness_for(150.0, 40.0, 1.0), 150.0);
+        assert_eq!(ambient_brightness_for(150.0, 40.0, 0.0), 40.0);
+        assert_eq!(ambient_brightness_for(150.0, 40.0, 0.5), 95.0);
+    }
 
     /// Testa se as cascatas de sombra alcançam a sombra da borda de uma patera de Io (330 m de
     /// profundidade com o sol a 25 graus dá ~710 m) vista do outro lado de uma patera de ~2 km.
